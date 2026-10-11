@@ -2,102 +2,122 @@
 
 Date: 2026-10-11
 
-Status: **MECHANICALLY SUCCESSFUL; FROZEN LOCAL-TRANSPORT GATE DID NOT FULLY CLEAR. SOURCE-ONLY RESEARCH. NO PREDICTIVE QB CANDIDATE AUTHORIZED.**
+Status: **MECHANICALLY SUCCESSFUL; FROZEN DIRECT-LOCAL TRANSPORT GATE REMAINS PARTIAL AFTER ONE GENERIC REPAIR PASS. SOURCE-ONLY RESEARCH. NO PREDICTIVE QB CANDIDATE AUTHORIZED.**
 
 Frozen plan:
 - `docs/research/QB_TEAM_PASS_INTENT_LOCAL_FALLBACK_DIRECT_TRANSPORT_V1H_PLAN.md`
 
-Canonical authority:
-- workflow run: `38154677346`
-- exact head: `9175e5c77b55a77f6e0c9566b3d119be35a2af1d`
-- artifact: `11708003047`
-- artifact digest: `sha256:3fc758a5874f188c75092955a850167f4bc81749c9acf696cf41ce3430eaefb1`
+## Canonical repaired authority
+
+- workflow run: `38172568766`
+- exact head: `5e07c7f291b60781484afd135c58fde5072510a5`
+- artifact: `11714987323`
+- artifact digest: `sha256:860dda964846625a3a2188acd5951c3092b28ca36aa882a1ab72a32554a1d469`
 - workflow conclusion: `SUCCESS`
-- exact-head Repo CI: `38154680473` SUCCESS
+- exact-head Repo CI: `38172572072` SUCCESS
+
+Parent V1G authority was reused exactly rather than rerun:
+- V1G rows: 536
+- official AUTO_REVIEW_READY: 378
+- unresolved requiring local fallback/review: 158
 
 ## Frozen disposition
 
 `LOCAL_DIRECT_TRANSPORT_PARTIAL`
 
-V1G authority was consumed exactly rather than rerun:
-- V1G rows: 536
-- official AUTO_REVIEW_READY: 378
-- unresolved requiring local fallback/review: 158
-
-## Transport result
+## Result
 
 - frozen franchises: 32
 - frozen publisher declarations: 64
 - unique publisher domains: 60
 - franchises with >=1 reachable/enumerable mapped local publisher: **28 / 32**
-- unresolved rows with >=1 reachable/enumerable mapped local publisher: **120 / 158 = 75.9494%**
-- frozen gate: >=80%
-- result: **FAIL by 7 rows**
-- unresolved rows with >=1 locally discovered candidate URL: **79 / 158 = 50.0%**
-  - candidate yield is descriptive only and was not a qualification gate.
+- unresolved rows with >=1 reachable/enumerable mapped local publisher: **123 / 158 = 77.8481%**
+- frozen gate: **>=80%**
+- minimum rows required to clear: **127 / 158**
+- remaining gap: **4 rows**
+- unresolved rows with >=1 locally discovered candidate URL: **87 / 158 = 55.0633%**
+  - candidate yield is descriptive only and is not a qualification gate.
 
-The 38 rows missing enumerable local transport are completely concentrated in four franchises:
+All 35 rows still lacking direct enumerable local transport are concentrated in:
 - DAL: 18
 - GB: 14
-- PIT: 3
 - SEA: 3
 
-All other unresolved team-weeks had at least one enumerable mapped local publisher.
+The generic repair successfully rescued PIT transport:
+- `post-gazette.com`: 100,000 enumerated URLs
+- `triblive.com`: 61,313 enumerated URLs
 
-## Gate readout
+## Repair integrity
 
-Passed:
-- exact unresolved input = 158;
-- frozen 32 x 2 publisher map;
-- >=24/32 franchises with a reachable mapped publisher: 28/32;
-- no public-search-engine HTML;
-- no external search API;
-- no football outcomes;
-- no model residuals;
-- no sportsbook/game-market inputs;
-- no paid OddsAPI;
-- no 2026 Week-5 outcomes;
-- no football predictive fit;
-- no production change.
+The repair changed transport mechanics only:
+1. malformed sitemap recovery became source-agnostic and tolerant of broken outer/item XML when explicit `<loc>` fields survive;
+2. child sitemap traversal no longer rejects a generic historical archive solely because the sitemap index itself has a 2026 `lastmod`.
 
-Failed:
-- unresolved rows with reachable/enumerable mapped local publisher >=80%:
-  - observed 120/158 = 75.9494%.
+No publisher was added, removed, or swapped.
+No source-density gate, semantic threshold, V1F prototype, date window, candidate cap, or football science changed.
+
+## Remaining failure classes
+
+Direct transport remains unavailable for the frozen DAL/GB/SEA publisher pairs.
+
+Observed classes include:
+- publisher access-control / client-challenge responses;
+- HTTP 402/403 responses;
+- direct endpoint timeouts;
+- malformed responses without recoverable sitemap locators.
+
+These are transport/access constraints, not football-source-density evidence.
+
+Do not bypass publisher controls or replace the frozen publishers after seeing the result.
+
+## Integrity
+
+- public search-engine HTML contacted: false
+- external search API used: false
+- football outcomes read: 0
+- model residuals read: 0
+- sportsbook/game-market inputs used: false
+- paid OddsAPI calls: 0
+- 2026 Week-5 outcomes read: 0
+- football predictive models fit: 0
+- production changed: false
+- final V1 source qualification claimed: false
+- predictive QB candidate authorized: false
 
 ## Interpretation
 
-This is not a scientific rejection of the QB public-intent family.
+V1H does **not** clear its frozen direct-local transport gate.
 
-V1G already established that official first-party AUTO_REVIEW_READY coverage alone clears every frozen parent density gate. V1H was required only to satisfy the original V1 complete-ledger/local-fallback governance contract.
+This does not reject the QB public-intent family:
+- V1G's official first-party lower bound still clears every parent density threshold;
+- V1H is a governance/completeness transport layer for rows unresolved after official-first collection.
 
-The V1H miss is a transport-architecture concentration:
-- DAL mapped publishers produced zero enumerable URLs;
-- GB mapped publishers produced zero enumerable URLs;
-- PIT mapped publishers were reachable but did not yield enumerable historical URL records under the current parser;
-- SEA mapped publishers produced zero enumerable URLs.
+The exact direct-publisher design is now exhausted at `123/158`; do not keep tuning it.
 
-No publisher may be swapped, added, or removed after seeing this result. No source-density, semantic, date-window, candidate-cap, or V1F threshold may change.
+The old V1B stopping rule permits a restart only with a materially different stable retrieval source/connector. A free historical archive connector is therefore the next legal transport question.
 
 ## Next legal move
 
-One transport-only repair pass is authorized under the frozen V1H advancement rule:
+Freeze a source-only Common Crawl archive-connector feasibility stage using:
+- the same V1G/V1H unresolved universe;
+- the same frozen local publisher domains;
+- archived URL/capture discovery only;
+- no publisher-domain substitution;
+- no football outcomes, residuals, sportsbook data, or predictive fitting.
 
-1. inspect aggregate sitemap/robots failure classes for the already-frozen DAL/GB/PIT/SEA publishers;
-2. add only generic parser/index transport support that applies to any frozen publisher with the same architecture;
-3. do not add bespoke team queries or publisher replacements;
-4. rerun the exact V1H contract against the same preserved V1G artifact;
-5. if the >=80% unresolved-row transport gate clears, freeze V1I final source qualification;
-6. only after formal V1 source qualification may a separately frozen predictive QB intent candidate be designed.
+The archive connector must be judged against the **unchanged parent transport requirement**. It cannot lower the 80% gate or manufacture final negative dispositions.
+
+Only after transport is sufficient can a final source-qualification bridge be frozen.
 
 ## Protected science
 
 Unchanged:
 - M89/M90;
 - QB C2;
-- generic QB mean/YPA CLOSED;
+- generic QB mean/YPA reopening CLOSED;
 - same-data attempts repackaging CLOSED;
 - schedule/rest D1 CLOSED;
 - PBP D2 CLOSED;
-- sportsbook downstream only;
+- sportsbook remains downstream only;
 - no Week-5 prospective grading;
 - production unchanged.
