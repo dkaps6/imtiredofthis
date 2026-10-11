@@ -521,7 +521,8 @@ def main() -> int:
         domains = list(LOCAL_SOURCES[team])
         reachable = [
             d for d in domains
-            if publisher_results[d].transport_reachable or publisher_results[d].probe_reachable
+            if publisher_results[d].transport_reachable
+            and publisher_results[d].enumerated_urls > 0
         ]
         counts: dict[str, int] = {}
         examples: dict[str, list[str]] = {}
