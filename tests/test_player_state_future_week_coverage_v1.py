@@ -6,6 +6,7 @@ from scripts.research.audit_player_state_future_week_coverage_v1 import (
     prior_week_scheduled_target_teams,
     source_complete_for_prior_week,
     target_schedule,
+    target_week_roster_source_ready,
 )
 
 
@@ -66,3 +67,21 @@ def test_prior_week_source_completion_passes_only_when_both_sources_cover_all():
     assert got["complete"] is True
     assert got["missing_stat_teams"] == []
     assert got["missing_snap_teams"] == []
+
+
+def test_target_week_roster_source_must_be_exact():
+    exact = pd.DataFrame([
+        {"roster_source_week": 6},
+        {"roster_source_week": 6},
+    ])
+    prior = pd.DataFrame([
+        {"roster_source_week": 5},
+        {"roster_source_week": 5},
+    ])
+    mixed = pd.DataFrame([
+        {"roster_source_week": 5},
+        {"roster_source_week": 6},
+    ])
+    assert target_week_roster_source_ready(exact, 6) is True
+    assert target_week_roster_source_ready(prior, 6) is False
+    assert target_week_roster_source_ready(mixed, 6) is False
