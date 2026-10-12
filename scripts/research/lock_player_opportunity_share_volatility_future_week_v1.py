@@ -90,21 +90,60 @@ def build_prior_weekly_universe(season:int,target_week:int)->pd.DataFrame:
     return x.sort_values(["season","week","team","player_identity_key"]).reset_index(drop=True)
 
 
-def _feature(vals:pd.Series,weeks:pd.Series)->dict[str,Any]:
-    q=pd.DataFrame({"share":_num(vals),"week":_num(weeks)}).dropna().sort_values("week").tail(PRIOR_WINDOW)
+def _feature(
+    vals:pd.Series,
+    weeks:pd.Series,
+    denominators:pd.Series | None=None,
+)->dict[str,Any]:
+    if denominators is None:
+        denominators=pd.Series(np.nan,index=vals.index)
+    q=pd.DataFrame({
+        "share":_num(vals),
+        "week":_num(weeks),
+        "denominator":_num(denominators),
+    })
+    q=q.loc[q["share"].notna()&q["week"].notna()].sort_values("week").tail(PRIOR_WINDOW)
     if len(q)<MIN_PRIOR_GAMES:
         return {
             "supported":False,"prior_games":int(len(q)),
             "mean":np.nan,"sd":np.nan,"min":np.nan,"max":np.nan,
+            "sampling_var":np.nan,"sampling_sd":np.nan,
+            "excess_var":np.nan,"excess_sd":np.nan,
             "source_max_week":int(q["week"].max()) if len(q) else np.nan,
         }
     arr=q["share"].to_numpy(float)
+    mu=float(np.mean(arr))
+    sd=float(np.std(arr,ddof=0))
+    den=q["denominator"].to_numpy(float)
+    valid_den=np.isfinite(den)&(den>0)
+    if valid_den.all():
+        sampling_var=float(np.mean(mu*(1.0-mu)/den))
+        sampling_var=max(0.0,sampling_var)
+        excess_var=max(0.0,sd*sd-sampling_var)
+        sampling_sd=float(np.sqrt(sampling_var))
+        excess_sd=float(np.sqrt(excess_var))
+    else:
+        sampling_var=sampling_sd=excess_var=excess_sd=np.nan
     return {
         "supported":True,"prior_games":int(len(q)),
-        "mean":float(np.mean(arr)),"sd":float(np.std(arr,ddof=0)),
+        "mean":mu,"sd":sd,
         "min":float(np.min(arr)),"max":float(np.max(arr)),
+        "sampling_var":sampling_var,"sampling_sd":sampling_sd,
+        "excess_var":excess_var,"excess_sd":excess_sd,
         "source_max_week":int(q["week"].max()),
     }
+
+
+def _betabinomial_eligible(feature:dict[str,Any])->bool:
+    if not bool(feature.get("supported",False)):
+        return False
+    mu=float(feature.get("mean",np.nan))
+    v=float(feature.get("excess_var",np.nan))
+    return bool(
+        np.isfinite(mu) and np.isfinite(v)
+        and 0.0<mu<1.0
+        and 0.0<v<mu*(1.0-mu)
+    )
 
 
 def lock_from_frames(
@@ -160,11 +199,21 @@ def lock_from_frames(
             & w["team"].map(canon_team).eq(str(r.team))
             & _num(w["week"]).lt(target_week)
         ].copy()
-        target_f=_feature(hist["tgt_share_game"] if len(hist) else pd.Series(dtype=float),
-                          hist["week"] if len(hist) else pd.Series(dtype=float))
-        rush_f=_feature(hist["rush_share_game"] if len(hist) else pd.Series(dtype=float),
-                        hist["week"] if len(hist) else pd.Series(dtype=float)) if pos=="RB" else {
-            "supported":False,"prior_games":0,"mean":np.nan,"sd":np.nan,"min":np.nan,"max":np.nan,"source_max_week":np.nan
+        target_f=_feature(
+            hist["tgt_share_game"] if len(hist) else pd.Series(dtype=float),
+            hist["week"] if len(hist) else pd.Series(dtype=float),
+            hist["team_targets"] if len(hist) else pd.Series(dtype=float),
+        )
+        rush_f=_feature(
+            hist["rush_share_game"] if len(hist) else pd.Series(dtype=float),
+            hist["week"] if len(hist) else pd.Series(dtype=float),
+            hist["team_rushes"] if len(hist) else pd.Series(dtype=float),
+        ) if pos=="RB" else {
+            "supported":False,"prior_games":0,
+            "mean":np.nan,"sd":np.nan,"min":np.nan,"max":np.nan,
+            "sampling_var":np.nan,"sampling_sd":np.nan,
+            "excess_var":np.nan,"excess_sd":np.nan,
+            "source_max_week":np.nan,
         }
         for f in (target_f,rush_f):
             if f["supported"] and int(f["source_max_week"])>=target_week:
@@ -180,14 +229,28 @@ def lock_from_frames(
             "prior_target_share_sd":target_f["sd"],
             "prior_target_share_min":target_f["min"],
             "prior_target_share_max":target_f["max"],
+            "prior_target_sampling_var":target_f["sampling_var"],
+            "prior_target_sampling_sd":target_f["sampling_sd"],
+            "prior_target_excess_share_var":target_f["excess_var"],
+            "prior_target_excess_share_sd":target_f["excess_sd"],
             "target_share_source_max_week":target_f["source_max_week"],
+            "wr_target_betabinomial_eligible":bool(
+                pos=="WR" and _betabinomial_eligible(target_f)
+            ),
             "rush_share_supported":bool(rush_f["supported"]) if pos=="RB" else False,
             "rush_share_prior_games":int(rush_f["prior_games"]) if pos=="RB" else 0,
             "prior_rush_share_mean":rush_f["mean"] if pos=="RB" else np.nan,
             "prior_rush_share_sd":rush_f["sd"] if pos=="RB" else np.nan,
             "prior_rush_share_min":rush_f["min"] if pos=="RB" else np.nan,
             "prior_rush_share_max":rush_f["max"] if pos=="RB" else np.nan,
+            "prior_rush_sampling_var":rush_f["sampling_var"] if pos=="RB" else np.nan,
+            "prior_rush_sampling_sd":rush_f["sampling_sd"] if pos=="RB" else np.nan,
+            "prior_rush_excess_share_var":rush_f["excess_var"] if pos=="RB" else np.nan,
+            "prior_rush_excess_share_sd":rush_f["excess_sd"] if pos=="RB" else np.nan,
             "rush_share_source_max_week":rush_f["source_max_week"] if pos=="RB" else np.nan,
+            "rb_carry_betabinomial_eligible":bool(
+                pos=="RB" and _betabinomial_eligible(rush_f)
+            ),
         })
 
     out=pd.DataFrame(rows)
@@ -208,6 +271,17 @@ def lock_from_frames(
         "rb_target_supported":int((rb&out["target_share_supported"]).sum()),
         "wr_target_supported":int((wr&out["target_share_supported"]).sum()),
         "te_target_supported":int((te&out["target_share_supported"]).sum()),
+        "rb_carry_betabinomial_eligible":int(
+            (rb&out["rb_carry_betabinomial_eligible"]).sum()
+        ),
+        "wr_target_betabinomial_eligible":int(
+            (wr&out["wr_target_betabinomial_eligible"]).sum()
+        ),
+        "allocation_uncertainty_candidate_cells":[
+            "RB_CARRY_SHARE","WR_TARGET_SHARE"
+        ],
+        "rb_target_betabinomial_authorized":False,
+        "te_target_betabinomial_authorized":False,
         "chronology_violations":int(chronology),
         "unsupported_rows_imputed":0,
         "thresholds_applied":0,
