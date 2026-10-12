@@ -17,7 +17,6 @@ import numpy as np
 import pandas as pd
 
 from scripts._opponent_map import canon_team
-from scripts.modeling.rb_receiving_identity_runtime_v1 import identity_atlas
 
 VERSION="RB_RECEIVING_ROOM_SHARE_SHADOW_FUTURE_WEEK_V1"
 TOL=1e-10
@@ -165,6 +164,7 @@ def _attach_prior_room_share(
         if len(v) and not v.lt(week).all():
             raise RuntimeError(f"same/future source week in {c}")
 
+    from scripts.modeling.rb_receiving_identity_runtime_v1 import identity_atlas
     states,_prev=identity_atlas(2013,season)
     feat=_snapshot_prior_room_share_by_gsis(
         parent[["state_key","team","player","gsis_id"]].copy(),
