@@ -180,6 +180,27 @@ For every supported season/cell:
 
 Candidate mean NLL must be <= baseline mean NLL in every season.
 
+### Paired log-score singularity convention
+
+A fixed-share baseline can assign exactly zero probability when `mu` is 0 or 1
+and the next game leaves that boundary. For rows where candidate and baseline
+are mathematically identical, any `+inf - +inf` numeric expression is
+undefined even though the paired score difference is exactly zero.
+
+Therefore the frozen paired protection is evaluated as:
+
+- if candidate distribution is identical to baseline: paired NLL improvement = 0;
+- if candidate distribution changes: both analytic log-PMFs must be finite and
+  paired NLL improvement = `NLL_base - NLL_candidate`;
+- any changed row with a non-finite analytic paired log score is an integrity
+  failure.
+
+The season/cell protection requires mean paired NLL improvement >=0.
+
+This is a numerical definition of the already-frozen paired log-score
+comparison. It does not alter CRPS, candidate eligibility, means, variance, or
+any scientific threshold.
+
 Log score cannot rescue a CRPS failure.
 
 ## Descriptive-only diagnostics
