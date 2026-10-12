@@ -111,6 +111,23 @@ def certify(
     if float(wrte_trajectory.get("max_team_modeled_target_mass_gap",1.0))>1e-10:
         raise RuntimeError("WR/TE team target mass conservation failed")
 
+    if int(share_volatility.get("season",-1))!=season or int(share_volatility.get("target_week",-1))!=week:
+        raise RuntimeError("share-volatility target mismatch")
+    if share_volatility.get("version")!="PLAYER_OPPORTUNITY_SHARE_VOLATILITY_FUTURE_WEEK_LOCK_V1":
+        raise RuntimeError("wrong share-volatility version")
+    if share_volatility.get("status")!=f"WEEK{week}_OPPORTUNITY_SHARE_VOLATILITY_LOCK_FROZEN":
+        raise RuntimeError(f"share-volatility not frozen: {share_volatility.get('status')}")
+    if int(share_volatility.get("chronology_violations",-1))!=0:
+        raise RuntimeError("share-volatility chronology violation")
+    _zero(
+        share_volatility,
+        ("target_week_outcomes_read","sportsbook_inputs_used","oddsapi_calls",
+         "fitted_coefficients","thresholds_applied","projection_changes",
+         "unsupported_rows_imputed"),
+        "share_volatility",
+    )
+    _false(share_volatility,("production_changed",),"share_volatility")
+
     components={
         "player_state":{
             "version":player_state.get("version",""),
@@ -143,6 +160,15 @@ def certify(
             "trajectory_available_players":int(wrte_trajectory.get("trajectory_available_players",0)),
             "row_csv_digest":wrte_trajectory.get("row_csv_digest",""),
         },
+        "share_volatility":{
+            "version":share_volatility.get("version",""),
+            "status":share_volatility.get("status",""),
+            "players":int(share_volatility.get("players",0)),
+            "rb_carry_supported":int(share_volatility.get("rb_carry_supported",0)),
+            "rb_target_supported":int(share_volatility.get("rb_target_supported",0)),
+            "wr_target_supported":int(share_volatility.get("wr_target_supported",0)),
+            "te_target_supported":int(share_volatility.get("te_target_supported",0)),
+        },
     }
 
     if components["rb_carry_snap"]["locked_players"]<=0:
@@ -151,6 +177,8 @@ def certify(
         raise RuntimeError("empty RB receiving lock")
     if components["wrte_trajectory"]["locked_players"]<=0:
         raise RuntimeError("empty WR/TE trajectory lock")
+    if components["share_volatility"]["players"]<=0:
+        raise RuntimeError("empty share-volatility lock")
 
     return {
         "version":VERSION,
@@ -177,6 +205,8 @@ def main()->int:
     ap.add_argument("--rb-receiving-rows",type=Path,required=True)
     ap.add_argument("--wrte-result",type=Path,required=True)
     ap.add_argument("--wrte-rows",type=Path,required=True)
+    ap.add_argument("--share-volatility-result",type=Path,required=True)
+    ap.add_argument("--share-volatility-rows",type=Path,required=True)
     ap.add_argument("--out",type=Path,required=True)
     a=ap.parse_args()
 
@@ -184,6 +214,7 @@ def main()->int:
     rb_carry=_read_json(a.rb_carry_result,"RB carry result")
     rb_receiving=_read_json(a.rb_receiving_result,"RB receiving result")
     wrte=_read_json(a.wrte_result,"WR/TE result")
+    share_volatility=_read_json(a.share_volatility_result,"share-volatility result")
 
     result=certify(
         season=a.season,week=a.week,
@@ -191,12 +222,14 @@ def main()->int:
         rb_carry=rb_carry,
         rb_receiving=rb_receiving,
         wrte_trajectory=wrte,
+        share_volatility=share_volatility,
     )
 
     result["artifact_sha256"]={
         "rb_carry_rows":_sha256(a.rb_carry_rows),
         "rb_receiving_rows":_sha256(a.rb_receiving_rows),
         "wrte_rows":_sha256(a.wrte_rows),
+        "share_volatility_rows":_sha256(a.share_volatility_rows),
     }
     a.out.parent.mkdir(parents=True,exist_ok=True)
     a.out.write_text(json.dumps(result,indent=2,sort_keys=True)+"\n",encoding="utf-8")
