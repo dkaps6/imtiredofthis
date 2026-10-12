@@ -68,6 +68,40 @@ Preserve:
 
 QB is carried for identity continuity but receives no feature from this V1.
 
+## V2/Beta-Binomial derived pregame fields
+
+The three-season V2 mechanism and Beta-Binomial V1 historical result authorize
+prospective excess-variance freezing for exactly two cells:
+
+- RB carry share;
+- WR target share.
+
+For the exact same prior games used by the raw feature, preserve the matching
+team opportunity denominator N_j and derive:
+
+`sampling_var = mean(mu * (1 - mu) / N_j)`
+
+`excess_share_var = max(0, prior_share_sd^2 - sampling_var)`
+
+`excess_share_sd = sqrt(excess_share_var)`
+
+No coefficient is fit.
+
+For a future Beta-Binomial marginal shadow, a row is mathematically eligible
+only when:
+- feature support is true;
+- 0 < mu < 1;
+- 0 < excess_share_var < mu * (1 - mu).
+
+Preserve the eligibility flag prospectively.
+
+Explicitly NOT authorized:
+- RB target-share Beta-Binomial candidate (historical V1 failed 2025);
+- TE target-share candidate (V2 mechanism failed three-season gate).
+
+Raw RB-target / TE-target volatility may remain in the feature lock for
+diagnostic continuity, but no allocation-uncertainty candidate flag may be set.
+
 ## Unsupported rows
 
 Do not impute or pool.
