@@ -76,6 +76,12 @@ class AuditRow:
 def _to_pandas(obj:Any)->pd.DataFrame:
     if isinstance(obj,pd.DataFrame):
         return obj.copy()
+    # Avoid Polars -> pandas Arrow conversion here. Repository CI currently
+    # carries NumPy 1.x while newer pyarrow wheels require NumPy 2.x.
+    # to_dicts() preserves the source values without adding an Arrow runtime
+    # dependency to this source-only audit.
+    if hasattr(obj,"to_dicts"):
+        return pd.DataFrame(obj.to_dicts())
     if hasattr(obj,"to_pandas"):
         return obj.to_pandas()
     return pd.DataFrame(obj)
