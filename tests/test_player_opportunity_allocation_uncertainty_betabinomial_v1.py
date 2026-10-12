@@ -33,7 +33,7 @@ def test_zero_excess_variance_is_exact_baseline():
     assert got["candidate_changed"] is False
     assert got["candidate_ineligible_reason"]=="NO_POSITIVE_EXCESS_VAR"
     assert abs(got["candidate_crps"]-got["baseline_crps"])<1e-12
-    assert abs(got["candidate_nll"]-got["baseline_nll"])<1e-12
+    assert got["paired_nll_improvement"]==0.0
     assert got["expected_count_gap"]==0.0
 
 
@@ -47,6 +47,8 @@ def test_positive_valid_excess_variance_changes_width_not_mean():
     assert got["candidate_changed"] is True
     assert np.isfinite(got["candidate_crps"])
     assert np.isfinite(got["candidate_nll"])
+    assert np.isfinite(got["baseline_nll"])
+    assert np.isfinite(got["paired_nll_improvement"])
     assert got["expected_count_gap"]==0.0
     assert got["candidate_90_low"] <= got["candidate_90_high"]
 
@@ -62,3 +64,4 @@ def test_impossible_beta_variance_fails_to_baseline_without_clipping():
     assert got["candidate_changed"] is False
     assert got["candidate_ineligible_reason"]=="INVALID_METHOD_OF_MOMENTS_VARIANCE"
     assert got["candidate_crps"]==got["baseline_crps"]
+    assert got["paired_nll_improvement"]==0.0
