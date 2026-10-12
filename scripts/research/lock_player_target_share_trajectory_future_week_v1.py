@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a future-week Player Target Share Trajectory Shadow V1 lock.\n\nMechanical continuation of the frozen target-week trajectory formula. No coefficient,\nsupport rule, room definition, or protected-parent behavior is changed.\n"""
+"""Create a future-week Player Target Share Trajectory Shadow V1 lock.\n\nMechanical continuation of the frozen Week-5 trajectory formula. No coefficient,\nsupport rule, room definition, or protected-parent behavior is changed.\n"""
 from __future__ import annotations
 
 import argparse
@@ -20,7 +20,9 @@ from scripts.player_form_v2 import _normalize_weekly, _to_pandas
 from scripts.utils.canonical_names import canon_team
 
 VERSION="PLAYER_TARGET_SHARE_TRAJECTORY_SHADOW_FUTURE_WEEK_V1"
-SEASON=0\nPRIOR_SEASON=0\nWEEK=0
+SEASON=0
+PRIOR_SEASON=0
+WEEK=0
 
 def num(x): return pd.to_numeric(x,errors="coerce")
 
@@ -304,7 +306,8 @@ def main():
       "row_csv_digest":digest,
       "te_r5p_model_version":str(te_audit["model_version"]),
       "wr_r15_model_version":str(wr_audit["model_version"]),
-      "sportsbook_inputs_used":0,"target_week_outcomes_read":0,"parameters_fit":0,"production_changed":False,\n      "scientific_formula_changed_from_week5":False,
+      "sportsbook_inputs_used":0,"target_week_outcomes_read":0,"parameters_fit":0,"production_changed":False,
+      "scientific_formula_changed_from_week5":False,
       "generated_at_utc":datetime.now(timezone.utc).isoformat(),
     }
     (a.out_dir/f"player_target_share_trajectory_shadow_week{WEEK}_lock.csv").write_bytes(payload)
