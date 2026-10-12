@@ -1,0 +1,181 @@
+{
+  "version": "QB_TEAM_PASS_INTENT_BLINDED_BOUNDED_MANUAL_PRECISION_AUDIT_V1K_DECISIONS",
+  "frozen_before_unblinding": true,
+  "hidden_v1f_key_inspected_before_decisions": false,
+  "decision_counts": {
+    "ELIGIBLE_EXPLICIT_TARGET_GAME_INTENT": 4,
+    "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE": 25,
+    "INSUFFICIENT_CONTEXT_TO_PROMOTE": 3
+  },
+  "decisions": [
+    {
+      "blind_id": "B01",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Technique/improvement discussion references past execution, not a specific offensive plan or intended usage for the Houston game."
+    },
+    {
+      "blind_id": "B02",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Scouting description of Buffalo personnel and tendencies; no explicit Houston offensive plan or intended player usage."
+    },
+    {
+      "blind_id": "B03",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Roster transactions and activations only; no explicit offensive plan, adjustment, or intended player usage beyond roster status."
+    },
+    {
+      "blind_id": "B04",
+      "decision": "INSUFFICIENT_CONTEXT_TO_PROMOTE",
+      "rationale": "Extracted material does not contain the Philadelphia-targeted Canales discussion needed to establish an explicit offensive plan."
+    },
+    {
+      "blind_id": "B05",
+      "decision": "ELIGIBLE_EXPLICIT_TARGET_GAME_INTENT",
+      "rationale": "Explicit target-game discussion of run-game/protection choices and looking to Jeudy early against Washington's defensive looks."
+    },
+    {
+      "blind_id": "B06",
+      "decision": "INSUFFICIENT_CONTEXT_TO_PROMOTE",
+      "rationale": "A quoted offensive adjustment appears, but the packet does not preserve enough speaker/context attribution to promote confidently."
+    },
+    {
+      "blind_id": "B07",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Opponent description, historical statistics, and general preparation language; no explicit Buffalo offensive plan for Philadelphia."
+    },
+    {
+      "blind_id": "B08",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Mostly Seattle roster/system description and opponent evaluation; no explicit Tampa Bay offensive plan or intended usage."
+    },
+    {
+      "blind_id": "B09",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Target-week preparation is discussed, but excerpts describe expected looks and general offensive identity rather than a specific plan."
+    },
+    {
+      "blind_id": "B10",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Scouting report describes Dallas offense and historical matchups; no explicit Raiders offensive plan or intended usage."
+    },
+    {
+      "blind_id": "B11",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Writer recommends short passing, protection, and usage possibilities, but excerpts lack direct attributed offensive-plan statements."
+    },
+    {
+      "blind_id": "B12",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Analyst recommendations and matchup observations dominate; no direct attributed Rams statement establishing intended target-game offensive action."
+    },
+    {
+      "blind_id": "B13",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Defensive-line scouting content only; no explicit Pittsburgh offensive plan or intended offensive player usage."
+    },
+    {
+      "blind_id": "B14",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Red-zone analysis and generic improvement quotes do not state a specific Atlanta offensive plan for Chicago."
+    },
+    {
+      "blind_id": "B15",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Quarterback uncertainty and injury/status reporting; no explicit target-game offensive plan or usage decision."
+    },
+    {
+      "blind_id": "B16",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Prediction-panel opinions about how teams could win are not attributable offensive intent from Jacksonville coaches or players."
+    },
+    {
+      "blind_id": "B17",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Practice participation and injury reporting only; no explicit Indianapolis offensive plan, adjustment, or intended usage."
+    },
+    {
+      "blind_id": "B18",
+      "decision": "ELIGIBLE_EXPLICIT_TARGET_GAME_INTENT",
+      "rationale": "Smith explicitly links continued passing success to opening the run, while the offense states a focus on improved run efficiency."
+    },
+    {
+      "blind_id": "B19",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Describes Baltimore's offensive tendencies and statistics; no explicit Cincinnati offensive plan for the target game."
+    },
+    {
+      "blind_id": "B20",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Seattle matchup keys and opponent scouting emphasize risks, but no direct explicit offensive plan or intended usage is stated."
+    },
+    {
+      "blind_id": "B21",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Motivation, quarterback reinstatement, and opponent statistics do not establish a specific Jets offensive plan or usage change."
+    },
+    {
+      "blind_id": "B22",
+      "decision": "ELIGIBLE_EXPLICIT_TARGET_GAME_INTENT",
+      "rationale": "Official source explicitly states Kenyan Drake will join the target-game backfield rotation, a concrete intended player-usage decision."
+    },
+    {
+      "blind_id": "B23",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Official preview contains analyst recommendations and matchup edges, not direct attributed New England offensive-plan statements."
+    },
+    {
+      "blind_id": "B24",
+      "decision": "INSUFFICIENT_CONTEXT_TO_PROMOTE",
+      "rationale": "Excerpts suggest a man-coverage response, but the key quote's speaker/context is insufficiently preserved for confident promotion."
+    },
+    {
+      "blind_id": "B25",
+      "decision": "ELIGIBLE_EXPLICIT_TARGET_GAME_INTENT",
+      "rationale": "Schottenheimer explicitly states Dallas wants to run the football and use play-action, tied to preparation for Detroit."
+    },
+    {
+      "blind_id": "B26",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Injury participation and availability report only; no explicit Arizona offensive plan or intended target-game usage."
+    },
+    {
+      "blind_id": "B27",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Injury/status report notes missing receivers but gives no direct attributed plan for replacing their offensive production."
+    },
+    {
+      "blind_id": "B28",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "General matchup preview and prior-performance discussion; no explicit Minnesota offensive plan or intended player usage."
+    },
+    {
+      "blind_id": "B29",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Injury designations and availability only; no explicit Green Bay offensive plan, adjustment, or intended player usage."
+    },
+    {
+      "blind_id": "B30",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Injury report table only; no explicit Kansas City offensive plan, adjustment, or intended player usage."
+    },
+    {
+      "blind_id": "B31",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Opponent profile, statistics, and unrelated page material; no explicit Raiders offensive plan for Baltimore."
+    },
+    {
+      "blind_id": "B32",
+      "decision": "NOT_ELIGIBLE_GENERIC_OR_DESCRIPTIVE",
+      "rationale": "Run-defense matchup analysis and general player evaluation do not state an explicit Buffalo offensive plan or usage decision."
+    }
+  ],
+  "integrity": {
+    "football_outcomes_read": 0,
+    "model_residuals_read": 0,
+    "sportsbook_inputs_used": false,
+    "paid_oddsapi_calls": 0,
+    "week5_2026_outcomes_read": 0,
+    "football_predictive_models_fit": 0,
+    "production_changed": false
+  }
+}
