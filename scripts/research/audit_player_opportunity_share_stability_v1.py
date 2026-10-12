@@ -22,7 +22,7 @@ import pandas as pd
 from scipy.stats import spearmanr
 
 from scripts._opponent_map import canon_team
-from scripts.player_form_v2 import _normalize_weekly
+from scripts.player_form_v2 import _normalize_weekly\nfrom scripts.utils.player_identity_v3 import historical_identity_key
 
 VERSION="PLAYER_OPPORTUNITY_SHARE_STABILITY_V1"
 TARGET_SEASONS=(2024,2025)
@@ -153,7 +153,11 @@ def _load_roster_universe(season:int,schedule:pd.DataFrame)->pd.DataFrame:
     x["team"]=x[team_col].map(canon_team)
     x["position"]=x[pos_col].map(_pos)
     x["player"]=x[name_col].astype("string").fillna("").str.strip()
-    x["player_identity_key"]=x[id_col].map(_clean)
+    x["provider_player_id"]=x[id_col].map(_clean)
+    x["player_identity_key"]=[
+        historical_identity_key(pid,name,team)
+        for pid,name,team in zip(x["provider_player_id"],x["player"],x["team"])
+    ]
 
     # Preserve the broad active-roster semantics; reserve/non-roster statuses are
     # excluded when status is available. ACT/INA are both legitimate pregame
@@ -380,9 +384,19 @@ def audit()->tuple[pd.DataFrame,dict[str,Any]]:
 
     any_rep=any(x["disposition"]=="PLAYER_SHARE_VOLATILITY_REPLICATED" for x in per_cell)
     scoreable_identity_cov=float(panel["player_identity_key"].astype(str).ne("").mean())
+    nondegenerate={}
+    for cell in CELLS:
+        for season in TARGET_SEASONS:
+            z=panel.loc[panel["cell"].eq(cell)&panel["season"].eq(season),"actual_share"]
+            nondegenerate[f"{cell}_{season}"]=bool(
+                len(z)>0 and pd.to_numeric(z,errors="coerce").nunique(dropna=True)>1
+                and float(pd.to_numeric(z,errors="coerce").max())>0
+            )
+
     gates={
         "exact_target_seasons":sorted(panel["season"].unique().tolist())==list(TARGET_SEASONS),
         "target_weeks_within_5_18":int(panel["week"].min())>=5 and int(panel["week"].max())<=18,
+        "all_cell_season_actual_shares_nondegenerate":all(nondegenerate.values()),
         "same_future_feature_violations_zero":integrity["same_future_feature_violations"]==0,
         "same_team_feature_violations_zero":integrity["same_team_feature_violations"]==0,
         "stable_identity_coverage_ge_095":scoreable_identity_cov>=.95,
@@ -407,7 +421,7 @@ def audit()->tuple[pd.DataFrame,dict[str,Any]]:
         "panel_rows":int(len(panel)),
         "panel_players":int(panel["player_identity_key"].nunique()),
         "scoreable_identity_coverage":scoreable_identity_cov,
-        "integrity":integrity,
+        "integrity":{**integrity,"nondegenerate_actual_share_cells":nondegenerate},
         "per_cell":per_cell,
         "cells":cells,
         "gates":gates,
