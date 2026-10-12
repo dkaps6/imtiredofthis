@@ -22,7 +22,8 @@ import pandas as pd
 from scipy.stats import spearmanr
 
 from scripts._opponent_map import canon_team
-from scripts.player_form_v2 import _normalize_weekly\nfrom scripts.utils.player_identity_v3 import historical_identity_key
+from scripts.player_form_v2 import _normalize_weekly
+from scripts.utils.player_identity_v3 import historical_identity_key
 
 VERSION="PLAYER_OPPORTUNITY_SHARE_STABILITY_V1"
 TARGET_SEASONS=(2024,2025)
