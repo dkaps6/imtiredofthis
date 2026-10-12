@@ -1,0 +1,147 @@
+name: Research Future-Week Individual Opportunity Lock Pack V1
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Target NFL season'
+        required: true
+        default: '2026'
+        type: string
+      week:
+        description: 'Target NFL week'
+        required: true
+        default: '6'
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  lock-pack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Resolve target context
+        shell: bash
+        run: |
+          set -euo pipefail
+          SEASON="${{ inputs.season }}"
+          WEEK="${{ inputs.week }}"
+          PRIOR_SEASON="$((SEASON-1))"
+          echo "SEASON=$SEASON" >> "$GITHUB_ENV"
+          echo "WEEK=$WEEK" >> "$GITHUB_ENV"
+          echo "PRIOR_SEASON=$PRIOR_SEASON" >> "$GITHUB_ENV"
+          echo "ROOT=/tmp/individual-opportunity-lock-pack" >> "$GITHUB_ENV"
+
+      - name: Install lock-pack dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest scipy pyarrow scikit-learn pyyaml
+
+      - name: Run frozen future-week mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_player_state_future_week_coverage_v1.py
+          pytest -q tests/test_rb_player_state_allocation_future_week_v1.py
+          pytest -q tests/test_rb_receiving_room_share_future_week_v1.py
+          pytest -q tests/test_player_target_share_trajectory_future_week_v1.py
+          pytest -q tests/test_individual_opportunity_future_week_lock_pack_v1.py
+
+      - name: Build target-week historical/pregame inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT/hist" "$ROOT/player_state" "$ROOT/rb_carry" "$ROOT/rb_receiving" "$ROOT/wrte" "$ROOT/pack"
+          python scripts/backtest/build_historical_inputs.py             --season "$SEASON"             --prior-season "$PRIOR_SEASON"             --weeks "$WEEK"             --out-dir "$ROOT/hist"
+          python scripts/backtest/historical_player_logs.py             --seasons "$PRIOR_SEASON,$SEASON"             --schedule "$ROOT/hist/schedule_history.csv"             --out "$ROOT/player_game_logs_history.csv"
+
+      - name: Certify complete prior-week state and exact target-week player identity
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python scripts/research/audit_player_state_future_week_coverage_v1.py             --season "$SEASON"             --target-week "$WEEK"             --out-dir "$ROOT/player_state"
+
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          week=int(os.environ["WEEK"])
+          p=json.loads((root/"player_state"/f"player_state_future_week{week}_result.json").read_text())
+          assert p["disposition"]=="PLAYER_STATE_FUTURE_WEEK_READY", p
+          assert p["target_week_roster_source_ready"] is True, p
+          assert p["roster_source_week"]==week, p
+          assert p["prior_week_source_completion"]["complete"] is True, p
+          assert p["chronology_violations"]==0, p
+          assert p["target_week_outcomes_read"]==0, p
+          assert p["sportsbook_inputs_used"]==0, p
+          assert p["candidate_models_fit"]==0, p
+          assert p["production_changed"] is False, p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Freeze RB carry-snap allocation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python scripts/research/lock_rb_player_state_allocation_future_week_v1.py             --season "$SEASON"             --week "$WEEK"             --parent-rows "$ROOT/player_state/player_state_future_week${WEEK}_rows.csv"             --parent-result "$ROOT/player_state/player_state_future_week${WEEK}_result.json"             --out-dir "$ROOT/rb_carry"
+
+      - name: Freeze RB receiving-room allocation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python scripts/research/lock_rb_receiving_room_share_future_week_v1.py             --season "$SEASON"             --week "$WEEK"             --parent-rb-lock "$ROOT/rb_carry/rb_player_state_allocation_week${WEEK}_lock.csv"             --parent-rb-lock-result "$ROOT/rb_carry/rb_player_state_allocation_week${WEEK}_lock.json"             --parent-live-rows "$ROOT/player_state/player_state_future_week${WEEK}_rows.csv"             --parent-live-result "$ROOT/player_state/player_state_future_week${WEEK}_result.json"             --out-dir "$ROOT/rb_receiving"
+
+      - name: Freeze WR-TE target-share trajectory allocation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          UNIVERSE="$(printf '%s/hist/pregame_universe/%s_week_%02d.csv' "$ROOT" "$SEASON" "$WEEK")"
+          test -s "$UNIVERSE"
+          python scripts/research/lock_player_target_share_trajectory_future_week_v1.py             --season "$SEASON"             --week "$WEEK"             --parent-state-result "$ROOT/player_state/player_state_future_week${WEEK}_result.json"             --player-logs "$ROOT/player_game_logs_history.csv"             --team-weekly "$ROOT/hist/team_weekly_history.csv"             --schedule "$ROOT/hist/schedule_history.csv"             --universe "$UNIVERSE"             --out-dir "$ROOT/wrte"
+
+      - name: Certify immutable opportunity lock pack
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python scripts/research/certify_individual_opportunity_future_week_lock_pack_v1.py             --season "$SEASON"             --week "$WEEK"             --player-state-result "$ROOT/player_state/player_state_future_week${WEEK}_result.json"             --rb-carry-result "$ROOT/rb_carry/rb_player_state_allocation_week${WEEK}_lock.json"             --rb-carry-rows "$ROOT/rb_carry/rb_player_state_allocation_week${WEEK}_lock.csv"             --rb-receiving-result "$ROOT/rb_receiving/rb_receiving_room_share_week${WEEK}_lock.json"             --rb-receiving-rows "$ROOT/rb_receiving/rb_receiving_room_share_week${WEEK}_lock.csv"             --wrte-result "$ROOT/wrte/player_target_share_trajectory_shadow_week${WEEK}_lock.json"             --wrte-rows "$ROOT/wrte/player_target_share_trajectory_shadow_week${WEEK}_lock.csv"             --out "$ROOT/pack/individual_opportunity_week${WEEK}_lock_pack.json"
+
+          cat "$ROOT/pack/individual_opportunity_week${WEEK}_lock_pack.json"
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload immutable future-week opportunity lock pack
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: individual-opportunity-lock-pack-v1-week${{ inputs.week }}-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/individual-opportunity-lock-pack/player_state/**
+            /tmp/individual-opportunity-lock-pack/rb_carry/**
+            /tmp/individual-opportunity-lock-pack/rb_receiving/**
+            /tmp/individual-opportunity-lock-pack/wrte/**
+            /tmp/individual-opportunity-lock-pack/pack/**
