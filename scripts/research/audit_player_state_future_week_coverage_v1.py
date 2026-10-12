@@ -106,6 +106,13 @@ def target_schedule(schedule:pd.DataFrame,target_week:int)->pd.DataFrame:
         raise RuntimeError(f"target schedule too small week={target_week}: {len(out)} teams")
     return out
 
+def target_week_roster_source_ready(roster:pd.DataFrame,target_week:int)->bool:
+    """Require exact target-week roster authority for an immutable future lock."""
+    if roster.empty or "roster_source_week" not in roster.columns:
+        return False
+    weeks=_num(roster["roster_source_week"]).dropna().astype(int).unique().tolist()
+    return len(weeks)==1 and weeks[0]==int(target_week)
+
 def prior_week_scheduled_target_teams(
     schedule:pd.DataFrame,target_teams:set[str],target_week:int
 )->set[str]:
@@ -340,6 +347,7 @@ def audit(season:int,target_week:int):
 
     roster=load_rosters(season,target_week)
     roster=roster.loc[roster["team"].isin(teams)].copy()
+    exact_target_week_roster=target_week_roster_source_ready(roster,target_week)
     roster=roster.merge(sched,on="team",how="left",validate="many_to_one")
     roster["state_key"]=roster.apply(stable_key,axis=1)
     roster["stable_id"]=roster["gsis_id"].ne("")|roster["pfr_id"].ne("")
@@ -408,11 +416,15 @@ def audit(season:int,target_week:int):
     ).reset_index())
 
     ready=bool(
-        len(sched)>=20 and stable_cov>=.90 and snap_cov>=.90 and usage_cov>=.90
+        len(sched)>=20 and exact_target_week_roster
+        and stable_cov>=.90 and snap_cov>=.90 and usage_cov>=.90
         and chrono==0 and len(rb_state)>=20 and multi>=10 and distinguish>=10
         and completion["complete"]
     )
-    source_safe=bool(len(sched)>=20 and stable_cov>=.80 and chrono==0 and completion["complete"])
+    source_safe=bool(
+        len(sched)>=20 and exact_target_week_roster
+        and stable_cov>=.80 and chrono==0 and completion["complete"]
+    )
     disposition=("PLAYER_STATE_FUTURE_WEEK_READY" if ready else
                  "PLAYER_STATE_FUTURE_WEEK_PARTIAL" if source_safe else
                  "PLAYER_STATE_FUTURE_WEEK_NOT_READY")
@@ -421,6 +433,7 @@ def audit(season:int,target_week:int):
         "season":season,"target_week":target_week,"prior_season":prior_season,
         "disposition":disposition,"scheduled_teams":int(len(sched)),
         "roster_source_week":int(out["roster_source_week"].max()) if len(out) else None,
+        "target_week_roster_source_ready":bool(exact_target_week_roster),
         "skill_players":int(len(out)),"stable_id_coverage":stable_cov,
         "players_with_current_games":int(played.sum()),
         "rb_wr_te_latest_snap_coverage_among_played":snap_cov,
