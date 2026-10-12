@@ -65,3 +65,8 @@ def test_share_volatility_expected_direction_helper():
     x=pd.Series([0.01,0.02,0.05,0.10]).to_numpy(float)
     y=pd.Series([0.02,0.03,0.08,0.20]).to_numpy(float)
     assert _rho(x,y) > 0
+
+
+def test_historical_identity_namespace_matches_playerform():
+    from scripts.utils.player_identity_v3 import historical_identity_key
+    assert historical_identity_key("00-0033553","James Conner","ARI")=="gsis:00-0033553"
