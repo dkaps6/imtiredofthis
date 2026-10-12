@@ -177,6 +177,7 @@ def score_row(r:pd.Series)->dict[str,Any]:
         cand_cdf=base_cdf
         cand_crps=base_crps
         cand_log=base_log
+        paired_nll_improvement=0.0
         alpha=beta=kappa=np.nan
         if not np.isfinite(v):
             invalid_reason="NONFINITE_EXCESS_VAR"
@@ -192,8 +193,9 @@ def score_row(r:pd.Series)->dict[str,Any]:
         cand_cdf=cand.cdf(np.arange(N+1))
         cand_crps=discrete_crps(cand_cdf,y)
         cand_log=float(cand.logpmf(y))
-        if not (np.isfinite(cand_crps) and np.isfinite(cand_log)):
-            raise RuntimeError("non-finite Beta-Binomial score")
+        if not (np.isfinite(cand_crps) and np.isfinite(base_log) and np.isfinite(cand_log)):
+            raise RuntimeError("non-finite changed-row analytic score")
+        paired_nll_improvement=float(cand_log-base_log)
 
     expected_base=N*mu
     expected_cand=N*mu
@@ -209,9 +211,9 @@ def score_row(r:pd.Series)->dict[str,Any]:
         "baseline_crps":base_crps,
         "candidate_crps":cand_crps,
         "crps_improvement":base_crps-cand_crps,
-        "baseline_nll":-base_log,
-        "candidate_nll":-cand_log,
-        "nll_improvement":(-base_log)-(-cand_log),
+        "baseline_nll":(-base_log if np.isfinite(base_log) else np.inf),
+        "candidate_nll":(-cand_log if np.isfinite(cand_log) else np.inf),
+        "paired_nll_improvement":paired_nll_improvement,
         "baseline_80_low":b80[0],"baseline_80_high":b80[1],
         "candidate_80_low":c80[0],"candidate_80_high":c80[1],
         "baseline_90_low":b90[0],"baseline_90_high":b90[1],
@@ -278,13 +280,16 @@ def cell_result(q:pd.DataFrame,cell:str,season:int)->dict[str,Any]:
     )
     base_crps=float(z["baseline_crps"].mean())
     cand_crps=float(z["candidate_crps"].mean())
-    base_nll=float(z["baseline_nll"].mean())
-    cand_nll=float(z["candidate_nll"].mean())
+    paired_nll=float(z["paired_nll_improvement"].mean())
+    changed=z.loc[z["candidate_changed"]].copy()
+    changed_paired_nll=(
+        float(changed["paired_nll_improvement"].mean()) if len(changed) else 0.0
+    )
     pass_cell=bool(
         cand_crps<base_crps
         and game["ci_low"]>0
         and player["ci_low"]>0
-        and cand_nll<=base_nll+1e-12
+        and paired_nll>=-1e-12
         and float(z["expected_count_gap"].max())<=MEAN_TOL
     )
     out.update({
@@ -293,9 +298,11 @@ def cell_result(q:pd.DataFrame,cell:str,season:int)->dict[str,Any]:
         "crps_improvement":base_crps-cand_crps,
         "game_boot":game,
         "player_boot":player,
-        "baseline_nll":base_nll,
-        "candidate_nll":cand_nll,
-        "nll_improvement":base_nll-cand_nll,
+        "mean_paired_nll_improvement":paired_nll,
+        "changed_rows_mean_paired_nll_improvement":changed_paired_nll,
+        "nonfinite_identical_baseline_rows":int(
+            ((~z["candidate_changed"]) & ~np.isfinite(z["baseline_nll"])).sum()
+        ),
         "baseline_80_coverage":float(z["baseline_80_hit"].mean()),
         "candidate_80_coverage":float(z["candidate_80_hit"].mean()),
         "baseline_90_coverage":float(z["baseline_90_hit"].mean()),
