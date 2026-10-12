@@ -214,15 +214,24 @@ def cluster_bootstrap(q:pd.DataFrame,cluster_col:str,seed:int)->dict[str,Any]:
 
 def quartiles(q:pd.DataFrame)->list[dict[str,Any]]:
     z=q[["excess_share_sd","share_surprise"]].dropna().copy()
-    if len(z)<4 or z["excess_share_sd"].nunique()<4:
+    if len(z)<4 or z["excess_share_sd"].nunique()<2:
         return []
-    z["quartile"]=pd.qcut(
-        z["excess_share_sd"],4,labels=["Q1","Q2","Q3","Q4"],duplicates="drop"
-    )
+    # Descriptive only. Many players can have exactly zero excess variance,
+    # so duplicate qcut edges may collapse four requested bins into fewer.
+    # Use integer bin codes first, then label only the bins that actually exist.
+    try:
+        codes=pd.qcut(z["excess_share_sd"],4,labels=False,duplicates="drop")
+    except ValueError:
+        return []
+    codes=pd.to_numeric(codes,errors="coerce")
+    z=z.loc[codes.notna()].copy()
+    if z.empty:
+        return []
+    z["quartile_code"]=codes.loc[codes.notna()].astype(int).to_numpy()
     out=[]
-    for label,g in z.groupby("quartile",observed=True):
+    for code,g in z.groupby("quartile_code",sort=True):
         out.append({
-            "quartile":str(label),"rows":int(len(g)),
+            "quartile":f"Q{int(code)+1}","rows":int(len(g)),
             "mean_excess_share_sd":float(g["excess_share_sd"].mean()),
             "mean_share_surprise":float(g["share_surprise"].mean()),
         })
