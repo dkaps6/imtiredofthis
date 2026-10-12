@@ -35,6 +35,33 @@ of this first run was to prove that the collection machinery could inspect the
 entire scheduled universe under clean pregame constraints before any Week-6
 outcomes exist.
 
+## Monday Week-6 refresh — attempt 2
+
+The exact frozen collector was rerun on Monday 2026-10-12 without changing any
+source rule or eligibility gate.
+
+Authority:
+- workflow run: `38187787580`, attempt **2**
+- exact frozen head: `a1489f58db35dcd1dd7720bb04c2aa9006d84bc3`
+- artifact: `11752326387`
+- artifact digest: `sha256:415a04ebfe254f2b18665d641943ed9dbb6996dff6cca613856e92bd39736d0b`
+- workflow conclusion: `SUCCESS`
+
+Observed again:
+- scheduled team-weeks: **28**
+- teams attempted: **28 / 28**
+- teams with retained first-party candidates: **0**
+- retained sources: **0**
+- review packet rows: **0**
+- coverage: **0.0%**
+
+All integrity gates remained green. No Week-6 outcomes, model residuals,
+sportsbook inputs, or predictive fits were used.
+
+This second zero-source snapshot strengthens the conclusion that V1L is
+currently **source/time-gated**, not mechanically broken. Do not loosen the
+allowed source families to manufacture coverage.
+
 ## Passed collection gates
 
 All V1L infrastructure gates passed:
