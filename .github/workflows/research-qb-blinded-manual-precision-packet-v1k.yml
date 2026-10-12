@@ -1,0 +1,98 @@
+name: Research QB Blinded Manual Precision Packet V1K
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/QB_TEAM_PASS_INTENT_BLINDED_BOUNDED_MANUAL_PRECISION_AUDIT_V1K_PLAN.md'
+      - 'scripts/research/build_qb_team_pass_intent_blinded_manual_precision_packet_v1k.py'
+      - 'tests/test_qb_team_pass_intent_blinded_manual_precision_packet_v1k.py'
+      - '.github/workflows/research-qb-blinded-manual-precision-packet-v1k.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  build-blinded-packet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install source-audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pyyaml
+
+      - name: Compile and test V1K packet mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/build_qb_team_pass_intent_blinded_manual_precision_packet_v1k.py
+          pytest -q tests/test_qb_team_pass_intent_blinded_manual_precision_packet_v1k.py
+
+      - name: Verify exact V1G artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11593130438 --jq '.id')" = "11593130438"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11593130438 --jq '.workflow_run.id')" = "37875606789"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11593130438 --jq '.digest')" = "sha256:385810c787da55f1da6678c4722757f0c20147ef4cf7db32398e50c3d8a0257c"
+
+      - name: Download exact V1G source screen
+        uses: actions/download-artifact@v4
+        with:
+          name: qb-full-official-first-source-screen-v1g
+          path: /tmp/v1g
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 37875606789
+
+      - name: Build frozen blinded V1K packet
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb-v1k
+          python scripts/research/build_qb_team_pass_intent_blinded_manual_precision_packet_v1k.py             --v1g-rows /tmp/v1g/qb_intent_full_official_screen_v1g_rows.json             --out-dir /tmp/qb-v1k
+
+      - name: Certify packet selection only
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open("/tmp/qb-v1k/qb_intent_v1k_packet_summary.json"))
+          assert p["sample_size"]==32, p
+          assert p["tag_count"]==7, p
+          assert p["season_week_cell_count"]==18, p
+          assert p["margin_quartile_count"]==4, p
+          assert p["franchise_count"]>=24, p
+          assert all(p["selection_gates"].values()), p
+          assert p["football_outcomes_read"]==0, p
+          assert p["model_residuals_read"]==0, p
+          assert p["sportsbook_inputs_used"] is False, p
+          assert p["paid_oddsapi_calls"]==0, p
+          assert p["week5_2026_outcomes_read"]==0, p
+          assert p["football_predictive_models_fit"]==0, p
+          assert p["production_changed"] is False, p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload blinded V1K packet
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-blinded-manual-precision-packet-v1k
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb-v1k/
