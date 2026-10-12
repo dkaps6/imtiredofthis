@@ -20,8 +20,10 @@ from scripts.build._schedule_utils import get_nfl_schedule
 from scripts._opponent_map import canon_team
 from scripts.research.audit_qb_team_pass_intent_first_party_archive_transport_v1c import (
     DOMAINS,
-    _enumerate_domain,
     _first_party,
+)
+from scripts.research.audit_qb_team_pass_intent_full_official_first_source_screen_v1g import (
+    _enumerate_domain,
 )
 from scripts.research.audit_qb_team_pass_intent_first_party_gold_validation_v1d import (
     _extract_safe_publication,
