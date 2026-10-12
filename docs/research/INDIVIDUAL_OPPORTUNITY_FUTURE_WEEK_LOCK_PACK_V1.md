@@ -16,7 +16,7 @@ individual opportunity mechanisms:
 1. current target-week player-state / identity snapshot;
 2. RB carry/snap allocation shadow;
 3. RB receiving-room share shadow;
-4. WR/TE target-share trajectory shadow.
+4. WR/TE target-share trajectory shadow;\n5. player opportunity-share volatility feature lock.
 
 This pack does not create a new predictor and does not alter any formula.
 
