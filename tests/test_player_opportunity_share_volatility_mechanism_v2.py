@@ -43,3 +43,15 @@ def test_sampling_variance_subtraction_definition():
     role_sd=raw_sd+.10
     excess2=max(0.0,role_sd*role_sd-sampling_var)
     assert excess2>0
+
+
+def test_descriptive_quartiles_tolerate_zero_excess_mass():
+    from scripts.research.audit_player_opportunity_share_volatility_mechanism_v2 import quartiles
+    q=pd.DataFrame({
+        "excess_share_sd":[0.0]*30+[0.01]*5+[0.03]*5,
+        "share_surprise":np.linspace(.01,.20,40),
+    })
+    got=quartiles(q)
+    assert isinstance(got,list)
+    assert sum(x["rows"] for x in got)==40
+    assert 1 <= len(got) <= 4
