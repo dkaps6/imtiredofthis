@@ -305,6 +305,8 @@ def _defense_games(events:pd.DataFrame)->pd.DataFrame:
 
 
 def player_state(prior_games:pd.DataFrame)->dict[str,Any]:
+    if prior_games is None or prior_games.empty or not {"time_key","game_id","targets"}.issubset(prior_games.columns):
+        return {"ready":False,"prior_games":0,"prior_targets":0}
     g=prior_games.sort_values(["time_key","game_id"]).tail(PLAYER_GAME_WINDOW).copy()
     if len(g)<MIN_PLAYER_GAMES:
         return {"ready":False,"prior_games":int(len(g)),"prior_targets":int(g["targets"].sum()) if len(g) else 0}
