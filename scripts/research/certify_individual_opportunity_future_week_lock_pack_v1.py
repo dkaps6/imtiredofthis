@@ -62,6 +62,7 @@ def certify(
     rb_carry:dict[str,Any],
     rb_receiving:dict[str,Any],
     wrte_trajectory:dict[str,Any],
+    share_volatility:dict[str,Any],
 )->dict[str,Any]:
     if int(player_state.get("season",-1))!=season or int(player_state.get("target_week",-1))!=week:
         raise RuntimeError("player-state target mismatch")
