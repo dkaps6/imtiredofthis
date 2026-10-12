@@ -89,3 +89,8 @@ def test_defense_state_requires_all_four_bands_supported():
     sparse["yards_deep"]=0.0
     got2=defense_state(sparse)
     assert got2["ready"] is False
+
+
+def test_player_state_zero_prior_history_is_unsupported_not_error():
+    got=player_state(pd.DataFrame())
+    assert got=={"ready":False,"prior_games":0,"prior_targets":0}
