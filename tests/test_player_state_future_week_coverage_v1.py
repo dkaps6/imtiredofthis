@@ -10,13 +10,17 @@ from scripts.research.audit_player_state_future_week_coverage_v1 import (
 
 
 def test_target_schedule_builds_two_team_rows_per_game():
-    schedule = pd.DataFrame([
-        {"week": 6, "home": "IND", "away": "HOU"},
-        {"week": 6, "home": "DAL", "away": "NYG"},
-    ])
+    pairs = [
+        ("IND","HOU"),("DAL","NYG"),("BUF","MIA"),("BAL","CLE"),("PIT","CIN"),
+        ("DEN","LV"),("LAC","KC"),("SEA","SF"),("TB","ATL"),("CHI","GB"),
+    ]
+    schedule = pd.DataFrame(
+        [{"week":6,"home":home,"away":away} for home,away in pairs]
+    )
     out = target_schedule(schedule, 6)
-    assert set(out["team"]) == {"IND", "HOU", "DAL", "NYG"}
+    assert len(out) == 20
     assert dict(zip(out["team"], out["opponent"]))["IND"] == "HOU"
+    assert dict(zip(out["team"], out["opponent"]))["HOU"] == "IND"
 
 
 def test_prior_week_required_teams_respects_target_byes():
