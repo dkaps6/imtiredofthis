@@ -1,0 +1,99 @@
+name: Research QB Prospective Structured Source Collection V1L
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/QB_TEAM_PASS_INTENT_PROSPECTIVE_STRUCTURED_SOURCE_COLLECTION_V1L_PLAN.md'
+      - 'scripts/research/collect_qb_team_pass_intent_prospective_structured_v1l.py'
+      - 'tests/test_qb_team_pass_intent_prospective_structured_v1l.py'
+      - '.github/workflows/research-qb-prospective-structured-source-collection-v1l.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prospective-source-collection:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install repository dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml
+
+      - name: Compile and test frozen V1L mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/collect_qb_team_pass_intent_prospective_structured_v1l.py
+          pytest -q tests/test_qb_team_pass_intent_prospective_structured_v1l.py
+
+      - name: Run prospective Week-6 structured source collection
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb-v1l
+          python scripts/research/collect_qb_team_pass_intent_prospective_structured_v1l.py             --season 2026             --week 6             --out-dir /tmp/qb-v1l             --workers 20
+
+      - name: Certify V1L collection contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          summary=json.load(open("/tmp/qb-v1l/qb_intent_prospective_structured_v1l_summary.json"))
+          teams=json.load(open("/tmp/qb-v1l/qb_intent_prospective_structured_v1l_team_results.json"))
+          packet=json.load(open("/tmp/qb-v1l/qb_intent_prospective_structured_v1l_review_packet.json"))
+
+          assert summary["version"]=="QB_TEAM_PASS_INTENT_PROSPECTIVE_STRUCTURED_SOURCE_COLLECTION_V1L", summary
+          assert summary["season"]==2026 and summary["week"]==6, summary
+          assert summary["scheduled_team_weeks"]==len(teams)>0, summary
+          assert all(t["retained_sources"]<=3 for t in teams), teams
+          assert summary["unreviewed_packet_rows"]==len(packet), summary
+          assert all(x["decision"]=="UNREVIEWED" for x in packet), packet
+          assert summary["football_outcomes_read"]==0, summary
+          assert summary["model_residuals_read"]==0, summary
+          assert summary["sportsbook_inputs_used"] is False, summary
+          assert summary["paid_oddsapi_calls"]==0, summary
+          assert summary["week5_2026_outcomes_read"]==0, summary
+          assert summary["football_predictive_models_fit"]==0, summary
+          assert summary["production_changed"] is False, summary
+          assert summary["disposition"] in {
+              "PROSPECTIVE_STRUCTURED_COLLECTION_READY",
+              "PROSPECTIVE_STRUCTURED_COLLECTION_NOT_READY",
+          }, summary
+
+          for row in packet:
+              assert row["season"]==2026 and row["week"]==6, row
+              assert row["locator"], row
+              assert row["publication_time"], row
+              assert row["source_family"] in {
+                  "transcript","transcripts","press-conference","press-conferences",
+                  "media-availability","media_availability","what-they-said","quotes"
+              }, row
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload V1L prospective source artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-prospective-structured-source-collection-v1l
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb-v1l/
