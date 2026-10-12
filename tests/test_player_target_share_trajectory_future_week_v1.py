@@ -38,11 +38,11 @@ def test_trajectory_feature_preserves_frozen_recent2_vs_earlier_rule():
     m.WEEK=6
     try:
         team_idx={"IND":pd.DataFrame([
-            {"week":1,"game_id":"g1","team_targets":20.0},
-            {"week":2,"game_id":"g2","team_targets":20.0},
-            {"week":3,"game_id":"g3","team_targets":20.0},
-            {"week":4,"game_id":"g4","team_targets":20.0},
-            {"week":5,"game_id":"g5","team_targets":20.0},
+            {"week":1,"game_id":"g1","team":"IND","team_targets":20.0},
+            {"week":2,"game_id":"g2","team":"IND","team_targets":20.0},
+            {"week":3,"game_id":"g3","team":"IND","team_targets":20.0},
+            {"week":4,"game_id":"g4","team":"IND","team_targets":20.0},
+            {"week":5,"game_id":"g5","team":"IND","team_targets":20.0},
         ])}
         lookup={
             (1,"g1","IND","P"):2.0,
