@@ -12,9 +12,9 @@ from scripts.research.audit_player_opportunity_share_volatility_mechanism_v2 imp
 def test_partial_spearman_detects_signal_beyond_controls():
     n=40
     sd=np.linspace(.01,.20,n)
-    mean=np.linspace(.10,.30,n)
-    sampling=np.linspace(.02,.04,n)
-    surprise=.5*sd + .01*np.sin(np.arange(n))
+    mean=.20 + .03*np.sin(np.arange(n)*0.7)
+    sampling=.03 + .005*np.cos(np.arange(n)*0.5)
+    surprise=.5*sd + .01*np.sin(np.arange(n)*1.3)
     q=pd.DataFrame({
         "prior_share_sd":sd,
         "share_surprise":surprise,
