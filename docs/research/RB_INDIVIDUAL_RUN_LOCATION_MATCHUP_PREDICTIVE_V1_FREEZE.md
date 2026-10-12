@@ -107,7 +107,7 @@ The candidate must preserve:
 - ensemble weights;
 - simulation seeds.
 
-Only the declared RB per-carry rushing-efficiency seam may change.
+Only the declared RB per-carry rushing-efficiency seam may change. RB `rush_rec_yards` may move only through its rushing component; its receiving component must remain exact.
 
 ## Primary scoring
 
