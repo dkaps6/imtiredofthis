@@ -58,6 +58,7 @@ jobs:
           pytest -q tests/test_rb_player_state_allocation_future_week_v1.py
           pytest -q tests/test_rb_receiving_room_share_future_week_v1.py
           pytest -q tests/test_player_target_share_trajectory_future_week_v1.py
+          pytest -q tests/test_player_opportunity_share_volatility_future_week_v1.py
           pytest -q tests/test_individual_opportunity_future_week_lock_pack_v1.py
 
       - name: Build target-week historical/pregame inputs
@@ -66,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf "$ROOT"
-          mkdir -p "$ROOT/hist" "$ROOT/player_state" "$ROOT/rb_carry" "$ROOT/rb_receiving" "$ROOT/wrte" "$ROOT/pack"
+          mkdir -p "$ROOT/hist" "$ROOT/player_state" "$ROOT/rb_carry" "$ROOT/rb_receiving" "$ROOT/wrte" "$ROOT/share_volatility" "$ROOT/pack"
           python scripts/backtest/build_historical_inputs.py             --season "$SEASON"             --prior-season "$PRIOR_SEASON"             --weeks "$WEEK"             --out-dir "$ROOT/hist"
           python scripts/backtest/historical_player_logs.py             --seasons "$PRIOR_SEASON,$SEASON"             --schedule "$ROOT/hist/schedule_history.csv"             --out "$ROOT/player_game_logs_history.csv"
 
@@ -94,6 +95,13 @@ jobs:
           assert p["production_changed"] is False, p
           print(json.dumps(p,indent=2,sort_keys=True))
           PY
+
+      - name: Freeze player opportunity-share volatility
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python scripts/research/lock_player_opportunity_share_volatility_future_week_v1.py             --season "$SEASON"             --target-week "$WEEK"             --parent-rows "$ROOT/player_state/player_state_future_week${WEEK}_rows.csv"             --parent-result "$ROOT/player_state/player_state_future_week${WEEK}_result.json"             --out-dir "$ROOT/share_volatility"
 
       - name: Freeze RB carry-snap allocation
         env:
@@ -123,7 +131,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          python scripts/research/certify_individual_opportunity_future_week_lock_pack_v1.py             --season "$SEASON"             --week "$WEEK"             --player-state-result "$ROOT/player_state/player_state_future_week${WEEK}_result.json"             --rb-carry-result "$ROOT/rb_carry/rb_player_state_allocation_week${WEEK}_lock.json"             --rb-carry-rows "$ROOT/rb_carry/rb_player_state_allocation_week${WEEK}_lock.csv"             --rb-receiving-result "$ROOT/rb_receiving/rb_receiving_room_share_week${WEEK}_lock.json"             --rb-receiving-rows "$ROOT/rb_receiving/rb_receiving_room_share_week${WEEK}_lock.csv"             --wrte-result "$ROOT/wrte/player_target_share_trajectory_shadow_week${WEEK}_lock.json"             --wrte-rows "$ROOT/wrte/player_target_share_trajectory_shadow_week${WEEK}_lock.csv"             --out "$ROOT/pack/individual_opportunity_week${WEEK}_lock_pack.json"
+          python scripts/research/certify_individual_opportunity_future_week_lock_pack_v1.py             --season "$SEASON"             --week "$WEEK"             --player-state-result "$ROOT/player_state/player_state_future_week${WEEK}_result.json"             --rb-carry-result "$ROOT/rb_carry/rb_player_state_allocation_week${WEEK}_lock.json"             --rb-carry-rows "$ROOT/rb_carry/rb_player_state_allocation_week${WEEK}_lock.csv"             --rb-receiving-result "$ROOT/rb_receiving/rb_receiving_room_share_week${WEEK}_lock.json"             --rb-receiving-rows "$ROOT/rb_receiving/rb_receiving_room_share_week${WEEK}_lock.csv"             --wrte-result "$ROOT/wrte/player_target_share_trajectory_shadow_week${WEEK}_lock.json"             --wrte-rows "$ROOT/wrte/player_target_share_trajectory_shadow_week${WEEK}_lock.csv"             --share-volatility-result "$ROOT/share_volatility/player_opportunity_share_volatility_week${WEEK}_lock.json"             --share-volatility-rows "$ROOT/share_volatility/player_opportunity_share_volatility_week${WEEK}_lock.csv"             --out "$ROOT/pack/individual_opportunity_week${WEEK}_lock_pack.json"
 
           cat "$ROOT/pack/individual_opportunity_week${WEEK}_lock_pack.json"
 
@@ -144,4 +152,5 @@ jobs:
             /tmp/individual-opportunity-lock-pack/rb_carry/**
             /tmp/individual-opportunity-lock-pack/rb_receiving/**
             /tmp/individual-opportunity-lock-pack/wrte/**
+            /tmp/individual-opportunity-lock-pack/share_volatility/**
             /tmp/individual-opportunity-lock-pack/pack/**
