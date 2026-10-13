@@ -1,0 +1,175 @@
+name: Research Player X Environment Response V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PLAYER_FIRST_INDIVIDUALIZATION_FRONTIER_V1.md'
+      - 'docs/research/PLAYER_X_ENVIRONMENT_RESPONSE_V1_FREEZE.md'
+      - 'scripts/research/audit_player_x_environment_response_v1.py'
+      - 'tests/test_player_x_environment_response_v1.py'
+      - '.github/workflows/research-player-x-environment-response-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PRODUCTION_PARENT_SHA: 812ac2cde79fe3846174613a2f2777e57b34b739
+
+jobs:
+  historical-diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyyaml tabulate 'pyarrow==18.1.0'
+
+      - name: Compile and test frozen diagnostic
+        env:
+          PYTHONPATH: \${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_player_x_environment_response_v1.py
+          pytest -q tests/test_player_x_environment_response_v1.py
+          cp scripts/research/audit_player_x_environment_response_v1.py /tmp/audit_player_x_environment_response_v1.py
+
+      - name: Strict research-branch audit
+        env:
+          PYTHONPATH: \${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Switch reconstruction code to exact production parent
+        run: |
+          git fetch origin "$PRODUCTION_PARENT_SHA" --depth=1
+          git checkout --detach "$PRODUCTION_PARENT_SHA"
+          test "$(git rev-parse HEAD)" = "$PRODUCTION_PARENT_SHA"
+
+      - name: Build historical inputs
+        env:
+          PYTHONPATH: \${{ github.workspace }}
+        run: |
+          rm -rf /tmp/player_x_env
+          mkdir -p /tmp/player_x_env/hist_2024 /tmp/player_x_env/hist_2025 /tmp/player_x_env/result
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/player_x_env/hist_2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/player_x_env/hist_2025
+
+      - name: Combine schedule and team histories
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          root=Path('/tmp/player_x_env')
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([
+                  pd.read_csv(root/'hist_2024'/name),
+                  pd.read_csv(root/'hist_2025'/name),
+              ],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(root/name,index=False)
+          PY
+
+      - name: Build leakage-safe player logs and exact component traces
+        env:
+          PYTHONPATH: \${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2023,2024,2025 \
+            --schedule /tmp/player_x_env/schedule_history.csv \
+            --out /tmp/player_x_env/player_game_logs_history.csv
+
+          python scripts/backtest/walk_forward.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/player_x_env/player_game_logs_history.csv \
+            --team-weekly /tmp/player_x_env/team_weekly_history.csv \
+            --schedule /tmp/player_x_env/schedule_history.csv \
+            --universe-dir /tmp/player_x_env/hist_2024/pregame_universe \
+            --out /tmp/player_x_env/component_predictions_2024.csv
+
+          python scripts/backtest/walk_forward.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/player_x_env/player_game_logs_history.csv \
+            --team-weekly /tmp/player_x_env/team_weekly_history.csv \
+            --schedule /tmp/player_x_env/schedule_history.csv \
+            --universe-dir /tmp/player_x_env/hist_2025/pregame_universe \
+            --out /tmp/player_x_env/component_predictions_2025.csv
+
+      - name: Build exact full-stack football baseline
+        env:
+          PYTHONPATH: \${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
+            --component-file /tmp/player_x_env/component_predictions_2024.csv \
+            --component-file /tmp/player_x_env/component_predictions_2025.csv \
+            --schedule /tmp/player_x_env/schedule_history.csv \
+            --weights data/model_ensemble_weights.csv \
+            --out /tmp/player_x_env/full_stack_projection_trace.csv
+
+          python - <<'PY'
+          import pandas as pd
+          p='/tmp/player_x_env/full_stack_projection_trace.csv'
+          x=pd.read_csv(p,nrows=5)
+          required={'ensemble_proj','actual','position','rules_pass_eff_mult','rules_rush_eff_mult'}
+          missing=sorted(required-set(x.columns))
+          if missing:
+              raise RuntimeError(f'full-stack trace missing diagnostic columns: {missing}')
+          print('baseline diagnostic columns present')
+          PY
+
+      - name: Score frozen player x environment diagnostic
+        run: |
+          python /tmp/audit_player_x_environment_response_v1.py \
+            --projection-file /tmp/player_x_env/full_stack_projection_trace.csv \
+            --out-dir /tmp/player_x_env/result
+
+      - name: Certify frozen boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/player_x_env/result/player_x_environment_response_result.json'))
+          assert p['version']=='PLAYER_X_ENVIRONMENT_RESPONSE_V1',p
+          assert p['production_parent_sha']=='812ac2cde79fe3846174613a2f2777e57b34b739',p
+          assert p['target_seasons']==[2024,2025],p
+          assert p['target_weeks']==[7,18],p
+          assert p['prior_window_games']==8,p
+          assert p['minimum_prior_games']==6,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['parameters_fit']==0,p
+          assert p['projection_changes']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'PLAYER_X_ENVIRONMENT_RESPONSE_HAS_REPLICATED_CELLS',
+              'PLAYER_X_ENVIRONMENT_RESPONSE_NULL',
+              'PLAYER_X_ENVIRONMENT_RESPONSE_INTEGRITY_FAILURE',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload frozen diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-x-environment-response-v1-\${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/player_x_env/result/**
