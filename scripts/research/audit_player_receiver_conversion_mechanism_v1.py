@@ -278,9 +278,14 @@ def canonical_rows(input_root: Path, season: int) -> pd.DataFrame:
         ids=roster_ids.loc[
             pd.to_numeric(roster_ids["week"],errors="coerce").eq(int(week)),
             ["team","player_clean_key","player_id"],
-        ].drop_duplicates(["team","player_clean_key"])
-        if ids.duplicated(["team","player_clean_key"]).any():
-            raise RuntimeError(f"target roster name-key ambiguity season={season} week={week}")
+        ].copy()
+        dup=ids.loc[ids.duplicated(["team","player_clean_key"],keep=False)].copy()
+        if len(dup) and dup.groupby(["team","player_clean_key"])["player_id"].nunique().max()>1:
+            sample=dup.head(10).to_dict("records")
+            raise RuntimeError(
+                f"target roster name-key ambiguity season={season} week={week}: {sample}"
+            )
+        ids=ids.drop_duplicates(["team","player_clean_key"],keep="last")
         x=x.merge(ids,on=["team","player_clean_key"],how="left",validate="many_to_one")
         scoreable_wrte=x["position"].map(pos_family).isin({"WR","TE"}) & pd.to_numeric(
             x["actual_targets"],errors="coerce"
