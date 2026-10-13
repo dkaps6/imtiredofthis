@@ -379,12 +379,15 @@ def grade(
     detail_out: Path | None = None,
     *,
     production_gate_evidence: dict | None = None,
+    final_board_already_gated: bool = False,
 ) -> dict:
-    board = apply_final_board_quarantine(load_boards(season, weeks))
-    board = apply_production_decision_gates(
-        board,
-        evidence=production_gate_evidence,
-    )
+    board = load_boards(season, weeks)
+    if not final_board_already_gated:
+        board = apply_final_board_quarantine(board)
+        board = apply_production_decision_gates(
+            board,
+            evidence=production_gate_evidence,
+        )
     bets = select_model_bet(board)
     if bets.empty:
         graded = empty_graded_frame(bets)
