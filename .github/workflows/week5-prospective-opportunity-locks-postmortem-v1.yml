@@ -1,0 +1,109 @@
+name: Week5 Prospective Opportunity Locks Postmortem V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/grade_week5_prospective_opportunity_locks_v1.py'
+      - '.github/workflows/week5-prospective-opportunity-locks-postmortem-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  grade-locks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RB_CARRY_ARTIFACT: "11456916566"
+      RB_CARRY_DIGEST: "sha256:edf51bbd93920ef0af580a0396422af3288cf511785be59deeea95c117062af4"
+      RB_RECV_ARTIFACT: "11518604971"
+      RB_RECV_DIGEST: "sha256:2174af9aeb75100f29f9965f808be03d9d1d3d38d91366b539d7d25909cfe029"
+      WRTE_ARTIFACT: "11497153776"
+      WRTE_DIGEST: "sha256:c12878ed97a4543a907ac54f4cbadadda7178db068491373091d2c048f176e88"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pyyaml 'pyarrow==18.1.0'
+
+      - name: Verify exact immutable lock artifacts
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,subprocess
+          specs=[
+            (os.environ['RB_CARRY_ARTIFACT'],os.environ['RB_CARRY_DIGEST']),
+            (os.environ['RB_RECV_ARTIFACT'],os.environ['RB_RECV_DIGEST']),
+            (os.environ['WRTE_ARTIFACT'],os.environ['WRTE_DIGEST']),
+          ]
+          for aid,digest in specs:
+              raw=subprocess.check_output(
+                  ['gh','api',f'repos/{os.environ["GITHUB_REPOSITORY"]}/actions/artifacts/{aid}'],
+                  text=True
+              )
+              a=json.loads(raw)
+              assert str(a['id'])==aid,a
+              assert a['digest']==digest,a
+              assert not a['expired'],a
+              print(a['id'],a['name'],a['digest'])
+          PY
+
+      - name: Download exact locks
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/w5locks
+          mkdir -p /tmp/w5locks/carry /tmp/w5locks/recv /tmp/w5locks/wrte /tmp/w5locks/out
+          for spec in             "$RB_CARRY_ARTIFACT carry"             "$RB_RECV_ARTIFACT recv"             "$WRTE_ARTIFACT wrte"; do
+            set -- $spec
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$1/zip" > "/tmp/$2.zip"
+            unzip -q "/tmp/$2.zip" -d "/tmp/w5locks/$2"
+          done
+          test -s /tmp/w5locks/carry/rb_player_state_allocation_week5_lock.csv
+          test -s /tmp/w5locks/recv/rb_receiving_room_share_week5_lock.csv
+          test -s /tmp/w5locks/wrte/player_target_share_trajectory_shadow_week5_lock.csv
+
+      - name: Grade Week5 prospective opportunity locks
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/grade_week5_prospective_opportunity_locks_v1.py             --rb-carry-lock /tmp/w5locks/carry/rb_player_state_allocation_week5_lock.csv             --rb-receiving-lock /tmp/w5locks/recv/rb_receiving_room_share_week5_lock.csv             --trajectory-lock /tmp/w5locks/wrte/player_target_share_trajectory_shadow_week5_lock.csv             --out-dir /tmp/w5locks/out
+
+      - name: Certify diagnostic boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/w5locks/out/week5_prospective_opportunity_locks_result.json'))
+          assert p['version']=='WEEK5_PROSPECTIVE_PLAYER_OPPORTUNITY_LOCK_POSTMORTEM_V1',p
+          assert p['season']==2026 and p['week']==5,p
+          assert p['week5_is_lock_number_one'] is True,p
+          assert p['final_promotion_dispositions_authorized'] is False,p
+          assert p['production_changed'] is False,p
+          assert p['rb_receiving']['baseline_comparison_available'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload Week5 opportunity-lock postmortem
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: week5-prospective-opportunity-locks-postmortem-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/w5locks/out/**
