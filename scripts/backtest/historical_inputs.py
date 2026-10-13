@@ -25,6 +25,11 @@ ALLOWED_ROSTER_STATUS = {"ACT", "INA"}
 def _to_pandas(obj) -> pd.DataFrame:
     if isinstance(obj, pd.DataFrame):
         return obj.copy()
+    # Prefer record conversion for Polars-like frames. This avoids importing
+    # pyarrow solely for a DataFrame bridge, which is incompatible with the
+    # repository's pinned NumPy 1.x runtime on current CI images.
+    if hasattr(obj, "to_dicts"):
+        return pd.DataFrame(obj.to_dicts())
     if hasattr(obj, "to_pandas"):
         return obj.to_pandas()
     return pd.DataFrame(obj)
