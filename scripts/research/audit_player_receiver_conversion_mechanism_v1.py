@@ -105,13 +105,24 @@ def load_roster_position(season: int) -> pd.DataFrame:
     r["week"]=pd.to_numeric(first(r,("week",)),errors="coerce")
     r["player_id"]=first(r,("gsis_id","player_id")).astype("string").fillna("").str.strip()
     r["position"]=first(r,("position","pos")).map(pos_family)
+    r["team"]=first(r,("team","club_code","recent_team")).map(canon_team)
+    r["player_clean_key"]=first(
+        r,("full_name","football_name","player_name","display_name")
+    ).map(clean_key)
     r=r.loc[
         r["season"].eq(season)
         & r["week"].between(1,18,inclusive="both")
         & r["player_id"].ne("")
+        & r["team"].astype(str).ne("")
+        & r["player_clean_key"].astype(str).ne("")
     ].copy()
-    return r[["season","week","player_id","position"]].drop_duplicates(
-        ["season","week","player_id"],keep="last"
+    keys=["season","week","player_id"]
+    if r.duplicated(keys).any():
+        dup=r.loc[r.duplicated(keys,keep=False),keys+["team","player_clean_key"]]
+        if dup.groupby(keys)[["team","player_clean_key"]].nunique().max().max()>1:
+            raise RuntimeError(f"weekly roster stable-ID ambiguity season={season}")
+    return r[["season","week","team","player_id","player_clean_key","position"]].drop_duplicates(
+        keys,keep="last"
     )
 
 
@@ -204,6 +215,7 @@ def num(v):
 
 def canonical_rows(input_root: Path, season: int) -> pd.DataFrame:
     root=input_root/str(season)
+    roster_ids=load_roster_position(season)
     logs=read_csv(root/"player_game_logs_history.csv")
     team=read_csv(root/"team_weekly_history.csv")
     sched=read_csv(root/"schedule_history.csv")
@@ -225,6 +237,22 @@ def canonical_rows(input_root: Path, season: int) -> pd.DataFrame:
             ["team","player_clean_key","actual","actual_opportunities"],
         ].rename(columns={"actual":"actual_receptions","actual_opportunities":"actual_targets"})
         x=m.merge(ar,on=["team","player_clean_key"],how="left")
+        ids=roster_ids.loc[
+            pd.to_numeric(roster_ids["week"],errors="coerce").eq(int(week)),
+            ["team","player_clean_key","player_id"],
+        ].drop_duplicates(["team","player_clean_key"])
+        if ids.duplicated(["team","player_clean_key"]).any():
+            raise RuntimeError(f"target roster name-key ambiguity season={season} week={week}")
+        x=x.merge(ids,on=["team","player_clean_key"],how="left",validate="many_to_one")
+        scoreable_wrte=x["position"].map(pos_family).isin({"WR","TE"}) & pd.to_numeric(
+            x["actual_targets"],errors="coerce"
+        ).gt(0)
+        missing_ids=scoreable_wrte & x["player_id"].astype("string").fillna("").str.strip().eq("")
+        if missing_ids.any():
+            sample=x.loc[missing_ids,["team","player","player_clean_key"]].head(10).to_dict("records")
+            raise RuntimeError(
+                f"stable target receiver ID unresolved season={season} week={week}: {sample}"
+            )
         for _,r in x.iterrows():
             pos=pos_family(r.get("position",""))
             if pos not in {"WR","TE"}:
@@ -244,6 +272,7 @@ def canonical_rows(input_root: Path, season: int) -> pd.DataFrame:
             rows.append({
                 "season":season,"week":week,"game_id":str(r.get("event_id","")),
                 "team":canon_team(r.get("team","")),
+                "player_id":str(r.get("player_id","")),
                 "player_clean_key":str(r.get("player_clean_key","")),
                 "player":str(r.get("player","")),"position":pos,
                 "canonical_catch_rate":float(pred),
@@ -265,7 +294,7 @@ def add_features(targets: pd.DataFrame, player_games: pd.DataFrame, team_games: 
         ph=player_games.loc[
             player_games["season"].eq(r.season)
             & player_games["team"].eq(r.team)
-            & player_games["player_clean_key"].eq(r.player_clean_key)
+            & player_games["player_id"].astype(str).eq(str(r.player_id))
             & player_games["week"].lt(r.week)
         ].sort_values(["week","game_id"]).tail(8)
         if len(ph)<4:
