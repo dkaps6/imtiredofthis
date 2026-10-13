@@ -1,0 +1,61 @@
+name: Research Player Efficiency Tail Stability V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - '.github/workflows/research-player-efficiency-tail-stability-v1.yml'
+      - 'scripts/research/audit_player_efficiency_tail_stability_v1.py'
+      - 'docs/research/PLAYER_EFFICIENCY_TAIL_STABILITY_V1_ANTIRETEST_AUDIT.md'
+      - 'docs/research/PLAYER_EFFICIENCY_TAIL_STABILITY_V1_FREEZE.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  historical-diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy 'pyarrow==18.1.0'
+
+      - name: Compile diagnostic
+        run: python -m py_compile scripts/research/audit_player_efficiency_tail_stability_v1.py
+
+      - name: Run frozen historical diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/player-efficiency-tail-stability-v1
+          mkdir -p /tmp/player-efficiency-tail-stability-v1
+          python scripts/research/audit_player_efficiency_tail_stability_v1.py             --out-dir /tmp/player-efficiency-tail-stability-v1
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-efficiency-tail-stability-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/player-efficiency-tail-stability-v1/**
