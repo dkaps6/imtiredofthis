@@ -275,19 +275,32 @@ def canonical_rows(input_root: Path, season: int) -> pd.DataFrame:
             ["team","player_clean_key","actual","actual_opportunities"],
         ].rename(columns={"actual":"actual_receptions","actual_opportunities":"actual_targets"})
         x=m.merge(ar,on=["team","player_clean_key"],how="left")
+        x["_position_family"]=x["position"].map(pos_family)
         ids=roster_ids.loc[
-            pd.to_numeric(roster_ids["week"],errors="coerce").eq(int(week)),
-            ["team","player_clean_key","player_id"],
+            pd.to_numeric(roster_ids["week"],errors="coerce").eq(int(week))
+            & roster_ids["position"].isin({"WR","TE"}),
+            ["team","player_clean_key","position","player_id"],
+        ].rename(columns={"position":"_position_family"}).copy()
+        dup=ids.loc[
+            ids.duplicated(["team","player_clean_key","_position_family"],keep=False)
         ].copy()
-        dup=ids.loc[ids.duplicated(["team","player_clean_key"],keep=False)].copy()
-        if len(dup) and dup.groupby(["team","player_clean_key"])["player_id"].nunique().max()>1:
+        if len(dup) and dup.groupby(
+            ["team","player_clean_key","_position_family"]
+        )["player_id"].nunique().max()>1:
             sample=dup.head(10).to_dict("records")
             raise RuntimeError(
-                f"target roster name-key ambiguity season={season} week={week}: {sample}"
+                f"target roster name-key/position ambiguity season={season} week={week}: {sample}"
             )
-        ids=ids.drop_duplicates(["team","player_clean_key"],keep="last")
-        x=x.merge(ids,on=["team","player_clean_key"],how="left",validate="many_to_one")
-        scoreable_wrte=x["position"].map(pos_family).isin({"WR","TE"}) & pd.to_numeric(
+        ids=ids.drop_duplicates(
+            ["team","player_clean_key","_position_family"],keep="last"
+        )
+        x=x.merge(
+            ids,
+            on=["team","player_clean_key","_position_family"],
+            how="left",
+            validate="many_to_one",
+        )
+        scoreable_wrte=x["_position_family"].isin({"WR","TE"}) & pd.to_numeric(
             x["actual_targets"],errors="coerce"
         ).gt(0)
         missing_ids=scoreable_wrte & x["player_id"].astype("string").fillna("").str.strip().eq("")
