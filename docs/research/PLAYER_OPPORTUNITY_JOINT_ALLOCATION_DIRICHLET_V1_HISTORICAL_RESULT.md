@@ -112,17 +112,17 @@ Disposition:
 - eligible players: **169**
 - mean joint log-score improvement: **+1.04293**
 - game-cluster 95% CI: **[+0.83940, +1.26814]**
-- team-cluster 95% CI: **[+0.72820, +1.36609]**
+- team-cluster 95% CI: **[+0.72820, +1.37987]**
 - marginal player CRPS improvement: **+0.07221**
 - historical pass: **true**
 
 ### 2025
 - rooms: **402**
-- games: **208**
+- games: **207**
 - eligible players: **179**
 - mean joint log-score improvement: **+1.04630**
 - game-cluster 95% CI: **[+0.85871, +1.24904]**
-- team-cluster 95% CI: **[+0.78508, +1.31986]**
+- team-cluster 95% CI: **[+0.78508, +1.31141]**
 - marginal player CRPS improvement: **+0.06805**
 - historical pass: **true**
 
