@@ -70,6 +70,29 @@ jobs:
           pytest -q tests/test_player_opportunity_share_volatility_future_week_v1.py
           pytest -q tests/test_individual_opportunity_future_week_lock_pack_v1.py
 
+      - name: Probe exact target-week player-state readiness
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          rm -rf "$ROOT/player_state"
+          mkdir -p "$ROOT/player_state"
+          python scripts/research/audit_player_state_future_week_coverage_v1.py             --season "$SEASON"             --target-week "$WEEK"             --out-dir "$ROOT/player_state"
+          python - <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          week=int(os.environ["WEEK"])
+          p=json.loads((root/"player_state"/f"player_state_future_week{week}_result.json").read_text())
+          print(json.dumps(p,indent=2,sort_keys=True))
+          if p.get("disposition")!="PLAYER_STATE_FUTURE_WEEK_READY":
+              print("TARGET_WEEK_PLAYER_STATE_NOT_READY", file=sys.stderr)
+              raise SystemExit(2)
+          if not p.get("target_week_roster_source_ready",False):
+              print("EXACT_TARGET_WEEK_ROSTER_NOT_READY", file=sys.stderr)
+              raise SystemExit(2)
+          PY
+
       - name: Build target-week historical/pregame inputs
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -85,8 +108,6 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          python scripts/research/audit_player_state_future_week_coverage_v1.py             --season "$SEASON"             --target-week "$WEEK"             --out-dir "$ROOT/player_state"
-
           python - <<'PY'
           import json, os
           from pathlib import Path
