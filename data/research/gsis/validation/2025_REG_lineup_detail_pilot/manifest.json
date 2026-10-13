@@ -1,0 +1,151 @@
+{
+  "archive_format_version": "1.0",
+  "snapshot_id": "gsis_2025_reg_lineup_detail_pilot_2026-09-28",
+  "created_at_utc": "2026-09-28T19:52:25.292Z",
+  "capture_window_utc": null,
+  "season": 2025,
+  "phase": "REG",
+  "source": {
+    "site": "NFLGSIS",
+    "base_url": "https://www.nflgsis.com/GameStatsLive/Statistics#LineupDetail",
+    "version": "v11.3.0",
+    "transport": "authenticated browser rendered table"
+  },
+  "point_in_time_semantics": null,
+  "research_boundary": null,
+  "purpose": "Validate historical selection, schema consistency, franchise handling, and extraction semantics.",
+  "leakage_warning": "Completed 2025 season aggregates must not be used as strict pregame weekly features. No historical point-in-time or week mechanism was established.",
+  "display_schemas": {
+    "Lineup Detail": [
+      "Lineup",
+      "Plays",
+      "Passing Plays",
+      "Rushing Plays",
+      "Avg Gain",
+      "Avg Gain, Pass",
+      "Avg Gain, Rush",
+      "First Downs",
+      "Touchdowns",
+      "Fumbles Lost",
+      "Interceptions"
+    ],
+    "Down Analysis / Detailed": [
+      "Distance",
+      "Plays",
+      "Yards",
+      "Avg",
+      "1st Downs",
+      "Conversion%"
+    ],
+    "Down Analysis / Grouped": [
+      "Yards to Go",
+      "Rushing Plays",
+      "Avg Yards per Rush",
+      "Rushing First Downs",
+      "% Rushing Plays Converted",
+      "Passing Plays",
+      "Avg Yards per Pass",
+      "Passing First Downs",
+      "% Passing Plays Converted"
+    ],
+    "Play Propensity / Field Position": [
+      "Yards to Go",
+      "% Rushing Plays, All",
+      "% Passing Plays, All",
+      "% Rushing Plays, Red Zone",
+      "% Passing Plays, Red Zone",
+      "% Rushing Plays, Goal to Go",
+      "% Passing Plays, Goal to Go",
+      "% Rushing Plays, Own Side of Field",
+      "% Passing Plays, Own Side of Field",
+      "% Rushing Plays, Opp. Side of Field",
+      "% Passing Plays, Opp. Side of Field"
+    ],
+    "Play Propensity / Quarter": [
+      "Yards to Go",
+      "% Rushing Plays, Q1",
+      "% Passing Plays, Q1",
+      "% Rushing Plays, Q2",
+      "% Passing Plays, Q2",
+      "% Rushing Plays, Q3",
+      "% Passing Plays, Q3",
+      "% Rushing Plays, Q4",
+      "% Passing Plays, Q4",
+      "% Rushing Plays, Overtime",
+      "% Passing Plays, Overtime"
+    ],
+    "Play Propensity / Score Differential": [
+      "Yards to Go",
+      "% Rushing Plays, Winning by Two Scores",
+      "% Passing Plays, Winning by Two Scores",
+      "% Rushing Plays, Winning by One Score",
+      "% Passing Plays, Winning by One Score",
+      "% Rushing Plays, Game Tied",
+      "% Passing Plays, Game Tied",
+      "% Rushing Plays, Losing by One Score",
+      "% Passing Plays, Losing by One Score",
+      "% Rushing Plays, Losing by Two Scores",
+      "% Passing Plays, Losing by Two Scores"
+    ],
+    "Formation Usage": [
+      "Yards to Go",
+      "# TEs",
+      "# WRs",
+      "Play Count",
+      "Avg Gain",
+      "Avg Gain, NFL Rank",
+      "Rushing Plays",
+      "Passing Plays",
+      "Pass %",
+      "Avg Gain per Rush",
+      "Avg Gain per Rush, NFL Rank",
+      "Avg Gain per Pass",
+      "Avg Gain per Pass, NFL Rank"
+    ]
+  },
+  "record_count": 3,
+  "records_by_report_mode": {
+    "Lineup Detail | None": 3
+  },
+  "empty_or_alert_records": [],
+  "record_summaries": [
+    {
+      "report": "Lineup Detail",
+      "mode": null,
+      "team": "ARZ",
+      "team_label": "Arizona Cardinals",
+      "capture_timestamp_utc": "2026-09-28T19:43:02.494Z",
+      "last_updated": "Last Updated: 1/23/2026 2:59:43 PM",
+      "table_count": 1,
+      "raw_row_count": 397,
+      "availability": "rendered"
+    },
+    {
+      "report": "Lineup Detail",
+      "mode": null,
+      "team": "CHI",
+      "team_label": "Chicago Bears",
+      "capture_timestamp_utc": "2026-09-28T19:43:03.690Z",
+      "last_updated": "Last Updated: 1/23/2026 2:59:43 PM",
+      "table_count": 1,
+      "raw_row_count": 240,
+      "availability": "rendered"
+    },
+    {
+      "report": "Lineup Detail",
+      "mode": null,
+      "team": "WAS",
+      "team_label": "Washington Commanders",
+      "capture_timestamp_utc": "2026-09-28T19:43:05.654Z",
+      "last_updated": "Last Updated: 1/23/2026 2:59:43 PM",
+      "table_count": 1,
+      "raw_row_count": 516,
+      "availability": "rendered"
+    }
+  ],
+  "raw_file": "raw_snapshot.json.gz",
+  "raw_uncompressed_bytes": 838140,
+  "raw_uncompressed_sha256": "5a925d7e8c0a0ca85a61030558eee259360fdd9d4a1b956fe201d6836c632a9b",
+  "raw_gzip_bytes": 23543,
+  "raw_gzip_sha256": "166589a5ee5a8e5388818068a18bab0632ca0839b09cc3a35e073701d1d2f5eb"
+}
