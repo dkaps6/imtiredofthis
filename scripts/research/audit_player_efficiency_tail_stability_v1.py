@@ -107,6 +107,7 @@ def _load_weekly() -> pd.DataFrame:
     for season in TARGET_SEASONS:
         raw = nfl.load_player_stats(seasons=[season], summary_level="week")
         x = _normalize_weekly(_to_pandas(raw), season)
+        x = x.loc[pd.to_numeric(x["week"], errors="coerce").between(1, 18)].copy()
         ss = sched.loc[sched["season"].eq(season)].rename(
             columns={"game_id": "schedule_game_id", "opponent": "schedule_opponent"}
         )
