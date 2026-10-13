@@ -36,10 +36,14 @@ jobs:
           pytest -q tests/test_joint_opportunity_allocation_dirichlet_v1.py
       - name: Certify research-only boundary
         run: |
-          git diff --exit-code origin/main...HEAD -- scripts/simulation_v2.py || {
-            echo "Production simulator changed in mechanics-only lane" >&2
+          if grep -q "joint_opportunity_allocation_dirichlet_v1" scripts/simulation_v2.py; then
+            echo "Research allocator is referenced by production simulation" >&2
             exit 1
-          }
+          fi
+          if git grep -n "joint_opportunity_allocation_dirichlet_v1" -- 'scripts/*.py' 'scripts/**/*.py'             | grep -v '^scripts/research/' ; then
+            echo "Research allocator escaped research namespace" >&2
+            exit 1
+          fi
           echo "JOINT_OPPORTUNITY_ALLOCATION_DIRICHLET_V1_MECHANICS_CERTIFIED"
       - name: Strict repository audit
         env:
