@@ -91,10 +91,9 @@ jobs:
           from scripts.operations.grade_market_track_record_gsis_v1 import grade
           out=Path('/tmp/week5_postmortem')
           detail=out/'week5_selected_graded_detail.csv'
-          gate=json.load(open('/tmp/week5_authority/data/market_track_record/PRODUCTION_DECISION_GATES_V1.json'))
           summary=grade(
               2026,[5],detail_out=detail,
-              production_gate_evidence=gate,
+              final_board_already_gated=True,
           )
           (out/'week5_selected_settlement_summary.json').write_text(
               json.dumps(summary,indent=2,sort_keys=True,default=str)+'\n'
