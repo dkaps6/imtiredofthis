@@ -86,3 +86,26 @@ def test_load_priced_board_raises_on_missing_required_columns(tmp_path):
     except RuntimeError:
         raised = True
     assert raised
+
+
+
+def test_archive_fails_closed_if_source_board_week_disagrees(tmp_path, monkeypatch):
+    from scripts.operations import archive_priced_board_v1 as mod
+
+    priced = tmp_path / "props_priced_clean.csv"
+    pd.DataFrame([_board_row(week=3)]).to_csv(priced, index=False)
+
+    monkeypatch.setattr(mod, "LEDGER_DIR", tmp_path / "ledger")
+    try:
+        mod.archive(
+            priced_path=priced,
+            season=2026,
+            week=4,
+            run_id="123",
+            git_sha="source-sha",
+        )
+        raised = False
+    except RuntimeError as exc:
+        raised = "week provenance mismatch" in str(exc)
+
+    assert raised
