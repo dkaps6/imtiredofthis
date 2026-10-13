@@ -373,9 +373,18 @@ def resolve_gsis(player_clean_key: str, team: str, idx: dict) -> tuple[str, str]
     return "", "UNRESOLVED_IDENTITY"
 
 
-def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict:
+def grade(
+    season: int,
+    weeks: list[int],
+    detail_out: Path | None = None,
+    *,
+    production_gate_evidence: dict | None = None,
+) -> dict:
     board = apply_final_board_quarantine(load_boards(season, weeks))
-    board = apply_production_decision_gates(board)
+    board = apply_production_decision_gates(
+        board,
+        evidence=production_gate_evidence,
+    )
     bets = select_model_bet(board)
     if bets.empty:
         graded = empty_graded_frame(bets)
