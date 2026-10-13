@@ -1,6 +1,106 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 GitHub is canonical; chat memory is secondary.
 
+---
+## ACTIVE CHECKPOINT — 2026-10-13 — WEEK-5 POSTMORTEM / JOINT OPPORTUNITY UNCERTAINTY / WEEK-6 FRONTIER
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-13_WEEK5_POSTMORTEM_JOINT_OPPORTUNITY_WEEK6_FRONTIER_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-13_WEEK5_POSTMORTEM_JOINT_OPPORTUNITY_WEEK6_FRONTIER.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- Production main remains `812ac2cde79fe3846174613a2f2777e57b34b739`; research is isolated on PR #672 / branch `research-individual-opportunity-roadmap-2026-10-08`.
+- Canonical Week-5 preserved board remains run `37860592615`, artifact `11585973062`, digest `sha256:bf52aa4bc30bf6e8cc6029a0a86c0f33cdfaa09f587c38a138f23cef6b7436f4`; no second paid OddsAPI acquisition.
+- Weeks 1-5 selected-board continuity:
+  - W1-W4 849-818, 50.93%, -44.10u;
+  - W5 199-151, 56.86%, +26.17u;
+  - through W5 1,048-969, 51.96%, -17.93u.
+- Week-5 raw football mean layer is NOT solved:
+  - model MAE 18.9288 vs preserved median-line MAE 17.8431;
+  - top-40 misses = 19 efficiency-dominant / 14 opportunity-dominant / 7 mixed.
+- User-facing ticket postmortem is separate from football science:
+  - Watson = genuine projection miss + cross-ticket concentration;
+  - BUF-LAR core = Allen 200+ HIT, Nacua 50+ HIT, Kyren 50+ MISS at 49;
+  - alt-line distance is not calibrated survival probability.
+- Strongest current player-specific result:
+  `PLAYER_OPPORTUNITY_SHARE_STABILITY_THREE_SEASON_CONFIRMED`.
+  Individual strictly-prior share volatility predicts next-game share instability in 2023/24/25.
+- V2 excess-volatility mechanism survives finite-count noise for:
+  - RB carry share;
+  - RB target share;
+  - WR target share.
+  TE target fails the frozen three-season mechanism gate.
+- Mean-identical Beta-Binomial historical PASS:
+  - RB carry share;
+  - WR target share.
+  RB target fails closed; TE not authorized.
+- **Major current PASS:** joint/team-conserving Dirichlet allocation historical run `38401069806`, artifact `11815490905`, digest `sha256:2b336114dc5ef0145c0a40706266da850a0ff1d25c8935958481b996333fce29`.
+  RB carry + WR target pass independently in 2023, 2024 and 2025 while preserving exact canonical means and exact finite team opportunity totals.
+- Prospective joint-shadow mechanics are certified:
+  - run `38402018307` SUCCESS;
+  - runner `.github/workflows/research-future-week-joint-opportunity-shadow-v1.yml`;
+  - research-only; no production change.
+- Week-6 lock is currently correctly FAIL-CLOSED:
+  - Week-5 stats/snaps complete;
+  - exact Week-6 weekly roster authority unavailable;
+  - roster source is still Week 5;
+  - target-week injury rows 0;
+  - do NOT substitute Week-5 roster identity.
+- If exact Week-6 roster authority is now available, the FIRST operational move is to rerun/freeze the existing opportunity lock pack and joint RB-carry/WR-target shadow before any Week-6 outcomes.
+- If Week-6 roster is still unavailable, the next non-time-gated football lane is **individual efficiency-tail uncertainty**, frozen historically before scoring. Do not tune Week-5 misses.
+- QB coach/OC intent is a passive prospective side lane:
+  - corrected historical transport passed;
+  - historical semantic automation failed / blanket promotion closed;
+  - V1L Monday refresh still retained 0 sources;
+  - do not loosen source rules.
+- Player-specific direct matchup transforms are closed:
+  - WR/TE depth-YPT V1 failed;
+  - RB run-location YPC V1 failed;
+  - do not retune/rescue.
+- PR-side red `Backtest Weeks 1-2 Full Board` and `Replay Paid Full Slate Artifact Once` are Arrow/NumPy compatibility failures, not scientific failures or new odds pulls. Repo CI / historical input validation / clean benchmark rebuild are green.
+- No paid OddsAPI without explicit user approval.
+
+### Exact next action
+
+1. Reconcile live main / research branch / PR #672 / Issue #535 / exact-head Actions.
+2. Check exact Week-6 weekly roster authority.
+3. If available:
+   - rerun the frozen Week-6 opportunity lock pack;
+   - require exact Week-6 identity and complete Week-5 stats/snaps;
+   - freeze raw share-volatility state;
+   - freeze RB carry/snap, RB receiving, WR/TE trajectory;
+   - build/freeze the joint Dirichlet shadow for RB carry + WR target only;
+   - preserve run/artifact/digest before Week-6 outcomes;
+   - no production promotion.
+4. If unavailable:
+   - remain fail-closed;
+   - immediately start the next historical player-specific root cause: efficiency-tail uncertainty, after anti-retest reconciliation and frozen contract.
+5. Mechanically repair the two Arrow/NumPy red PR workflows when useful, without changing football science.
+6. Keep ticket construction as a separate downstream risk/portfolio process.
+7. Do not reopen closed matchup, QB generic mean, M95/M96, RB-target Beta-Binomial, or TE-target uncertainty families.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this newest top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-10-13_WEEK5_POSTMORTEM_JOINT_OPPORTUNITY_WEEK6_FRONTIER_CURRENT.md`
+4. `docs/research/WEEKS1_5_CONTINUITY_WEEK5_POSTMORTEM_SYNTHESIS_V1.md`
+5. `docs/research/PLAYER_OPPORTUNITY_JOINT_ALLOCATION_DIRICHLET_V1_HISTORICAL_RESULT.md`
+6. `docs/research/PLAYER_OPPORTUNITY_JOINT_ALLOCATION_DIRICHLET_V1_PROSPECTIVE_SHADOW_MECHANICS_RESULT.md`
+7. `docs/research/WEEK6_INDIVIDUAL_OPPORTUNITY_LOCK_READINESS_RESULT.md`
+8. newest Issue #535 / PR #672 comments
+9. live main / research branch / Actions
+
+Then continue execution immediately. Do not recursively load older handoffs unless a targeted anti-retest question requires one.
+
 
 ---
 ## ACTIVE CHECKPOINT — 2026-10-08 — PLAYER LANDSCAPE / OPPORTUNITY-DOMINANT CURRENT
