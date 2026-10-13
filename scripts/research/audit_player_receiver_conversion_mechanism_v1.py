@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -87,10 +88,29 @@ def bool_num(s: pd.Series) -> pd.Series:
     return out
 
 
-def fetch_parquet(url: str) -> pd.DataFrame:
+def load_source_hashes(path: Path) -> dict[tuple[int,str],str]:
+    x=lower(read_csv(path))
+    req={"season","source","sha256"}
+    miss=req-set(x.columns)
+    if miss:
+        raise RuntimeError(f"certified source snapshot missing columns: {sorted(miss)}")
+    out={(int(r.season),str(r.source).upper()):str(r.sha256).strip().lower()
+         for r in x.itertuples(index=False)}
+    expected={(s,k) for s in SEASONS for k in ("FTN","PBP")}
+    if set(out)!=expected:
+        raise RuntimeError(f"certified source snapshot keys drifted: {sorted(out)}")
+    return out
+
+
+def fetch_parquet(url: str, expected_sha256: str) -> pd.DataFrame:
     req=Request(url,headers={"User-Agent":"receiver-conversion-mechanism-v1"})
     with urlopen(req,timeout=180) as r:
         raw=r.read()
+    digest=hashlib.sha256(raw).hexdigest()
+    if digest.lower()!=str(expected_sha256).lower():
+        raise RuntimeError(
+            f"certified historical source hash drift url={url} got={digest} expected={expected_sha256}"
+        )
     return pd.read_parquet(io.BytesIO(raw))
 
 
@@ -126,12 +146,16 @@ def load_roster_position(season: int) -> pd.DataFrame:
     )
 
 
-def charted_game_rows(season: int) -> tuple[pd.DataFrame,pd.DataFrame]:
+def charted_game_rows(
+    season: int, source_hashes: dict[tuple[int,str],str]
+) -> tuple[pd.DataFrame,pd.DataFrame]:
     ftn=lower(fetch_parquet(
-        f"https://github.com/nflverse/nflverse-data/releases/download/ftn_charting/ftn_charting_{season}.parquet"
+        f"https://github.com/nflverse/nflverse-data/releases/download/ftn_charting/ftn_charting_{season}.parquet",
+        source_hashes[(season,"FTN")],
     ))
     pbp=lower(fetch_parquet(
-        f"https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_{season}.parquet"
+        f"https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_{season}.parquet",
+        source_hashes[(season,"PBP")],
     ))
     req_f={"nflverse_game_id","nflverse_play_id","season","week","is_drop","is_catchable_ball"}
     req_p={"game_id","play_id","season","week","season_type","posteam","pass_attempt",
@@ -363,14 +387,16 @@ def cluster_ci(frame: pd.DataFrame,cluster: str,value: str,seed: int) -> dict:
 def main() -> int:
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--input-root",type=Path,required=True)
+    ap.add_argument("--source-snapshot",type=Path,required=True)
     ap.add_argument("--out-dir",type=Path,required=True)
     args=ap.parse_args()
     args.out_dir.mkdir(parents=True,exist_ok=True)
+    source_hashes=load_source_hashes(args.source_snapshot)
 
     panels=[]
     integrity={"chronology_violations":0,"same_team_history_violations":0}
     for season in SEASONS:
-        pg,tg=charted_game_rows(season)
+        pg,tg=charted_game_rows(season,source_hashes)
         canon=canonical_rows(args.input_root,season)
         panel,integ=add_features(canon,pg,tg)
         panels.append(panel)
@@ -511,6 +537,9 @@ def main() -> int:
         "development_season":2023,
         "confirmation_seasons":[2024,2025],
         "target_weeks":[5,18],
+        "source_authority":{"run":38409898663,"artifact":11820921870,
+          "digest":"sha256:8967a609e4fe08de5affd936c01d7ee65e60ccf350a2fc4f48f83f945cc4a07a",
+          "hashes_verified":True},
         "features":list(FEATURES),
         "ridge_alpha":RIDGE_ALPHA,
         "bootstrap_reps":BOOT_REPS,
