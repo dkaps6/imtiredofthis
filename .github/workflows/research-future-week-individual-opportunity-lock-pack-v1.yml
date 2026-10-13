@@ -6,6 +6,7 @@ on:
       - research-individual-opportunity-roadmap-2026-10-08
     paths:
       - '.github/workflows/research-future-week-individual-opportunity-lock-pack-v1.yml'
+      - 'scripts/backtest/historical_inputs.py'
       - 'docs/research/WEEK6_INDIVIDUAL_OPPORTUNITY_LOCK_LAUNCH.md'
   workflow_dispatch:
     inputs:
