@@ -1,0 +1,47 @@
+name: Research Prospective Joint Opportunity Shadow V1 Mechanics
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PLAYER_OPPORTUNITY_JOINT_ALLOCATION_DIRICHLET_V1_PROSPECTIVE_SHADOW_FREEZE.md'
+      - 'scripts/research/lock_joint_opportunity_allocation_dirichlet_future_week_v1.py'
+      - 'tests/test_lock_joint_opportunity_allocation_dirichlet_future_week_v1.py'
+      - '.github/workflows/research-prospective-joint-opportunity-shadow-v1-mechanics.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mechanics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml scipy
+      - name: Compile and test frozen prospective mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/lock_joint_opportunity_allocation_dirichlet_future_week_v1.py
+          pytest -q tests/test_lock_joint_opportunity_allocation_dirichlet_future_week_v1.py
+      - name: Certify research-only boundary
+        run: |
+          if grep -q "lock_joint_opportunity_allocation_dirichlet_future_week_v1" scripts/simulation_v2.py; then
+            echo "Prospective shadow escaped into production simulator" >&2
+            exit 1
+          fi
+          echo "PROSPECTIVE_JOINT_OPPORTUNITY_SHADOW_V1_MECHANICS_CERTIFIED"
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
