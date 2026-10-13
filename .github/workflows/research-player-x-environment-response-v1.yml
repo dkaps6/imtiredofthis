@@ -41,7 +41,7 @@ jobs:
 
       - name: Compile and test frozen diagnostic
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python -m py_compile scripts/research/audit_player_x_environment_response_v1.py
           pytest -q tests/test_player_x_environment_response_v1.py
@@ -49,7 +49,7 @@ jobs:
 
       - name: Strict research-branch audit
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: python scripts/utils/audit_repo.py --strict
 
       - name: Switch reconstruction code to exact production parent
@@ -60,7 +60,7 @@ jobs:
 
       - name: Build historical inputs
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           rm -rf /tmp/player_x_env
           mkdir -p /tmp/player_x_env/hist_2024 /tmp/player_x_env/hist_2025 /tmp/player_x_env/result
@@ -89,7 +89,7 @@ jobs:
 
       - name: Build leakage-safe player logs and exact component traces
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/historical_player_logs.py \
             --seasons 2023,2024,2025 \
@@ -114,7 +114,7 @@ jobs:
 
       - name: Build exact full-stack football baseline
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
             --component-file /tmp/player_x_env/component_predictions_2024.csv \
@@ -169,7 +169,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: player-x-environment-response-v1-\${{ github.run_id }}
+          name: player-x-environment-response-v1-${{ github.run_id }}
           retention-days: 90
           if-no-files-found: warn
           path: /tmp/player_x_env/result/**
