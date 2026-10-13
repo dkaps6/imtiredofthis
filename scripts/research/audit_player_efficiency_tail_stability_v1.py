@@ -107,12 +107,17 @@ def _load_weekly() -> pd.DataFrame:
     for season in TARGET_SEASONS:
         raw = nfl.load_player_stats(seasons=[season], summary_level="week")
         x = _normalize_weekly(_to_pandas(raw), season)
-        x = x.merge(
-            sched.loc[sched["season"].eq(season)],
+        ss = sched.loc[sched["season"].eq(season)].rename(
+            columns={"game_id": "schedule_game_id", "opponent": "schedule_opponent"}
+        )
+        x = x.drop(columns=["game_id", "opponent"], errors="ignore").merge(
+            ss,
             on=["season", "week", "team"],
             how="left",
             validate="many_to_one",
         )
+        x["game_id"] = x["schedule_game_id"]
+        x["opponent"] = x["schedule_opponent"]
         if x["game_id"].isna().any():
             raise RuntimeError(f"missing schedule game_id season={season}")
         parts.append(x)
