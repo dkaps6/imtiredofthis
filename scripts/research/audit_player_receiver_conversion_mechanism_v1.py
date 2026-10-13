@@ -190,8 +190,22 @@ def charted_game_rows(
     z["team"]=z["posteam"].map(canon_team)
     z["catchable"]=bool_num(z["is_catchable_ball"])
     z["drop"]=bool_num(z["is_drop"])
-    roster=load_roster_position(season)
-    z=z.merge(roster,on=["season","week","player_id"],how="left",validate="many_to_one")
+    roster=load_roster_position(season).rename(columns={
+        "team":"roster_team",
+        "player_clean_key":"roster_player_clean_key",
+    })
+    z=z.merge(
+        roster[["season","week","player_id","position","roster_team","roster_player_clean_key"]],
+        on=["season","week","player_id"],how="left",validate="many_to_one"
+    )
+    mapped=z["position"].notna()
+    if mapped.any():
+        bad_team=mapped & z["roster_team"].astype(str).ne(z["team"].astype(str))
+        if bad_team.any():
+            sample=z.loc[bad_team,["season","week","player_id","team","roster_team"]].head(10).to_dict("records")
+            raise RuntimeError(f"FTN/PBP receiver team disagrees with weekly roster: {sample}")
+        z.loc[mapped,"team"]=z.loc[mapped,"roster_team"].astype(str)
+        z.loc[mapped,"player_clean_key"]=z.loc[mapped,"roster_player_clean_key"].astype(str)
     z=z.loc[
         z["player_id"].ne("")
         & z["player_clean_key"].astype(str).ne("")
