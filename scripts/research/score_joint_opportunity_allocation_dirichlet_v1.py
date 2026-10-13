@@ -261,8 +261,11 @@ def build_rooms(
     if s[[ycol,Ncol]].isna().any(axis=None):
         raise RuntimeError(f"target-count identity miss season={season} week={week} cell={cell}")
 
+    # V2 source position is the frozen player-cell authority. The canonical
+    # probability frame contributes only q; merging a second position column
+    # would create position_x/position_y and weaken the identity audit.
     s=s.merge(
-        probs[["team","player_clean_key","position","q"]],
+        probs[["team","player_clean_key","q"]],
         on=["team","player_clean_key"],
         how="left",validate="one_to_one",
     )
