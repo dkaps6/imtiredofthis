@@ -1,6 +1,12 @@
 name: Research Future-Week Individual Opportunity Lock Pack V1
 
 on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - '.github/workflows/research-future-week-individual-opportunity-lock-pack-v1.yml'
+      - 'docs/research/WEEK6_INDIVIDUAL_OPPORTUNITY_LOCK_LAUNCH.md'
   workflow_dispatch:
     inputs:
       season:
@@ -38,6 +44,8 @@ jobs:
           set -euo pipefail
           SEASON="${{ inputs.season }}"
           WEEK="${{ inputs.week }}"
+          if [ -z "$SEASON" ]; then SEASON="2026"; fi
+          if [ -z "$WEEK" ]; then WEEK="6"; fi
           PRIOR_SEASON="$((SEASON-1))"
           echo "SEASON=$SEASON" >> "$GITHUB_ENV"
           echo "WEEK=$WEEK" >> "$GITHUB_ENV"
