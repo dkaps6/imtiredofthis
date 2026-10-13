@@ -2,6 +2,55 @@
 GitHub is canonical; chat memory is secondary.
 
 ---
+## ACTIVE CHECKPOINT — 2026-10-13 — WEEK-6 REPROBE BLOCKED / EFFICIENCY VOLATILITY V1 CLOSED
+
+This checkpoint supersedes the V2 execution-frontier checkpoint for immediate
+execution while preserving its deeper continuity.
+
+Read next:
+- `docs/handoffs/NFL_HANDOFF_2026-10-13_FULL_CONTINUITY_JOINT_OPPORTUNITY_WEEK6_V2.md`
+- `docs/research/WEEK6_INDIVIDUAL_OPPORTUNITY_LOCK_READINESS_RESULT.md`
+- `docs/research/PLAYER_EFFICIENCY_TAIL_STABILITY_V1_RESULT.md`
+
+Current facts:
+- production main remains `812ac2cde79fe3846174613a2f2777e57b34b739`;
+- research remains isolated on PR #672 / branch
+  `research-individual-opportunity-roadmap-2026-10-08`;
+- no paid OddsAPI acquisition was used;
+- fresh Week-6 roster reprobe run `38406807851` remains FAIL-CLOSED:
+  roster source week 5, exact Week-6 roster false, Week-6 injury rows 0;
+- Week-5 stats/snaps remain complete with clean chronology;
+- therefore no Week-6 opportunity pack or joint Dirichlet shadow was created;
+- individual efficiency-tail volatility V1 is complete and NULL:
+  - run `38408536257` SUCCESS
+  - artifact `11819986612`
+  - digest
+    `sha256:4bb8bead9f3a40f6465909c2148111d0c2aec9ff0b21a6b85fdc6bb27a0bb1e5`
+  - 6,280 rows / 360 players / identity coverage 100% / chronology violations 0;
+  - RB rushing YPC: no three-season replication;
+  - WR target YPT: full pass only in 2023; 2024/2025 fail after frozen controls;
+  - TE target YPT: frozen player-support gate fails all seasons;
+  - RB receiving YPT: 2023 scientific fail, 2024/2025 support fail;
+- no V2 efficiency-width candidate is authorized from this exact volatility
+  family;
+- do not rescue with windows, pooled seasons, subgroups, support-gate changes,
+  tail thresholds, or matchup combinations;
+- opportunity uncertainty remains a major PASS for RB carry + WR target and is
+  still awaiting a legal Week-6 prospective lock;
+- QB intent remains passive/source-strict;
+- direct WR/TE depth-YPT and RB run-location-YPC remain closed;
+- ticket outcomes remain downstream and may not retune football science.
+
+Immediate legal research frontier:
+1. keep Week-6 exact-roster source gate fail-closed;
+2. anti-retest the remaining **efficiency regime/mechanism-state** space against
+   completed WR CPOE/catchability/target-depth, QB M70/M71, RB run-location,
+   historical-efficiency and residual-calibration work;
+3. only freeze a new experiment if it uses genuinely distinct pregame
+   information or state—not another historical efficiency-volatility transform;
+4. no paid OddsAPI without explicit user authorization.
+
+---
 ## ACTIVE CHECKPOINT — 2026-10-13 — FULL CONTINUITY / JOINT OPPORTUNITY / WEEK-6 EXECUTION FRONTIER V2
 
 **Read this detailed handoff next:**
