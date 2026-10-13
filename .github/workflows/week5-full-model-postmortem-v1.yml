@@ -8,6 +8,7 @@ on:
     paths:
       - 'docs/research/WEEK5_FULL_MODEL_POSTMORTEM_PROTOCOL_V1.md'
       - 'scripts/research/grade_week5_full_football_board_v1.py'
+      - 'scripts/operations/grade_market_track_record_gsis_v1.py'
       - '.github/workflows/week5-full-model-postmortem-v1.yml'
 
 permissions:
