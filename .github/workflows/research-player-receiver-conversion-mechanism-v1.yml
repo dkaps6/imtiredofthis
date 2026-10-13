@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 env:
   PYTHONDONTWRITEBYTECODE: "1"
@@ -34,6 +35,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nflreadpy scipy scikit-learn pyyaml 'pyarrow==18.1.0'
+
+      - name: Download certified source snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: player-receiver-conversion-source-v1-38409898663
+          path: /tmp/receiver-conversion-source
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38409898663
+
+      - name: Resolve certified source snapshot
+        run: |
+          set -euo pipefail
+          SNAPSHOT="$(find /tmp/receiver-conversion-source -type f -name 'player_receiver_conversion_source_snapshot.csv' -print -quit)"
+          test -n "$SNAPSHOT" && test -s "$SNAPSHOT"
+          echo "SOURCE_SNAPSHOT=$SNAPSHOT" >> "$GITHUB_ENV"
 
       - name: Compile frozen mechanism
         run: python -m py_compile scripts/research/audit_player_receiver_conversion_mechanism_v1.py
@@ -65,6 +82,7 @@ jobs:
           rm -rf /tmp/player-receiver-conversion-mechanism-v1
           python scripts/research/audit_player_receiver_conversion_mechanism_v1.py \
             --input-root /tmp/player-receiver-conversion-inputs \
+            --source-snapshot "$SOURCE_SNAPSHOT" \
             --out-dir /tmp/player-receiver-conversion-mechanism-v1
 
       - name: Certify frozen integrity
@@ -76,6 +94,9 @@ jobs:
           assert p['development_season']==2023,p
           assert p['confirmation_seasons']==[2024,2025],p
           assert p['target_weeks']==[5,18],p
+          assert p['source_authority']['run']==38409898663,p
+          assert p['source_authority']['artifact']==11820921870,p
+          assert p['source_authority']['hashes_verified'] is True,p
           assert p['features']==['prior_drop_per_catchable','prior_relative_catchable_rate'],p
           assert p['ridge_alpha']==20.0,p
           assert p['integrity']['chronology_violations']==0,p
