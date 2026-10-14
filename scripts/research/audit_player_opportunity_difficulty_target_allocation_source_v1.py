@@ -76,6 +76,7 @@ def audit_te(path):
     # Try exact baseline ratio if the casebook preserves baseline share/count.
     if method is None:
         pairs=[
+          ("b0_expected_targets","b0_target_probability"),
           ("b0_expected_targets","baseline_entitlement_tgt_share"),
           ("b0_expected_targets","b0_entitlement_tgt_share"),
           ("b0_expected_targets","b0_tgt_share"),
@@ -92,15 +93,33 @@ def audit_te(path):
     if "event_id" in x.columns: keys=["season","week","event_id","team"]
     c=consistency(x.loc[x["implied_team_targets"].notna()],"implied_team_targets",keys)
     ready=bool(x["implied_team_targets"].notna().any() and c["consistent"])
+    candidate_share_valid=False
+    candidate_mean_gap=None
+    candidate_share_rate=0.0
+    if ready and "candidate_targets_r5p" in x.columns:
+        team_n=num(x["implied_team_targets"])
+        cand=num(x["candidate_targets_r5p"])
+        good=team_n.gt(0)&cand.notna()&cand.ge(0)
+        share=pd.Series(np.nan,index=x.index,dtype=float)
+        share.loc[good]=cand.loc[good]/team_n.loc[good]
+        share_ok=good & share.ge(0) & share.le(1)
+        candidate_share_rate=float(share_ok.mean()) if len(x) else 0.0
+        if share_ok.any():
+            gap=(share.loc[share_ok]*team_n.loc[share_ok]-cand.loc[share_ok]).abs()
+            candidate_mean_gap=float(gap.max()) if len(gap) else 0.0
+            candidate_share_valid=bool(share_ok.sum()==good.sum() and candidate_mean_gap<=TOL)
     return {
       "rows":int(len(x)),"players":int(x["player_clean_key"].astype(str).nunique()),
       "columns":list(x.columns),"interesting_columns":interesting,
       "recoverable_rows":int(x["implied_team_targets"].notna().sum()),
       "recoverable_rate":float(x["implied_team_targets"].notna().mean()) if len(x) else 0.0,
       "team_total_consistency":c,
-      "pregame_team_total_ready":ready,
+      "pregame_team_total_ready":bool(ready and candidate_share_valid),
       "method":method,
-      "replay_required":bool(not ready),
+      "candidate_full_team_share_recoverable":candidate_share_valid,
+      "candidate_full_team_share_rate":candidate_share_rate,
+      "candidate_mean_reconstruction_max_gap":candidate_mean_gap,
+      "replay_required":bool(not (ready and candidate_share_valid)),
     }
 
 def main():
