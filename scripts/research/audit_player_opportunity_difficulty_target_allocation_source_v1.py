@@ -41,6 +41,14 @@ def audit_wr(path):
     }
 
 def audit_te(path):
+    if path is None or not Path(path).exists():
+        return {
+          "rows":0,"players":0,"columns":[],"interesting_columns":[],
+          "recoverable_rows":0,"recoverable_rate":0.0,
+          "team_total_consistency":{"groups":0,"max_within_group_range":None,"consistent":False},
+          "pregame_team_total_ready":False,"method":None,"replay_required":True,
+          "reason":"TE_CASEBOOK_NOT_PRESERVED_IN_RECOVERED_AUTHORITY",
+        }
     x=read(path)
     req={"season","week","team","player_clean_key","candidate_targets_r5p"}
     miss=req-set(x.columns)
@@ -96,7 +104,7 @@ def audit_te(path):
     }
 
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--wr",type=Path,required=True); ap.add_argument("--te",type=Path,required=True); ap.add_argument("--out-dir",type=Path,required=True)
+    ap=argparse.ArgumentParser(); ap.add_argument("--wr",type=Path,required=True); ap.add_argument("--te",type=Path,default=None); ap.add_argument("--out-dir",type=Path,required=True)
     a=ap.parse_args(); a.out_dir.mkdir(parents=True,exist_ok=True)
     wr=audit_wr(a.wr); te=audit_te(a.te)
     if wr["pregame_team_total_ready"] and te["pregame_team_total_ready"]:
