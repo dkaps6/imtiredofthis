@@ -28,3 +28,8 @@ If readiness passes, the existing workflow is authorized to freeze the Week-6
 player-state / RB carry / RB receiving / WR-TE trajectory / share-volatility
 lock pack. If readiness fails, remain fail-closed and continue the historical
 individual efficiency-tail uncertainty lane.
+
+## 2026-10-14 fresh reprobe trigger
+
+Triggered after canonical closure of WR targeted-route mean integration.
+The frozen Week-6 source contract is unchanged. This write exists only to rerun the already-authorized readiness / lock-pack workflow against current source availability.
