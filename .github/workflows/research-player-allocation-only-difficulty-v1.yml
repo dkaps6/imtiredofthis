@@ -1,0 +1,104 @@
+name: Research Player Allocation-Only Difficulty V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - "docs/research/PLAYER_ALLOCATION_ONLY_DIFFICULTY_V1_FREEZE.md"
+      - "scripts/research/evaluate_player_allocation_only_difficulty_v1.py"
+      - ".github/workflows/research-player-allocation-only-difficulty-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install pandas numpy scipy
+
+      - name: Download certified recovered WR/TE authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-te-fold-authorities-recovered-v1
+          path: /tmp/authority
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37782189538
+
+      - name: Download frozen V2 share-volatility panel
+        uses: actions/download-artifact@v4
+        with:
+          name: player-opportunity-share-volatility-mechanism-v2-38295515693
+          path: /tmp/v2
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38295515693
+
+      - name: Download source-ready audit
+        uses: actions/download-artifact@v4
+        with:
+          name: player-opportunity-difficulty-target-allocation-source-v1
+          path: /tmp/source
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38655896001
+
+      - name: Verify frozen sources
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/authority/recovery_manifest.json'))
+          assert p['status']=='WR_TE_FOLD_AUTHORITIES_RECOVERED_EXACT',p
+          assert p['provider_rebuild_used'] is False,p
+          s=json.load(open('/tmp/source/result.json'))
+          assert s['disposition']=='PLAYER_OPPORTUNITY_DIFFICULTY_TARGET_ALLOCATION_SOURCE_READY',s
+          print('source gates PASS')
+          PY
+          WR="$(find /tmp/authority -type f -name 'wr_r15_confirmation_predictions.csv' -print -quit)"
+          TE="$(find /tmp/authority -type f -name 'te_r5p_oos_player_casebook.csv' -print -quit)"
+          V2="$(find /tmp/v2 -type f -name 'player_opportunity_share_volatility_mechanism_v2_rows.csv' -print -quit)"
+          test -n "$WR" && test -s "$WR"
+          test -n "$TE" && test -s "$TE"
+          test -n "$V2" && test -s "$V2"
+          echo "WR=$WR" >> "$GITHUB_ENV"
+          echo "TE=$TE" >> "$GITHUB_ENV"
+          echo "V2=$V2" >> "$GITHUB_ENV"
+
+      - name: Compile
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m py_compile scripts/research/evaluate_player_allocation_only_difficulty_v1.py
+
+      - name: Evaluate frozen allocation-only bridge
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/result
+          python scripts/research/evaluate_player_allocation_only_difficulty_v1.py             --wr "$WR"             --te "$TE"             --v2-rows "$V2"             --out-dir /tmp/result
+
+      - name: Show result
+        if: always()
+        run: cat /tmp/result/player_allocation_only_difficulty_result.json 2>/dev/null || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-allocation-only-difficulty-v1
+          path: |
+            /tmp/result/*
+            docs/research/PLAYER_ALLOCATION_ONLY_DIFFICULTY_V1_FREEZE.md
+          if-no-files-found: warn
+          retention-days: 60
