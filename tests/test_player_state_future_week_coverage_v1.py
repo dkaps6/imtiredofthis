@@ -7,6 +7,7 @@ from scripts.research.audit_player_state_future_week_coverage_v1 import (
     source_complete_for_prior_week,
     target_schedule,
     target_week_roster_source_ready,
+    GAME_ROSTER_STATUS,
 )
 
 
@@ -85,3 +86,10 @@ def test_target_week_roster_source_must_be_exact():
     assert target_week_roster_source_ready(exact, 6) is True
     assert target_week_roster_source_ready(prior, 6) is False
     assert target_week_roster_source_ready(mixed, 6) is False
+
+
+def test_future_player_state_game_roster_status_contract_matches_pregame_universe():
+    assert GAME_ROSTER_STATUS == {"ACT", "INA"}
+    statuses = pd.Series(["ACT", "INA", "RES", "DEV", "CUT", "RET"])
+    keep = statuses.isin(GAME_ROSTER_STATUS)
+    assert statuses.loc[keep].tolist() == ["ACT", "INA"]
