@@ -10,16 +10,21 @@ Frozen contracts:
 
 Authority:
 - branch: `research-individual-opportunity-roadmap-2026-10-08`
-- exact scored head: `b078b211415e278dbab5ef8930754395bb6447e9`
+- exact scored head: `fe1d8ff52bd7cfa322e095a7a6f58752acb0b55f`
 - workflow: `Research Player Targeted Route Matchup V1`
-- run: `38630218270` — SUCCESS
-- job: `116079627105`
-- artifact: `11926191561`
-- artifact digest: `sha256:c016bb9164fcb96a11464bf5bb3d9d9aa6f69a0d8b6633fef0dd19826e6e2b8d`
+- run: `38641891257` — SUCCESS
+- job: `116119186261`
+- artifact: `11929999088`
+- artifact digest: `sha256:0ff2c393e0daa0fa5163d34ce35e38eb25fb7c907cdf287019d609b804ca5128`
 
 Source authority:
-- Stage-A run: `38629731504`
+- Stage-A run: `38637901016`
 - Stage-A disposition: `PLAYER_TARGETED_ROUTE_MATCHUP_SOURCE_READY`
+
+Canonical rerun note:
+- the corrected Stage-A source authority was re-scored end-to-end on 2026-10-14;
+- all six Stage-B family statistics reproduced exactly;
+- the prior Stage-B run remains lineage only; this run is the canonical scientific authority.
 - 46,666 valid WR/TE targeted-route rows
 - 554 distinct WR/TE identities
 - 10 route families with >=1,000 pooled rows
