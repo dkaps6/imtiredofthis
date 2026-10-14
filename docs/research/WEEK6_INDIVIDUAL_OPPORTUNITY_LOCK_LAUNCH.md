@@ -33,3 +33,7 @@ individual efficiency-tail uncertainty lane.
 
 Triggered after canonical closure of WR targeted-route mean integration.
 The frozen Week-6 source contract is unchanged. This write exists only to rerun the already-authorized readiness / lock-pack workflow against current source availability.
+
+## 2026-10-14 active-role membership correction rerun
+
+The first successful generic Week-6 pack exposed a mechanical membership mismatch: the future player-state loader retained nflverse RES/DEV/CUT/RET rows, while the pre-existing pregame projection universe and frozen continuation contract require legitimate current game-active role identities. The loader is now aligned with the already-existing ACT/INA pregame-universe rule. No football formula, support window, coefficient, or outcome gate changed. Regenerate the complete immutable Week-6 pack from scratch; prior pack run 38644002109 is superseded if this corrected run passes.
