@@ -25,37 +25,44 @@ jobs:
           python-version: "3.11"
       - name: Install
         run: pip install pandas numpy
-      - name: Download WR authority
+      - name: Download certified recovered WR/TE fold authority
         uses: actions/download-artifact@v4
         with:
-          name: wr-r15-wr1-anchor-participation-v1
-          path: /tmp/wr
+          name: wr-te-fold-authorities-recovered-v1
+          path: /tmp/recovered
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          run-id: 34238301577
-      - name: Download TE authority
-        uses: actions/download-artifact@v4
-        with:
-          name: te-r5p-production-contract-refit-v1
-          path: /tmp/te
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          run-id: 34152797603
-      - name: Resolve exact files
+          run-id: 37782189538
+      - name: Verify recovery manifest and resolve files
         run: |
           set -euo pipefail
-          WR="$(find /tmp/wr -type f -name 'wr_r15_confirmation_predictions.csv' -print -quit)"
-          TE="$(find /tmp/te -type f -name 'te_r5p_oos_player_casebook.csv' -print -quit)"
+          test -s /tmp/recovered/recovery_manifest.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/recovered/recovery_manifest.json').read_text())
+          assert p['status']=='WR_TE_FOLD_AUTHORITIES_RECOVERED_EXACT',p
+          assert p['provider_rebuild_used'] is False,p
+          assert p['sportsbook_inputs_used'] is False,p
+          print('RECOVERED_FOLD_AUTHORITY_CERTIFIED')
+          PY
+          WR="$(find /tmp/recovered -type f -name 'wr_r15_confirmation_predictions.csv' -print -quit)"
+          TE="$(find /tmp/recovered -type f -name 'te_r5p_oos_player_casebook.csv' -print -quit)"
           test -n "$WR" && test -s "$WR"
-          test -n "$TE" && test -s "$TE"
           echo "WR=$WR" >> "$GITHUB_ENV"
-          echo "TE=$TE" >> "$GITHUB_ENV"
+          if [ -n "$TE" ] && [ -s "$TE" ]; then
+            echo "TE=$TE" >> "$GITHUB_ENV"
+            echo "TE casebook preserved in recovered authority"
+          else
+            echo "TE=" >> "$GITHUB_ENV"
+            echo "TE casebook not preserved; replay reconstruction required"
+          fi
       - name: Audit frozen authority lineage
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           rm -rf /tmp/out
-          python scripts/research/audit_player_opportunity_difficulty_target_allocation_source_v1.py --wr "$WR" --te "$TE" --out-dir /tmp/out
+          if [ -n "$TE" ]; then\n            python scripts/research/audit_player_opportunity_difficulty_target_allocation_source_v1.py --wr "$WR" --te "$TE" --out-dir /tmp/out\n          else\n            python scripts/research/audit_player_opportunity_difficulty_target_allocation_source_v1.py --wr "$WR" --out-dir /tmp/out\n          fi
       - name: Show result
         if: always()
         run: cat /tmp/out/result.json 2>/dev/null || true
