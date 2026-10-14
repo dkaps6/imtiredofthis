@@ -124,6 +124,9 @@ def prep_te(path:Path)->pd.DataFrame:
 
 def merge_authority(auth:pd.DataFrame,v2:pd.DataFrame)->pd.DataFrame:
     keys=["season","week","team","name_key","cell"]
+    # The TE authority also preserves an older identity column. The V2 panel's
+    # stable historical identity is the canonical clustering/join identity here.
+    auth=auth.drop(columns=["player_identity_key"],errors="ignore")
     z=auth.merge(
         v2[[
             "season","week","team","name_key","cell","game_id","player_identity_key",
