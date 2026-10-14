@@ -434,6 +434,32 @@ Do not violate this in Stage B.
 
 ---
 
+# 8B. EARLIER WR FULL-STACK ROUTE-MATCHUP ATTEMPTS — MECHANICAL ONLY, NO SCIENTIFIC RESULT
+
+Before the final source-readiness result was recorded, the branch contained a prematurely scaffolded WR targeted-route full-stack integration workflow. Three Actions runs exist:
+
+- run `38631681403` — FAILURE
+- run `38632065221` — FAILURE
+- run `38632845699` — FAILURE
+
+These are **not scientific failures and not Stage-B results**.
+
+The latest attempt, run `38632845699` / job `116088540862`, passed checkout, dependency install, compile/tests, artifact downloads, fold-authority verification, historical-input construction, player-log construction, and canonical component-baseline generation. It failed during promoted-baseline/candidate generation before any integration trace or scientific scoring existed.
+
+Exact mechanical failure:
+- `pyarrow` required NumPy >=2.0;
+- the workflow environment had NumPy `1.26.4`;
+- failure occurred inside `te_r5p_entitlement_adapter_v1._load_snaps()` while converting nflreadpy/Polars snap counts to pandas;
+- no `wr_route_matchup_full_stack_result.json` was produced;
+- scoring steps were skipped.
+
+The earlier two full-stack runs were also mechanical failures. Do **not** interpret any of the three as evidence for or against the route-matchup hypothesis.
+
+The valid authority is the later source-readiness run `38637901016` and its frozen source result. Stage B itself remains scientifically **UNDISPOSITIONED**.
+
+Next chat should not simply rerun the premature full-stack integration first. It should execute the already-frozen Stage-B diagnostic, then only if Stage B passes freeze/execute an integration candidate. Any mechanical reuse of the scaffold must first repair the NumPy/pyarrow environment without changing football science.
+
+
 # 9. EXACT NEXT SCIENTIFIC ACTION — STAGE B
 
 Stage A/source is complete.
