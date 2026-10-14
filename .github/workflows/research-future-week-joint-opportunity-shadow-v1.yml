@@ -43,6 +43,8 @@ jobs:
           set -euo pipefail
           SEASON="${{ inputs.season }}"
           WEEK="${{ inputs.week }}"
+          if [ -z "$SEASON" ]; then SEASON="2026"; fi
+          if [ -z "$WEEK" ]; then WEEK="6"; fi
           PRIOR_SEASON="$((SEASON-1))"
           ROOT="/tmp/joint-shadow"
           echo "SEASON=$SEASON" >> "$GITHUB_ENV"
