@@ -64,6 +64,13 @@ nflverse participation route is ONLY the route label for the primary/targeted re
 It is NOT total routes run, route participation, TPRR, YPRR, or non-target route state.
 Do not infer WR-CB assignment.
 
+Important mechanical-only history:
+- WR targeted-route full-stack runs 38631681403, 38632065221, and 38632845699 all FAILED before scientific scoring.
+- Latest run 38632845699 / job 116088540862 died on a pyarrow/NumPy ABI mismatch (pyarrow required NumPy >=2.0; env had 1.26.4) inside TE-R5P snap loading.
+- No full-stack result JSON was produced; scoring was skipped.
+- These are NOT scientific failures and NOT Stage-B results.
+- Stage B remains undispositioned. Do not treat those runs as evidence and do not jump straight to rerunning full-stack integration before Stage B.
+
 Immediate next action:
 BUILD AND RUN STAGE B EXACTLY AS ALREADY FROZEN.
 
