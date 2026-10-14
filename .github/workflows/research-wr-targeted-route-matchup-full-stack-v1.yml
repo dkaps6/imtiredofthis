@@ -31,7 +31,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nflreadpy scipy pytest pyarrow
+          pip install nflreadpy scipy pytest pyarrow==17.0.0
 
       - name: Compile and unit test frozen integration
         env:
@@ -53,7 +53,7 @@ jobs:
           path: /tmp/route_casebook
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          run-id: 38630218270
+          run-id: 38641891257
 
       - name: Download certified recovered WR-R15 and TE-R5P fold authorities
         uses: actions/download-artifact@v4
