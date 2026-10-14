@@ -1,6 +1,12 @@
 name: Research Future-Week Joint Opportunity Shadow V1
 
 on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - '.github/workflows/research-future-week-joint-opportunity-shadow-v1.yml'
+      - 'docs/research/WEEK6_JOINT_OPPORTUNITY_SHADOW_LAUNCH.md'
   workflow_dispatch:
     inputs:
       season:
