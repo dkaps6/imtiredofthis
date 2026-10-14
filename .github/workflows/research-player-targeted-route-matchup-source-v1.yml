@@ -33,11 +33,11 @@ jobs:
 
       - name: Compile
         run: |
-          python -m py_compile scripts/research/audit_player_targeted_route_matchup_source_v1.py
+          PYTHONPATH=. python -m py_compile scripts/research/audit_player_targeted_route_matchup_source_v1.py
 
       - name: Unit tests
         run: |
-          PYTHONPATH=. pytest -q tests/test_player_targeted_route_matchup_source_v1.py
+          PYTHONPATH=. PYTHONPATH=. python -m pytest -q tests/test_player_targeted_route_matchup_source_v1.py
 
       - name: Run frozen source audit
         run: |
