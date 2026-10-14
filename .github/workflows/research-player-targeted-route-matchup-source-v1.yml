@@ -37,7 +37,7 @@ jobs:
 
       - name: Unit tests
         run: |
-          pytest -q tests/test_player_targeted_route_matchup_source_v1.py
+          PYTHONPATH=. pytest -q tests/test_player_targeted_route_matchup_source_v1.py
 
       - name: Run frozen source audit
         run: |
