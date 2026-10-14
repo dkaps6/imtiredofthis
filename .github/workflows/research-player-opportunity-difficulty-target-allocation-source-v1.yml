@@ -1,0 +1,69 @@
+name: Research Player Opportunity Difficulty Target Allocation Source V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - "docs/research/PLAYER_OPPORTUNITY_DIFFICULTY_TARGET_ALLOCATION_SOURCE_V1.md"
+      - "scripts/research/audit_player_opportunity_difficulty_target_allocation_source_v1.py"
+      - ".github/workflows/research-player-opportunity-difficulty-target-allocation-source-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install pandas numpy
+      - name: Download WR authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-r15-wr1-anchor-participation-v1
+          path: /tmp/wr
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34238301577
+      - name: Download TE authority
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r5p-production-contract-refit-v1
+          path: /tmp/te
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34152797603
+      - name: Resolve exact files
+        run: |
+          set -euo pipefail
+          WR="$(find /tmp/wr -type f -name 'wr_r15_confirmation_predictions.csv' -print -quit)"
+          TE="$(find /tmp/te -type f -name 'te_r5p_oos_player_casebook.csv' -print -quit)"
+          test -n "$WR" && test -s "$WR"
+          test -n "$TE" && test -s "$TE"
+          echo "WR=$WR" >> "$GITHUB_ENV"
+          echo "TE=$TE" >> "$GITHUB_ENV"
+      - name: Audit frozen authority lineage
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/out
+          python scripts/research/audit_player_opportunity_difficulty_target_allocation_source_v1.py --wr "$WR" --te "$TE" --out-dir /tmp/out
+      - name: Show result
+        if: always()
+        run: cat /tmp/out/result.json 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-opportunity-difficulty-target-allocation-source-v1
+          path: /tmp/out/*
+          if-no-files-found: warn
+          retention-days: 30
