@@ -68,3 +68,5 @@ jobs:
             docs/research/PLAYER_TARGETED_ROUTE_MATCHUP_V1_STAGE_B_FREEZE.md
           if-no-files-found: warn
           retention-days: 30
+
+# Canonical Stage-B rerun trigger: Stage-A source authority 38637901016
