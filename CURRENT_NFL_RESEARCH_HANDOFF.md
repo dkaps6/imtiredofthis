@@ -63,6 +63,7 @@ This supersedes all older checkpoints for immediate execution while preserving t
   - 32/32 defenses supported by Week 8 in 2023, 2024 and 2025
   - eligible named players: 257 / 246 / 253 in 2023/24/25
   - no sportsbook, OddsAPI, 2026 outcomes or production change.
+- Mechanical-only guard: WR targeted-route full-stack runs `38631681403`, `38632065221`, and `38632845699` all failed before scientific scoring. Latest failure was a pyarrow/NumPy ABI mismatch inside TE-R5P snap loading; no full-stack result JSON existed. These are NOT scientific failures. Stage B remains undispositioned.
 - CRITICAL SEMANTICS:
   - `route` = route label for the primary/targeted receiver on the play;
   - NOT total routes, route participation, TPRR, YPRR, or non-target route state;
