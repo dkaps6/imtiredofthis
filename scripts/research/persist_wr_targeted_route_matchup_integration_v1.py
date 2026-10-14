@@ -99,12 +99,53 @@ def _bridge_casebook(casebook: pd.DataFrame, player_logs: pd.DataFrame) -> pd.Da
         how="left",
         validate="many_to_one",
     )
+    out["identity_bridge_method"] = np.where(
+        out["player_clean_key"].notna() & out["player_clean_key"].astype(str).ne(""),
+        "EXACT_WEEK_TEAM_GSIS",
+        "",
+    )
+
+    # Mechanical identity fallback only: GSIS is the stable player authority.
+    # Some weekly-stat rows can be absent or carry a different team-side
+    # representation even when the targeted-route source has an official target.
+    # A missing exact bridge may therefore use the historical logs' unique
+    # GSIS -> canonical player key mapping, but only when that mapping is
+    # globally one-to-one across the loaded 2023-2024 history.
+    global_map = (
+        logs.loc[
+            logs["player_id"].astype(str).str.strip().ne(""),
+            ["player_id", "player_clean_key"],
+        ]
+        .drop_duplicates()
+        .copy()
+    )
+    global_map["player_id"] = global_map["player_id"].astype(str).str.strip()
+    counts = global_map.groupby("player_id")["player_clean_key"].nunique()
+    ambiguous = set(counts.loc[counts.ne(1)].index.astype(str))
+    unique_map = (
+        global_map.loc[~global_map["player_id"].isin(ambiguous)]
+        .drop_duplicates("player_id")
+        .set_index("player_id")["player_clean_key"]
+        .to_dict()
+    )
+    miss = out["player_clean_key"].isna() | out["player_clean_key"].astype(str).eq("")
+    if miss.any():
+        fallback = out.loc[miss, "player_id"].astype(str).map(unique_map)
+        resolved = fallback.notna() & fallback.astype(str).ne("")
+        idx = fallback.index[resolved]
+        out.loc[idx, "player_clean_key"] = fallback.loc[idx]
+        out.loc[idx, "identity_bridge_method"] = "UNIQUE_GSIS_HISTORY_FALLBACK"
+
     miss = out["player_clean_key"].isna() | out["player_clean_key"].astype(str).eq("")
     if miss.any():
         sample = out.loc[miss, ["season","week","team","player_id"]].head(20).to_dict("records")
         raise RuntimeError(f"route casebook identity bridge failed rows={int(miss.sum())} sample={sample}")
     if out.duplicated(["season","week","team","player_clean_key"]).any():
         raise RuntimeError("route casebook maps to duplicate canonical player-week identities")
+    print(
+        "[wr_route_matchup] identity_bridge "
+        + out["identity_bridge_method"].value_counts(dropna=False).to_dict().__repr__()
+    )
     return out
 
 
