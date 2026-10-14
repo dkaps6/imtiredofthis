@@ -99,7 +99,8 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          rm -rf "$ROOT"
+          # Preserve the exact target-week player_state created by the readiness probe.
+          # GitHub-hosted runners are clean per job; only ensure downstream directories exist.
           mkdir -p "$ROOT/hist" "$ROOT/player_state" "$ROOT/rb_carry" "$ROOT/rb_receiving" "$ROOT/wrte" "$ROOT/share_volatility" "$ROOT/pack"
           python scripts/backtest/build_historical_inputs.py             --season "$SEASON"             --prior-season "$PRIOR_SEASON"             --weeks "$WEEK"             --out-dir "$ROOT/hist"
           python scripts/backtest/historical_player_logs.py             --seasons "$PRIOR_SEASON,$SEASON"             --schedule "$ROOT/hist/schedule_history.csv"             --out "$ROOT/player_game_logs_history.csv"
