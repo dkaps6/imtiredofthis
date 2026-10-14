@@ -171,13 +171,36 @@ def lock_shadow(
             ) else None
             rhos.append(rho)
         source["rho_i"]=rhos
-        source["joint_eligible"]=(
+        pre_q_eligible=(
             source["eligible_flag"]
             & source["rho_i"].notna()
-            & _num(source["q"]).gt(0)
-            & _num(source["q"]).lt(1)
             & source["source_max_week"].lt(week)
         )
+        source["joint_eligible"]=(
+            pre_q_eligible
+            & _num(source["q"]).gt(0)
+            & _num(source["q"]).lt(1)
+        )
+        eligible_count=int(pre_q_eligible.sum())
+        eligible_q_match=int((pre_q_eligible & source["q"].notna()).sum())
+        eligible_q_positive=int((pre_q_eligible & _num(source["q"]).gt(0) & _num(source["q"]).lt(1)).sum())
+        unmatched_eligible=source.loc[
+            pre_q_eligible & source["q"].isna(),
+            ["team","player","player_identity_key","player_clean_key"],
+        ].head(20).to_dict("records")
+        print(json.dumps({
+            "joint_shadow_q_identity_diagnostic": {
+                "cell":cell,
+                "source_rows":int(len(source)),
+                "all_q_matches":int(source["q"].notna().sum()),
+                "all_q_match_rate":float(source["q"].notna().mean()) if len(source) else 0.0,
+                "pre_q_eligible_players":eligible_count,
+                "eligible_q_matches":eligible_q_match,
+                "eligible_q_match_rate":float(eligible_q_match/eligible_count) if eligible_count else 1.0,
+                "eligible_positive_q":eligible_q_positive,
+                "unmatched_eligible_examples":unmatched_eligible,
+            }
+        },sort_keys=True))
 
         for team,g in source.groupby("team",sort=True):
             e=g.loc[g["joint_eligible"]].copy()
