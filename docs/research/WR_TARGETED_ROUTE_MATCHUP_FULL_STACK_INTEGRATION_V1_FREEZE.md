@@ -16,6 +16,14 @@ Confirmed source signal:
 - WR direct receiving-yard residual: CLOSED
 - all TE families: CLOSED
 
+Corrected Stage-B authority:
+- canonical source run: `38637901016`;
+- canonical Stage-B rerun: `38641891257`;
+- exact scored head: `fe1d8ff52bd7cfa322e095a7a6f58752acb0b55f`;
+- artifact: `11929999088`;
+- digest: `sha256:0ff2c393e0daa0fa5163d34ce35e38eb25fb7c907cdf287019d609b804ca5128`;
+- this authority correction changes no frozen integration mechanics.
+
 This experiment tests only the two confirmed WR mechanisms inside the historical production-order WR stack.
 
 ## 1. Authoritative integration year
@@ -34,7 +42,7 @@ The 2024 stack must preserve production order:
 
 ## 2. Frozen development-to-integration transmission
 
-Use the already-frozen Stage-B casebook from run `38630218270`.
+Use the already-frozen corrected-source Stage-B casebook from run `38641891257` (artifact `11929999088`, digest `sha256:0ff2c393e0daa0fa5163d34ce35e38eb25fb7c907cdf287019d609b804ca5128`).
 
 Fit **only 2023 development rows**, WR only.
 
