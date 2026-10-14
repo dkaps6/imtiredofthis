@@ -1,0 +1,84 @@
+name: Research TE Player Allocation Joint Dirichlet V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - "docs/research/TE_PLAYER_ALLOCATION_JOINT_DIRICHLET_V1_FREEZE.md"
+      - "scripts/research/evaluate_te_player_allocation_joint_dirichlet_v1.py"
+      - ".github/workflows/research-te-player-allocation-joint-dirichlet-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install pandas numpy scipy
+
+      - name: Download canonical allocation-only parent
+        uses: actions/download-artifact@v4
+        with:
+          name: player-allocation-only-difficulty-v1
+          path: /tmp/parent
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38656442803
+
+      - name: Resolve and verify parent
+        run: |
+          set -euo pipefail
+          ROWS="$(find /tmp/parent -type f -name 'player_allocation_only_difficulty_rows.csv' -print -quit)"
+          RESULT="$(find /tmp/parent -type f -name 'player_allocation_only_difficulty_result.json' -print -quit)"
+          test -n "$ROWS" && test -s "$ROWS"
+          test -n "$RESULT" && test -s "$RESULT"
+          python - "$RESULT" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1]))
+          assert p["version"]=="PLAYER_ALLOCATION_ONLY_DIFFICULTY_V1",p
+          assert p["te"]["disposition"]=="TE_PLAYER_ALLOCATION_DIFFICULTY_CONFIRMED",p
+          assert p["wr"]["disposition"]=="NO_ACTIONABLE_WR_PLAYER_ALLOCATION_DIFFICULTY",p
+          assert p["sportsbook_inputs_used"]==0,p
+          assert p["oddsapi_calls"]==0,p
+          assert p["production_changed"] is False,p
+          print("PARENT_CONFIRMED")
+          PY
+          echo "ROWS=$ROWS" >> "$GITHUB_ENV"
+
+      - name: Compile
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m py_compile scripts/research/evaluate_te_player_allocation_joint_dirichlet_v1.py
+
+      - name: Evaluate frozen TE joint candidate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/result
+          python scripts/research/evaluate_te_player_allocation_joint_dirichlet_v1.py             --parent-rows "$ROWS"             --out-dir /tmp/result
+
+      - name: Show result
+        if: always()
+        run: cat /tmp/result/te_player_allocation_joint_dirichlet_result.json 2>/dev/null || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-player-allocation-joint-dirichlet-v1
+          path: |
+            /tmp/result/*
+            docs/research/TE_PLAYER_ALLOCATION_JOINT_DIRICHLET_V1_FREEZE.md
+          if-no-files-found: warn
+          retention-days: 60
