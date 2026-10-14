@@ -2,6 +2,128 @@
 GitHub is canonical; chat memory is secondary.
 
 ---
+## ACTIVE CHECKPOINT — 2026-10-14 — PLAYER-FIRST INDIVIDUALIZATION / TARGETED-ROUTE MATCHUP SOURCE READY
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-14_PLAYER_FIRST_TARGETED_ROUTE_SOURCE_READY_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-14_PLAYER_FIRST_TARGETED_ROUTE_SOURCE_READY.md`
+
+This supersedes all older checkpoints for immediate execution while preserving their scientific lineage.
+
+### Current state in one screen
+
+- Production main remains `812ac2cde79fe3846174613a2f2777e57b34b739`.
+- Active research remains isolated on PR #672 / branch `research-individual-opportunity-roadmap-2026-10-08`.
+- User's model standard is now explicit: this is an **individual-player projection system**. Position-wide MAE/RMSE is a guardrail, not the hypothesis grain.
+- Canonical status remains `PLAYER_INDIVIDUALIZATION_PARTIAL`.
+- Do not equate a failed position-level/shared candidate with exhaustion of individual-player signal.
+- Confirmed player-specific uncertainty:
+  - `WR_PLAYER_OPPORTUNITY_UNCERTAINTY_CONFIRMED`
+    - run `38595088817`, artifact `11908832554`
+    - 3,224 player-games / 211 WRs
+    - pooled CRPS ~1.47% better than pooled WR uncertainty
+    - player-cluster 95% CI [+0.08180,+0.30846]
+  - `TE_PLAYER_OPPORTUNITY_UNCERTAINTY_CONFIRMED`
+    - run `38594365393`, artifact `11909006619`
+    - 2,005 player-games / 121 TEs
+    - pooled CRPS ~3.28% better than pooled TE uncertainty
+    - player-cluster 95% CI [+0.19727,+0.46175]
+  - historical RB `RB_YARD_DIFFICULTY_MC_WIDTH_QUALIFIED` remains valid.
+- Closed exact player/shared candidates:
+  - player-x-environment V1 = support-limited null;
+  - broad 11/12/OTHER personnel-conditioned opportunity = null;
+  - WR-R3 exact combined integration = closed, but its failure does **not** erase WR same-player persistence;
+  - efficiency-tail volatility V1 = null;
+  - receiver conversion V1 = not confirmed;
+  - Q90 upper-tail hinge = development null;
+  - generic matchup/coverage/target-depth/NGS/WR-CB/RB retune families remain closed/source-blocked as documented.
+- High-resolution source audit says:
+  - total historical routes/route participation still source-parity blocked;
+  - current WR slot/wide exists but historical parity not cleared;
+  - player-attributed motion not available historically;
+  - nflverse participation `route` **is usable only as the primary/targeted receiver's route label**, not total routes run.
+- NEWEST SOURCE BREAKTHROUGH:
+  `PLAYER_TARGETED_ROUTE_MATCHUP_SOURCE_READY`
+  - frozen plan: `docs/research/PLAYER_TARGETED_ROUTE_MATCHUP_V1_FREEZE.md`
+  - result: `docs/research/PLAYER_TARGETED_ROUTE_MATCHUP_V1_SOURCE_RESULT.md`
+  - canonical run `38637901016` SUCCESS
+  - job `116105672352`
+  - exact scored head `159b8213a734e3f4ee16fc86fbb51950099f3323`
+  - artifact `11928258474`
+  - digest `sha256:b957ff0b37f0b2d8f45232bcd44657928cecc75f5f5e6d1c292ee8e35729228c`
+  - 46,666 valid WR/TE targeted-route rows
+  - 554 valid WR/TE players
+  - 100% route/PBP join rate on joined rows
+  - 93.18% stable receiver identity coverage on taxonomy-eligible rows
+  - 10 route families >=1,000 rows
+  - 32/32 defenses supported by Week 8 in 2023, 2024 and 2025
+  - eligible named players: 257 / 246 / 253 in 2023/24/25
+  - no sportsbook, OddsAPI, 2026 outcomes or production change.
+- CRITICAL SEMANTICS:
+  - `route` = route label for the primary/targeted receiver on the play;
+  - NOT total routes, route participation, TPRR, YPRR, or non-target route state;
+  - do not infer WR-CB assignment.
+
+### Exact next action
+
+Build and run **Stage B** exactly as already frozen.
+
+For each target WR/TE:
+1. same named player only;
+2. trailing max 8 eligible prior player-games;
+3. minimum 4 strictly-prior player-games;
+4. targeted-route mix only;
+5. target opponent trailing max 8 defensive games;
+6. strictly-prior route-family completion rate / yards per target / receiving yards per target;
+7. strictly-prior league route-family neutral;
+8. derive player-specific
+   `matchup_delta = weighted opponent expectation - weighted league neutral`.
+
+Primary outcomes, WR and TE separately:
+- next-game receiving yards per target;
+- next-game catch rate;
+- next-game receiving yards.
+
+Frozen validation:
+- 2023 development;
+- 2024 independent confirmation;
+- 2025 independent confirmation;
+- player-cluster CI required;
+- game-cluster CI required;
+- show it is not merely a renamed target-depth/air-yard signal;
+- position-wide aggregate alone cannot qualify the mechanism.
+
+If Stage B passes:
+- freeze a separate full-stack integration candidate beyond M38/WR-R15 or TE-R5P.
+
+If Stage B fails:
+- close the exact targeted-route interaction with no regrouping/window/support/player-filter rescue.
+
+Parallel rule:
+- player-specific WR/TE/RB uncertainty integration may continue only under separate frozen contracts;
+- keep mean and distribution research separate.
+
+No paid OddsAPI without explicit user authorization.
+No production mutation from research.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this newest top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-10-14_PLAYER_FIRST_TARGETED_ROUTE_SOURCE_READY_CURRENT.md`
+4. `docs/research/PLAYER_TARGETED_ROUTE_MATCHUP_V1_FREEZE.md`
+5. `docs/research/PLAYER_TARGETED_ROUTE_MATCHUP_V1_SOURCE_RESULT.md`
+6. WR/TE player uncertainty result docs
+7. newest Issue #535 comments
+8. live PR #672 / branch / Actions
+
+Then continue execution immediately. Do not recursively reread older handoffs unless a targeted anti-retest question requires one.
+
 ## ACTIVE CHECKPOINT — 2026-10-13 — WEEK-6 REPROBE BLOCKED / EFFICIENCY VOLATILITY V1 CLOSED
 
 This checkpoint supersedes the V2 execution-frontier checkpoint for immediate
