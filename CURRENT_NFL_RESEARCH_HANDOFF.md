@@ -1,4 +1,47 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
+
+## TOP CHECKPOINT — 2026-10-14 — TARGETED-ROUTE STAGE B CONFIRMED / EXACT FULL-STACK MEAN INTEGRATION CLOSED
+
+Authoritative detailed handoff:
+- `docs/handoffs/NFL_HANDOFF_2026-10-14_TARGETED_ROUTE_STAGE_B_CONFIRMED_FULL_STACK_CLOSED_CURRENT.md`
+
+Restart prompt:
+- `docs/handoffs/NEXT_CHAT_PROMPT_2026-10-14_TARGETED_ROUTE_STAGE_B_CONFIRMED_FULL_STACK_CLOSED.md`
+
+Canonical Stage B:
+- `PLAYER_TARGETED_ROUTE_MATCHUP_CONFIRMED`
+- run `38641891257` SUCCESS
+- job `116119186261`
+- exact scored head `fe1d8ff52bd7cfa322e095a7a6f58752acb0b55f`
+- artifact `11929999088`
+- digest `sha256:0ff2c393e0daa0fa5163d34ce35e38eb25fb7c907cdf287019d609b804ca5128`
+- WR YPT + WR catch confirmed; WR direct rec-yards residual + all TE route families closed.
+
+Canonical WR full-stack integration:
+- `NO_ACTIONABLE_WR_ROUTE_MATCHUP_FULL_STACK_INTEGRATION`
+- run `38642241032` SUCCESS
+- job `116120366630`
+- exact scored head `bdbc132e35939133e3fb9ee4fca1e85ff1857561`
+- artifact `11930768340`
+- digest `sha256:a9a0198efaca76ea8967813842468894b01c5d130781f2bb5b4c71881bfc36d3`
+- result: `docs/research/WR_TARGETED_ROUTE_MATCHUP_FULL_STACK_INTEGRATION_V1_RESULT.md`
+
+Interpretation:
+- named-WR route-role matchup mechanism remains scientifically confirmed;
+- the exact frozen direct mean transmission into the promoted WR stack is closed;
+- do not rescue via coefficient/window/support/route-family/subgroup/cap changes;
+- player-first standard remains in force and canonical status remains `PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+Next clean frontier:
+- separately confirmed WR/TE player-specific opportunity uncertainty / reliability integration;
+- preserve promoted means and entitlement mass;
+- distribution/reliability only;
+- freeze before scoring.
+
+No paid OddsAPI without explicit authorization. No production mutation.
+
+---
+
 GitHub is canonical; chat memory is secondary.
 
 ---
