@@ -25,6 +25,10 @@ from scripts.player_form_v2 import _normalize_weekly, _to_pandas
 VERSION="PLAYER_STATE_FUTURE_WEEK_COVERAGE_V1"
 SKILL={"QB","RB","WR","TE"}
 RB_RAW={"RB","HB","FB"}
+# Preserve the pre-existing pregame-universe semantics: only game-roster players
+# are legitimate current-role identities. Reserve/development/cut/retired rows
+# may remain in nflverse's weekly roster snapshot but are not projected players.
+GAME_ROSTER_STATUS={"ACT","INA"}
 FORBIDDEN=(
     "sportsbook","bookmaker","prop_line","market_line","over_odds","under_odds",
     "spread_line","total_line","moneyline","closing_line","no_vig","implied_prob",
@@ -144,6 +148,9 @@ def load_rosters(season:int,target_week:int):
         if prior.empty: raise RuntimeError("no target-week or prior weekly roster")
         source_week=int(prior["week"].max())
         use=prior.loc[prior["week"].eq(source_week)].copy()
+    keep=use["status"].isin(GAME_ROSTER_STATUS)
+    if keep.any():
+        use=use.loc[keep].copy()
     use["roster_source_week"]=source_week
     return use.sort_values(["team","gsis_id","pfr_id","name_key"]).drop_duplicates(["team","name_key"],keep="last")
 
