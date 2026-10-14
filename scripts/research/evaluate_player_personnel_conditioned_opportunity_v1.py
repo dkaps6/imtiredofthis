@@ -48,6 +48,10 @@ SUPPORT = {
 def to_pd(v) -> pd.DataFrame:
     if isinstance(v, pd.DataFrame):
         return v.copy()
+    # nflreadpy currently returns Polars. Prefer a Python-record bridge here so
+    # this research diagnostic does not depend on the runner's pyarrow/NumPy ABI.
+    if hasattr(v, "to_dicts"):
+        return pd.DataFrame(v.to_dicts())
     if hasattr(v, "to_pandas"):
         return v.to_pandas()
     return pd.DataFrame(v)
