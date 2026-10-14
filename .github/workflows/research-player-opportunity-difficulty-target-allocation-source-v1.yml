@@ -62,7 +62,10 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           rm -rf /tmp/out
-          if [ -n "$TE" ]; then\n            python scripts/research/audit_player_opportunity_difficulty_target_allocation_source_v1.py --wr "$WR" --te "$TE" --out-dir /tmp/out\n          else\n            python scripts/research/audit_player_opportunity_difficulty_target_allocation_source_v1.py --wr "$WR" --out-dir /tmp/out\n          fi
+          python scripts/research/audit_player_opportunity_difficulty_target_allocation_source_v1.py \
+            --wr "$WR" \
+            --te "$TE" \
+            --out-dir /tmp/out
       - name: Show result
         if: always()
         run: cat /tmp/out/result.json 2>/dev/null || true
