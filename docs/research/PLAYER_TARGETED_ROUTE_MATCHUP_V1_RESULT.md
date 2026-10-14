@@ -32,6 +32,11 @@ Canonical rerun note:
 - 93.18% stable receiver-identity coverage on taxonomy route rows
 - all 32 defenses cleared the frozen pre-Week-8 support floor in 2023, 2024, and 2025
 
+Supersession note:
+- prior Stage-B run `38630218270` is superseded as authority by corrected-source rerun `38641891257`;
+- the corrected rerun reproduced the same frozen family dispositions and statistics;
+- no scientific parameter, route grouping, history window, support threshold, or player filter changed.
+
 ## Frozen overall disposition
 
 `PLAYER_TARGETED_ROUTE_MATCHUP_CONFIRMED`
