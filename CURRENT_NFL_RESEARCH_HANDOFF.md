@@ -1,5 +1,53 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+
+## TOP CHECKPOINT — 2026-10-15 — TE MARGINAL WIDTH CLOSED / PLAYER TRUST FRONTIER
+
+Authoritative detailed handoff:
+- `docs/handoffs/NFL_HANDOFF_2026-10-15_TE_MARGINAL_WIDTH_CLOSED_PLAYER_TRUST_FRONTIER_CURRENT.md`
+
+Newest completed TE marginal experiment:
+- result: `docs/research/TE_PLAYER_ALLOCATION_MARGINAL_REC_YARDS_V1_RESULT.md`
+- disposition: `NO_ACTIONABLE_TE_PLAYER_ALLOCATION_MARGINAL_REC_YARDS`
+- canonical run `38800926331` SUCCESS
+- job `116649432539`
+- exact head `e7961d5bf6abe9097a8fbf21d776fb1696a57bba`
+- artifact `12003898778`
+- digest `sha256:0c59e6e551e6ac025ac21e4098c5298a3a6ac3e16ecef9f7cd5e8d2bb0db73a4`
+
+What was learned:
+- named-TE allocation difficulty **does** improve the canonical TE-R5P receiving-yard marginal in both 2024 and 2025;
+- pooled named-vs-canonical CRPS gain = `+0.10936`;
+- player-cluster 95% CI = `[+0.01851,+0.20876]`;
+- game-cluster 95% CI = `[+0.02306,+0.19571]`;
+- canonical TE marginal is materially under-dispersed;
+- however the named-player overlay does **not** beat the frozen pooled-TE allocation-width control in either 2024 or 2025;
+- exact mapping `same-player trailing allocation MAE -> target sigma -> pregame YPT -> independent rec-yard width` is CLOSED;
+- do not rescue with coefficients, caps, TE1/TE2 slices, post-result subgroups, windows, alternate YPT conversion/noise family, or pooled-season qualification.
+
+Canonical scientific status remains:
+`PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+Immediate legal frontier:
+- **player-level trust/selectivity**, not another width law;
+- test whether strictly-prior named-player TE allocation difficulty identifies when the existing canonical TE-R5P projection/distribution is reliable vs fragile;
+- preserve mean and distribution exactly;
+- prove incremental information beyond contemporaneous pooled TE state;
+- freeze the trust score/ranking/gates before scoring;
+- 2024 development + 2025 independent confirmation + player/game clustered inference;
+- if qualified, freeze a Week-6 pregame trust shadow from football-only authority before reading Week-6 outcomes.
+
+Week 6 production is parked and complete:
+- final live replay run `38792341891` SUCCESS;
+- main `9b70b12e2fb4bc39f08556f244370068aad9c47b`;
+- exactly one paid OddsAPI acquisition was used;
+- do not return to PIT-TB/tickets unless the user asks.
+
+No paid OddsAPI without explicit authorization.
+No production mutation from research.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-14 — TARGETED-ROUTE STAGE B CONFIRMED / EXACT FULL-STACK MEAN INTEGRATION CLOSED
 
 Authoritative detailed handoff:
