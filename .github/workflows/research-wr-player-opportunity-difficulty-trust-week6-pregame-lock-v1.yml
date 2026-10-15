@@ -1,0 +1,169 @@
+name: Research WR Player Opportunity Difficulty Trust Week6 Pregame Lock V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - "docs/research/WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_WEEK6_PREGAME_LOCK_V1_FREEZE.md"
+      - "scripts/research/lock_wr_player_opportunity_difficulty_trust_week6_v1.py"
+      - ".github/workflows/research-wr-player-opportunity-difficulty-trust-week6-pregame-lock-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  lock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy scikit-learn pyyaml pytest pyarrow==17.0.0
+
+      - name: Compile frozen lock
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m py_compile scripts/research/lock_wr_player_opportunity_difficulty_trust_week6_v1.py
+
+      - name: Download qualified WR trust parent
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-player-opportunity-difficulty-trust-selectivity-v1-38823063793
+          path: /tmp/trust_parent
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38823063793
+
+      - name: Download exact WR mechanism parent
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-player-mechanism-persistence-v1-37634044900
+          path: /tmp/wr_mechanism
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37634044900
+
+      - name: Download recovered exact WR-R15 authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-te-fold-authorities-recovered-v1
+          path: /tmp/wr_authority
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37782189538
+
+      - name: Download exact Week6 opportunity lock pack
+        uses: actions/download-artifact@v4
+        with:
+          name: individual-opportunity-lock-pack-v1-week-38644002109
+          path: /tmp/week6_pack
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38644002109
+
+      - name: Resolve exact parent files
+        run: |
+          set -euo pipefail
+          TRUST_RESULT="$(find /tmp/trust_parent -type f -name 'wr_player_opportunity_difficulty_trust_selectivity_result.json' -print -quit)"
+          MECHANISM="$(find /tmp/wr_mechanism -type f -name 'wr_player_mechanism_persistence_rows.csv' -print -quit)"
+          WR_AUTH="$(find /tmp/wr_authority -type f -name 'wr_r15_confirmation_predictions.csv' -print -quit)"
+          W6_COHORT="$(find /tmp/week6_pack -type f -name 'player_target_share_trajectory_shadow_week6_lock.csv' -print -quit)"
+          W6_PACK_RESULT="$(find /tmp/week6_pack -type f -name 'individual_opportunity_week6_lock_pack.json' -print -quit)"
+          for p in "$TRUST_RESULT" "$MECHANISM" "$WR_AUTH" "$W6_COHORT" "$W6_PACK_RESULT"; do
+            test -n "$p" && test -s "$p"
+          done
+          echo "TRUST_RESULT=$TRUST_RESULT" >> "$GITHUB_ENV"
+          echo "MECHANISM=$MECHANISM" >> "$GITHUB_ENV"
+          echo "WR_AUTH=$WR_AUTH" >> "$GITHUB_ENV"
+          echo "W6_COHORT=$W6_COHORT" >> "$GITHUB_ENV"
+          echo "W6_PACK_RESULT=$W6_PACK_RESULT" >> "$GITHUB_ENV"
+
+      - name: Certify parent boundaries
+        run: |
+          python - <<'PY'
+          import json,os
+          trust=json.load(open(os.environ["TRUST_RESULT"]))
+          pack=json.load(open(os.environ["W6_PACK_RESULT"]))
+          assert trust["disposition"]=="WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_SELECTIVITY_QUALIFIED",trust
+          assert int(trust["outcomes_2026_read"])==0,trust
+          assert int(trust["sportsbook_inputs_used"])==0,trust
+          assert pack["status"]=="WEEK6_INDIVIDUAL_OPPORTUNITY_LOCK_PACK_FROZEN",pack
+          assert int(pack["target_week_outcomes_read"])==0,pack
+          assert int(pack["sportsbook_inputs_used"])==0,pack
+          state=pack["components"]["player_state"]
+          assert state["disposition"]=="PLAYER_STATE_FUTURE_WEEK_READY",state
+          assert int(state["roster_source_week"])==6,state
+          print("WR Week6 trust parent boundaries PASS")
+          PY
+
+      - name: Build strict-prior 2026 Weeks1-5 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/w6wr_hist /tmp/w6wr_result
+          mkdir -p /tmp/w6wr_hist /tmp/w6wr_result
+          python scripts/backtest/build_historical_inputs.py             --season 2026 --prior-season 2025 --weeks 1-5             --out-dir /tmp/w6wr_hist
+          python scripts/backtest/historical_player_logs.py             --seasons 2025,2026             --schedule /tmp/w6wr_hist/schedule_history.csv             --out /tmp/w6wr_hist/player_game_logs_history.csv
+
+      - name: Fail closed if Week6 outcomes have appeared
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          x=pd.read_csv('/tmp/w6wr_hist/player_game_logs_history.csv',low_memory=False)
+          s=pd.to_numeric(x['season'],errors='coerce')
+          w=pd.to_numeric(x['week'],errors='coerce')
+          bad=sorted(w.loc[s.eq(2026)&w.ge(6)].dropna().astype(int).unique().tolist())
+          if bad:
+              raise RuntimeError(f'Week6-or-later outcomes present; refuse prospective WR lock: {bad}')
+          print('Week6 outcome boundary PASS')
+          PY
+
+      - name: Freeze exact Week6 WR trust labels
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/lock_wr_player_opportunity_difficulty_trust_week6_v1.py             --week6-cohort "$W6_COHORT"             --week6-pack-result "$W6_PACK_RESULT"             --parent-trust-result "$TRUST_RESULT"             --mechanism-parent "$MECHANISM"             --wr-authority "$WR_AUTH"             --player-logs /tmp/w6wr_hist/player_game_logs_history.csv             --team-weekly /tmp/w6wr_hist/team_weekly_history.csv             --schedule /tmp/w6wr_hist/schedule_history.csv             --universe-dir /tmp/w6wr_hist/pregame_universe             --out-dir /tmp/w6wr_result
+
+      - name: Verify immutable research-only lock
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/w6wr_result/wr_week6_trust_lock.json'))
+          assert p['version']=='WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_WEEK6_PREGAME_LOCK_V1',p
+          assert p['status']=='WEEK6_WR_TRUST_PREGAME_LOCK_FROZEN',p
+          assert p['parent_disposition']=='WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_SELECTIVITY_QUALIFIED',p
+          assert p['current_wr_cohort']==152,p
+          assert p['historical_semantic_parity']['matched_rows']==3224,p
+          assert p['historical_semantic_parity']['players']==211,p
+          assert p['historical_semantic_parity']['max_abs_opportunity_error_gap']<=1e-9,p
+          assert p['history_source_max_week_2026']==5,p
+          assert p['supported_wr']>0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['week6_outcomes_read']==0,p
+          assert p['models_fit']==0,p
+          assert p['projection_distribution_values_changed']==0,p
+          assert p['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload frozen Week6 WR trust lock
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-player-opportunity-difficulty-trust-week6-pregame-lock-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/w6wr_result/**
+            docs/research/WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_WEEK6_PREGAME_LOCK_V1_FREEZE.md
