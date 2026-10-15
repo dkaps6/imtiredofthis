@@ -1,0 +1,119 @@
+name: Research TE Player Difficulty Trust Selectivity V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - "docs/research/TE_PLAYER_DIFFICULTY_TRUST_SELECTIVITY_V1_FREEZE.md"
+      - "scripts/research/evaluate_te_player_difficulty_trust_selectivity_v1.py"
+      - "tests/test_te_player_difficulty_trust_selectivity_v1.py"
+      - ".github/workflows/research-te-player-difficulty-trust-selectivity-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest
+
+      - name: Run frozen safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_te_player_difficulty_trust_selectivity_v1.py
+          pytest -q tests/test_te_player_difficulty_trust_selectivity_v1.py
+
+      - name: Download exact canonical TE marginal parent
+        uses: actions/download-artifact@v4
+        with:
+          name: te-player-allocation-marginal-rec-yards-v1-replay-38800926331
+          path: /tmp/parent
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38800926331
+
+      - name: Resolve and verify exact parent
+        run: |
+          set -euo pipefail
+          ROWS="$(find /tmp/parent -type f -name 'te_player_allocation_marginal_rec_yards_rows.csv' -print -quit)"
+          RESULT="$(find /tmp/parent -type f -name 'te_player_allocation_marginal_rec_yards_result.json' -print -quit)"
+          test -n "$ROWS" && test -s "$ROWS"
+          test -n "$RESULT" && test -s "$RESULT"
+          python - "$RESULT" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1]))
+          assert p['disposition']=='NO_ACTIONABLE_TE_PLAYER_ALLOCATION_MARGINAL_REC_YARDS',p
+          assert int(p['sportsbook_inputs_used'])==0,p
+          assert int(p['oddsapi_calls'])==0,p
+          assert int(p['outcomes_2026_read'])==0,p
+          assert p['production_changed'] is False,p
+          assert int(p['scored_rows'])==1476,p
+          print('canonical TE marginal parent verified')
+          PY
+          echo "ROWS=$ROWS" >> "$GITHUB_ENV"
+          echo "PARENT_RESULT=$RESULT" >> "$GITHUB_ENV"
+
+      - name: Evaluate frozen TE player trust selectivity
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/result
+          mkdir -p /tmp/result
+          python scripts/research/evaluate_te_player_difficulty_trust_selectivity_v1.py \
+            --rows "$ROWS" \
+            --parent-result "$PARENT_RESULT" \
+            --out-dir /tmp/result
+
+      - name: Verify research-only boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/result/te_player_difficulty_trust_selectivity_result.json'))
+          assert p['version']=='TE_PLAYER_DIFFICULTY_TRUST_SELECTIVITY_V1',p
+          assert p['source_parent_disposition']=='NO_ACTIONABLE_TE_PLAYER_ALLOCATION_MARGINAL_REC_YARDS',p
+          assert int(p['sportsbook_inputs_used'])==0,p
+          assert int(p['oddsapi_calls'])==0,p
+          assert int(p['outcomes_2026_read'])==0,p
+          assert int(p['projection_distribution_values_changed'])==0,p
+          assert p['production_changed'] is False,p
+          assert int(p['models_fit'])==0,p
+          assert p['disposition'] in {
+              'TE_PLAYER_DIFFICULTY_TRUST_SELECTIVITY_QUALIFIED',
+              'NO_ACTIONABLE_TE_PLAYER_DIFFICULTY_TRUST_SELECTIVITY',
+          },p
+          print('TE trust/selectivity research boundary certified')
+          PY
+
+      - name: Show result
+        if: always()
+        run: cat /tmp/result/te_player_difficulty_trust_selectivity_result.json 2>/dev/null || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-player-difficulty-trust-selectivity-v1-${{ github.run_id }}
+          path: |
+            /tmp/result/*
+            docs/research/TE_PLAYER_DIFFICULTY_TRUST_SELECTIVITY_V1_FREEZE.md
+          if-no-files-found: warn
+          retention-days: 90
