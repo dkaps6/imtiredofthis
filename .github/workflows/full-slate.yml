@@ -56,7 +56,7 @@ env:
   SEASON: ${{ github.event.inputs.season || '2026' }}
   PRIOR_SEASON: ${{ github.event.inputs.prior_season || '2025' }}
   SLATE_DATE: ${{ github.event.inputs.date || '' }}
-  FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds || 'false' }}
+  FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds || (github.event_name == 'push' && contains(github.event.head_commit.message, '[LIVE_ODDS_AUTHORIZED]') && 'true') || 'false' }}
   REUSE_PAID_ODDS_RUN_ID: ${{ github.event.inputs.reuse_paid_odds_run_id || '' }}
   REUSE_PAID_ODDS_ARTIFACT_ID: ${{ github.event.inputs.reuse_paid_odds_artifact_id || '' }}
   REUSE_PAID_ODDS_ARTIFACT_DIGEST: ${{ github.event.inputs.reuse_paid_odds_artifact_digest || '' }}
@@ -88,7 +88,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest pyarrow==17.0.0 pyarrow==17.0.0
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest pyarrow==17.0.0
 
       - name: Validate season context
         run: |
