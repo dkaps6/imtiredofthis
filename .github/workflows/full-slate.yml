@@ -88,7 +88,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest pyarrow==17.0.0
 
       - name: Validate season context
         run: |
