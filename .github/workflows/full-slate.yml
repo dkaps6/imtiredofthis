@@ -57,9 +57,9 @@ env:
   PRIOR_SEASON: ${{ github.event.inputs.prior_season || '2025' }}
   SLATE_DATE: ${{ github.event.inputs.date || '' }}
   FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds || (github.event_name == 'push' && contains(github.event.head_commit.message, '[LIVE_ODDS_AUTHORIZED]') && 'true') || 'false' }}
-  REUSE_PAID_ODDS_RUN_ID: ${{ github.event.inputs.reuse_paid_odds_run_id || '' }}
-  REUSE_PAID_ODDS_ARTIFACT_ID: ${{ github.event.inputs.reuse_paid_odds_artifact_id || '' }}
-  REUSE_PAID_ODDS_ARTIFACT_DIGEST: ${{ github.event.inputs.reuse_paid_odds_artifact_digest || '' }}
+  REUSE_PAID_ODDS_RUN_ID: ${{ github.event.inputs.reuse_paid_odds_run_id || (github.event_name == 'push' && contains(github.event.head_commit.message, '[REPLAY_WEEK6_38791377571]') && '38791377571') || '' }}
+  REUSE_PAID_ODDS_ARTIFACT_ID: ${{ github.event.inputs.reuse_paid_odds_artifact_id || (github.event_name == 'push' && contains(github.event.head_commit.message, '[REPLAY_WEEK6_38791377571]') && '11999923880') || '' }}
+  REUSE_PAID_ODDS_ARTIFACT_DIGEST: ${{ github.event.inputs.reuse_paid_odds_artifact_digest || (github.event_name == 'push' && contains(github.event.head_commit.message, '[REPLAY_WEEK6_38791377571]') && 'sha256:0916cd1cbec93f9a2529190b3df7c39172eee011a31eb9df429a35cdb9b41f61') || '' }}
   RB_PD2_SHADOW_CAPTURE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.rb_pd2_shadow_capture == 'true' && 'true' || '' }}
   # Pinned green history build: 2025 leakage-safe seed + certified completed 2026 Weeks 1-2.
   RB_PD2_FORWARD_HISTORY_RUN_ID: "35732782075"
