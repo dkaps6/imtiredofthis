@@ -1,5 +1,58 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-15 — TE TRUST QUALIFIED / WEEK-6 TRUST SHADOW FROZEN
+
+Authoritative detailed handoff:
+- `docs/handoffs/NFL_HANDOFF_2026-10-15_TE_TRUST_WEEK6_LOCK_FROZEN_CURRENT.md`
+
+Historical qualification:
+- `TE_PLAYER_DIFFICULTY_TRUST_SELECTIVITY_QUALIFIED`
+- run `38821176218` SUCCESS
+- artifact `12013570473`
+- digest `sha256:66c7b39f08b956dc1a96bd068272d1b97ddb5ddba22ef928a7d6e02c7f463530`
+
+Prospective Week-6 lock:
+- status `WEEK6_TE_TRUST_PREGAME_LOCK_FROZEN`
+- run `38822346088` SUCCESS
+- job `116721639322`
+- exact head `1edecb1b3f60089e95bfc4c100522baf60d560a9`
+- artifact `12013018536`
+- digest `sha256:98667675753bfb410c6ac6259dc097476a87e49ce29f5cfe71be6fe14a74e1f1`
+- row digest `sha256:fb5e2f83822a76adf3f09a721738237158bfddd9f95a3e63a97d3e4334d8ffa5`
+
+Week-6 TE cohort:
+- 105 TE-R5P players
+- 103 supported
+- 25 HIGH_TRUST / 52 MIDDLE / 26 LOW_TRUST / 2 UNSUPPORTED
+- 2026 history source max week = 5
+- Week-6 outcomes read = 0
+- sportsbook = 0
+- OddsAPI = 0
+- projection/distribution changes = 0
+- production unchanged.
+
+Interpretation:
+- named-player TE allocation difficulty qualifies as a trust/reliability selector for the **unchanged** TE-R5P projection;
+- the exact failed TE width and Dirichlet transmission mappings remain closed;
+- the Week-6 lock is prospective and must not be altered using target-week outcomes.
+
+Immediate frontier:
+- continue genuinely distinct individual-player research while Week 6 remains untouched;
+- anti-retest first;
+- prioritize named-player reliability/mechanism state rather than position-wide means;
+- keep opportunity and efficiency mechanisms separate;
+- no production promotion from the Week-6 lock until prospective scoring.
+
+Production Week-6 live board is complete and parked. Do not return to PIT-TB unless user asks.
+
+Canonical overall status:
+`PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+No paid OddsAPI without explicit authorization.
+No production mutation.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-15 — TE TRUST SELECTIVITY QUALIFIED / WEEK-6 PROSPECTIVE LOCK
 
 Authoritative detailed handoff:
