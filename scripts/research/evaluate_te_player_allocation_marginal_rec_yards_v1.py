@@ -128,7 +128,7 @@ def _coverage_gap(hit: pd.Series, nominal: float) -> float:
     return abs(float(hit.mean()) - float(nominal))
 
 
-def _load_parent(rows_path: Path, result_path: Path, te_authority_path: Path) -> pd.DataFrame:
+def _load_parent(rows_path: Path, result_path: Path) -> pd.DataFrame:
     parent = json.loads(result_path.read_text(encoding="utf-8"))
     if parent.get("te", {}).get("disposition") != "TE_PLAYER_ALLOCATION_DIFFICULTY_CONFIRMED":
         raise RuntimeError(f"parent TE disposition drift: {parent.get('te', {}).get('disposition')}")
@@ -136,8 +136,8 @@ def _load_parent(rows_path: Path, result_path: Path, te_authority_path: Path) ->
     need = {
         "season", "week", "team", "player_clean_key", "player_identity_key",
         "position", "game_id", "promoted_targets", "mc_rec_yards",
-        "candidate_sigma", "pool_sigma", "player_mae",
-        "difficulty_q4",
+        "rec_yards", "candidate_targets_r5p", "candidate_rec_yards_r5p",
+        "candidate_sigma", "pool_sigma", "player_mae", "difficulty_q4",
     }
     miss = need - set(x.columns)
     if miss:
@@ -150,54 +150,22 @@ def _load_parent(rows_path: Path, result_path: Path, te_authority_path: Path) ->
         x["position"].astype(str).str.upper().eq("TE")
         & x["season"].isin(TARGET_SEASONS)
     ].copy()
-    for c in [
-        "promoted_targets", "mc_rec_yards",
+    for col in [
+        "promoted_targets", "mc_rec_yards", "rec_yards",
+        "candidate_targets_r5p", "candidate_rec_yards_r5p",
         "candidate_sigma", "pool_sigma", "player_mae",
     ]:
-        x[c] = _num(x[c])
+        x[col] = _num(x[col])
 
-    # Allocation-only V1 intentionally scored target-allocation error, so its
-    # combined rows do not carry a TE receiving-yard outcome. Attach that label
-    # from the exact recovered TE-R5P fold authority frozen for this experiment.
-    te = _read_csv(te_authority_path, "recovered TE-R5P authority")
-    te_need = {
-        "season", "week", "team", "player_clean_key", "candidate_targets_r5p",
-        "candidate_rec_yards_r5p", "rec_yards",
-    }
-    te_miss = te_need - set(te.columns)
-    if te_miss:
-        raise RuntimeError(f"TE authority missing columns: {sorted(te_miss)}")
-    te["season"] = _num(te["season"])
-    te["week"] = _num(te["week"])
-    te["team"] = te["team"].map(canon_team)
-    te["player_clean_key"] = te["player_clean_key"].astype(str).str.strip()
-    for col in ("candidate_targets_r5p", "candidate_rec_yards_r5p", "rec_yards"):
-        te[col] = _num(te[col])
-    te = te.loc[te["season"].isin(TARGET_SEASONS)].copy()
-    keys = ["season", "week", "team", "player_clean_key"]
-    if te.duplicated(keys).any():
-        sample = te.loc[te.duplicated(keys, keep=False), keys].head(20).to_dict("records")
-        raise RuntimeError(f"duplicate recovered TE authority identities: {sample}")
-    x = x.drop(columns=["actual_rec_yards"], errors="ignore").merge(
-        te[keys + ["candidate_targets_r5p", "candidate_rec_yards_r5p", "rec_yards"]],
-        on=keys,
-        how="left",
-        validate="one_to_one",
-    )
-    x["actual_rec_yards"] = _num(x["rec_yards"])
-    target_gap = (
-        _num(x["promoted_targets"]) - _num(x["candidate_targets_r5p"])
-    ).abs()
-    rec_mean_gap = (
-        _num(x["mc_rec_yards"]) - _num(x["candidate_rec_yards_r5p"])
-    ).abs()
-    if x["actual_rec_yards"].isna().any():
-        raise RuntimeError(
-            f"recovered TE authority missing rec-yard labels for {int(x['actual_rec_yards'].isna().sum())} parent rows"
-        )
+    # The exact allocation-only parent retained the recovered TE-R5P casebook
+    # columns. Use its rec_yards outcome directly and prove its promoted
+    # target/yard means still match the frozen R5P columns before scoring.
+    x["actual_rec_yards"] = x["rec_yards"]
+    target_gap = (x["promoted_targets"] - x["candidate_targets_r5p"]).abs()
+    rec_mean_gap = (x["mc_rec_yards"] - x["candidate_rec_yards_r5p"]).abs()
     if float(target_gap.max()) > 1e-10 or float(rec_mean_gap.max()) > 1e-10:
         raise RuntimeError(
-            "allocation parent / recovered TE-R5P authority numerical lineage drift "
+            "allocation parent / retained TE-R5P numerical lineage drift "
             f"targets={float(target_gap.max())} rec_yards={float(rec_mean_gap.max())}"
         )
 
@@ -225,7 +193,6 @@ def _load_parent(rows_path: Path, result_path: Path, te_authority_path: Path) ->
     x["player_sigma_yards"] = x["candidate_sigma"] * x["pregame_ypt"]
     x["pool_sigma_yards"] = x["pool_sigma"] * x["pregame_ypt"]
     return x.reset_index(drop=True)
-
 
 def _metadata_rows(dist_dir: Path) -> pd.DataFrame:
     parts = []
@@ -422,13 +389,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--allocation-rows", type=Path, required=True)
     ap.add_argument("--parent-result", type=Path, required=True)
-    ap.add_argument("--te-authority", type=Path, required=True)
     ap.add_argument("--distribution-dir", type=Path, required=True)
     ap.add_argument("--out-dir", type=Path, required=True)
     a = ap.parse_args()
     a.out_dir.mkdir(parents=True, exist_ok=True)
 
-    parent = _load_parent(a.allocation_rows, a.parent_result, a.te_authority)
+    parent = _load_parent(a.allocation_rows, a.parent_result)
     scored = _score_rows(parent, a.distribution_dir)
     max_drift = float(scored["max_mean_drift"].max()) if len(scored) else np.inf
 
