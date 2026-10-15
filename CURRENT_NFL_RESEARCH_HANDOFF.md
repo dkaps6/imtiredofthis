@@ -1,5 +1,62 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-15 — TE TRUST SELECTIVITY QUALIFIED / WEEK-6 PROSPECTIVE LOCK
+
+Authoritative detailed handoff:
+- `docs/handoffs/NFL_HANDOFF_2026-10-15_TE_TRUST_SELECTIVITY_QUALIFIED_WEEK6_LOCK_FRONTIER_CURRENT.md`
+
+Canonical trust result:
+- `TE_PLAYER_DIFFICULTY_TRUST_SELECTIVITY_QUALIFIED`
+- run `38821176218` SUCCESS
+- job `116717842485`
+- exact scored head `270f01266bff125cfaccb53a57b378674d919901`
+- artifact `12013570473`
+- digest `sha256:66c7b39f08b956dc1a96bd068272d1b97ddb5ddba22ef928a7d6e02c7f463530`
+- result: `docs/research/TE_PLAYER_DIFFICULTY_TRUST_SELECTIVITY_V1_RESULT.md`
+
+Every frozen gate passed.
+
+2025 confirmation:
+- primary association `+0.11538`
+- player-cluster 95% CI `[+0.04191,+0.18535]`
+- game-cluster 95% CI `[+0.04679,+0.18280]`
+- HIGH_TRUST standardized CRPS `0.67012`
+- LOW_TRUST standardized CRPS `1.09274`
+- HIGH_TRUST raw abs error `8.70 yd`
+- LOW_TRUST raw abs error `23.60 yd`
+
+Interpretation:
+- named-TE strictly-prior allocation difficulty is qualified as a player-specific **trust/reliability selector** for the unchanged TE-R5P projection;
+- failed TE width and joint-Dirichlet mappings remain CLOSED;
+- no projection mean/width/shape mutation is authorized;
+- no production promotion yet.
+
+Exact next action:
+- freeze Week-6 pregame TE trust labels from football-only authority using the exact same trailing max-8/min-4 same-player allocation-error semantics;
+- no proxy target-share volatility;
+- no sportsbook input;
+- no Week-6 outcomes;
+- HIGH_TRUST <= .25 / LOW_TRUST >= .75;
+- labels only, no projection/distribution mutation;
+- fail closed if exact prior allocation-error history cannot be reconstructed.
+
+Preferred Week-6 football authority:
+- no-odds Full Slate run `38790425676`
+- artifact `11999618082`
+- digest `sha256:d7473705d4534c3172b58843272e7d95f5fbbd9aa910238d48916a8567cde1de`
+
+Production Week-6 board is complete and parked; do not return to PIT-TB unless user asks.
+
+Canonical scientific status remains:
+`PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+No paid OddsAPI without explicit authorization.
+No production mutation.
+
+---
+
+# CURRENT NFL RESEARCH HANDOFF — READ FIRST
+
 
 ## TOP CHECKPOINT — 2026-10-15 — TE MARGINAL WIDTH CLOSED / PLAYER TRUST FRONTIER
 
