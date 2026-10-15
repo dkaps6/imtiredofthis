@@ -134,9 +134,14 @@ Paired gains:
 - named vs canonical;
 - named vs pooled.
 
+Empirical interval convention:
+- NumPy linear quantiles (`method="linear"`);
+- central interval endpoints are inclusive (`low <= actual <= high`).
+
 Dependence-aware inference:
 - player-cluster bootstrap;
 - game-cluster bootstrap;
+- resample whole clusters with replacement and retain every scored row belonging to each sampled cluster;
 - 5,000 replicates;
 - fixed seeds recorded in implementation.
 
