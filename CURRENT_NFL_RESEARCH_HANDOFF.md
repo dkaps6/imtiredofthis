@@ -1,5 +1,116 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-15 — SEA-DEN TICKET CONTINUITY + WR/TE TRUST LOCKS FROZEN
+
+Authoritative detailed handoff:
+- `docs/handoffs/NFL_HANDOFF_2026-10-15_WEEK6_SEA_DEN_TICKETS_WR_TE_TRUST_CONTINUITY_CURRENT.md`
+
+Restart prompt:
+- `docs/handoffs/NEXT_CHAT_PROMPT_2026-10-15_WEEK6_SEA_DEN_TICKETS_WR_TE_TRUST_CONTINUITY.md`
+
+### Immediate user-facing lane
+
+Tonight is **SEA @ DEN**.
+
+Use:
+- `docs/research/MODEL_BACKED_ALT_LINE_PARLAY_CONSTRUCTION_V1.md`
+- the frozen Week-6 live board
+- current sportsbook lines only when explicitly reconciled.
+
+Ticket tiers:
+- Core / safe
+- Core + juice / moderate
+- Aggressive
+- High-ceiling / lottery.
+
+The user specifically asked to resume the actual GitHub ticket-construction process for the lottery ticket rather than reconstruct one from chat memory.
+
+ATD is allowed tonight only as an explicitly **judgment-only / non-certified** optional layer using football role, red-zone/goal-line context, game environment and current offered price. Dedicated ATD science remains uncertified.
+
+### Week-6 paid odds guardrail
+
+Exactly one paid Week-6 acquisition:
+- run `38791377571`
+- artifact `11999923880`
+- digest `sha256:0916cd1cbec93f9a2529190b3df7c39172eee011a31eb9df429a35cdb9b41f61`.
+
+Final green replay:
+- run `38792341891` SUCCESS
+- artifact `12000113891`
+- no refetch.
+
+**Do not spend another Week-6 OddsAPI credit.**
+
+### WR player trust/selectivity — QUALIFIED
+
+- disposition `WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_SELECTIVITY_QUALIFIED`
+- run `38823063793` SUCCESS
+- job `116723999254`
+- exact scored head `35a10d09ba92fd1218d37e812768fda5d2f4023e`
+- artifact `12013153664`
+- digest `sha256:12fd0de1dc3ebceee4d356669d59f30d96776d8c0800d1fb3ac6a293af457b7c`
+- result `docs/research/WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_SELECTIVITY_V1_RESULT.md`.
+
+Exact final WR-R15 parity:
+- 3,224 rows
+- 211 WRs
+- pooled trust association +0.28853
+- HIGH_TRUST abs error 14.61 yd
+- overall 23.25 yd
+- LOW_TRUST 30.47 yd
+- positive pooled + 2024 player/game clustered CIs.
+
+Interpretation: same-player strictly-prior opportunity difficulty is a qualified reliability selector for the **unchanged final WR-R15 receiving-yard projection**. It is not an over/under rule and does not authorize mean/width mutation.
+
+### Week-6 WR trust shadow — FROZEN PROSPECTIVELY
+
+- status `WEEK6_WR_TRUST_PREGAME_LOCK_FROZEN`
+- run `38823520954` SUCCESS
+- job `116725474887`
+- exact head `638037c82b81e3e0f4d01ce37b1db24e5cc8144b`
+- artifact `12012884262`
+- digest `sha256:e5bc113e507ded651ecc29080c7fdbe4fd55182d1d039d0dd14057ada4b7bb38`
+- row digest `sha256:81d9e950b96d7ac9d5699eba8490fc741a5aab2c938ef29287dc261534346b8f`
+- result `docs/research/WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_WEEK6_PREGAME_LOCK_V1_RESULT.md`.
+
+Cohort:
+- 152 WRs
+- 141 supported
+- HIGH 35 / MIDDLE 70 / LOW 36 / unsupported 11
+- reconstructed 2026 W1-W5 rows 717
+- Week-6 outcomes read 0
+- sportsbook 0
+- OddsAPI 0
+- production unchanged.
+
+### TE trust remains qualified + frozen
+
+Historical:
+- `TE_PLAYER_DIFFICULTY_TRUST_SELECTIVITY_QUALIFIED`
+- run `38821176218`
+- artifact `12013570473`.
+
+Week-6:
+- `WEEK6_TE_TRUST_PREGAME_LOCK_FROZEN`
+- run `38822346088`
+- artifact `12013018536`
+- 25 HIGH / 52 MIDDLE / 26 LOW / 2 unsupported
+- Week-6 outcomes read 0.
+
+### Research status / frontier
+
+Canonical status remains:
+`PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+Do not reopen closed QB generic mean/YPA, target-depth symmetric distribution, WR route full-stack mean integration, WR allocation-only width bridge, TE width/Dirichlet mappings, or other terminal lanes.
+
+After tonight's betting work, anti-retest Issue #535 before opening a genuinely distinct player-level lane. A legal candidate is named-player efficiency reliability/regime state that preserves existing means on first diagnostic and remains distinct from the already-closed generic efficiency-tail volatility family.
+
+No production mutation.
+No paid OddsAPI without explicit authorization.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-15 — TE TRUST QUALIFIED / WEEK-6 TRUST SHADOW FROZEN
 
 Authoritative detailed handoff:
