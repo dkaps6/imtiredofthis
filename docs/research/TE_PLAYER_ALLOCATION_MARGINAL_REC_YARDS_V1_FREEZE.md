@@ -108,10 +108,10 @@ Add independent centered Normal noise with SD `player_sigma_yards` to the
 canonical marginal.
 
 For B/C:
-- deterministic stable per-row seed derived only from version +
-  season/week/team/player + arm;
-- exactly 2,000 noise draws;
-- center the generated noise to sample mean zero before addition;
+- deterministic stable per-row seed derived only from version + season/week/team/player;
+- exactly 2,000 standard-Normal noise draws;
+- the same row-stable standardized noise vector is used for pooled and named arms so the arm comparison differs only by the frozen sigma;
+- center the generated noise to sample mean zero and rescale it to sample SD exactly 1.0 before multiplying by the arm sigma;
 - floor resulting receiving yards at zero;
 - rescale the nonnegative draw vector multiplicatively back to exact canonical
   mean `mu`;
