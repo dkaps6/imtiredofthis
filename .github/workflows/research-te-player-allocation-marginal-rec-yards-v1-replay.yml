@@ -72,7 +72,7 @@ jobs:
           ALLOC_ROWS="$(find /tmp/allocation -type f -name 'player_allocation_only_difficulty_rows.csv' -print -quit)"
           ALLOC_RESULT="$(find /tmp/allocation -type f -name 'player_allocation_only_difficulty_result.json' -print -quit)"
           META_DIR="$(dirname "$(find /tmp/rebuild_compact -type f -name '2024_week_01_metadata.csv' -print -quit)")"
-          RAW_DIR="$(dirname "$(find /tmp/rebuild_raw -type f -name '2024_week_01_distributions.npz' -print -quit)")"
+          RAW_DIR="$(dirname "$(find /tmp/rebuild_raw -type f -name '2024_week_01.npz' -print -quit)")"
           test -n "$ALLOC_ROWS" && test -s "$ALLOC_ROWS"
           test -n "$ALLOC_RESULT" && test -s "$ALLOC_RESULT"
           test -n "$META_DIR" && test -d "$META_DIR"
