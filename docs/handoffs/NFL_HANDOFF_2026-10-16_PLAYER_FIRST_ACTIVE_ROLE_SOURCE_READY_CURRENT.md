@@ -9,6 +9,18 @@
 
 This handoff is intentionally self-contained enough for a new chat to resume as if the conversation had not ended.
 
+> **FINAL CONTINUITY SEAL — 2026-10-16 08:06 ET**
+>
+> Live GitHub immediately before this docs-only seal:
+> - production `main`: `29213acc71e342c09537c198626c8a5c79a33353` — `Docs: advance canonical active-role source checkpoint`;
+> - research branch / PR #672 head: `b77faa7f0f85a122b391683a7079c96a071d1036` — `Docs: advance top checkpoint to active-role source ready`;
+> - PR #672: OPEN / DRAFT;
+> - Issue #535 newest continuity comment: `6215000334`;
+> - newest scientific authority remains active-role source run `38895205962` — SUCCESS, exact scientific head `28ebf8d7159fdd1fec8c2e4a0fe1c9e2c691537c`, artifact `12044155086`, digest `sha256:a42322579aee682497223c7f53bce0b14a96dc6f466558e811770e681a035dad`.
+>
+> **No active-role mechanism result exists yet.** The exact next action remains to freeze that mechanism before scoring. Do not skip ahead, do not use 2026 outcomes, and do not spend another Week-6 OddsAPI credit.
+>
+
 ---
 
 ## 1. NON-NEGOTIABLE MODEL OBJECTIVE
