@@ -1,3 +1,4 @@
+# Frozen player-first high-value persistence safeguards.
 import pandas as pd
 
 from scripts.research.evaluate_player_high_value_opportunity_persistence_v1 import (
