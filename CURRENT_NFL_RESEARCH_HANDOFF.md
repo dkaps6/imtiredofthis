@@ -1,5 +1,76 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-15 — PLAYER HIGH-VALUE OPPORTUNITY SOURCE READY / SIMPLE PERSISTENCE CLOSED
+
+Player-first principle remains canonical:
+`PLAYER IDENTITY -> CURRENT ROLE -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+### Role-elasticity source audit
+
+`PLAYER_ROLE_ELASTICITY_SOURCE_BLOCKED`
+- run `38847501580` SUCCESS
+- artifact `12024335417`
+- digest `sha256:1a22efad89da4593124d366d21176d8c70d0d5f2cc0e7498a6216fab57353186`
+- result `docs/research/PLAYER_ROLE_ELASTICITY_TEAMMATE_AVAILABILITY_V1_SOURCE_RESULT.md`.
+
+RB/WR/TE all had strong official-inactive identity, snap and multi-room-state support,
+but the exact frozen >=90% strictly-prior same-team opportunity-history gate failed:
+RB 88.68/88.36%, WR 88.67/89.26%, TE 85.59/84.88% (2024/2025).
+Do not lower the gate or infer missing history from target-game outcomes.
+
+### High-value scoring-opportunity source
+
+`PLAYER_HIGH_VALUE_SCORING_OPPORTUNITY_SOURCE_READY`
+- run `38848080453` SUCCESS
+- exact head `1448fcce54f803d9737a7b3f7d9ff451b5189add`
+- artifact `12023852453`
+- digest `sha256:1d8a22bf6240b4d4443ab7432d3224b63eaef97439639e7b47f536aed174adda`
+- result `docs/research/PLAYER_HIGH_VALUE_SCORING_OPPORTUNITY_IDENTITY_V1_SOURCE_RESULT.md`.
+
+2022-2025 PBP supports named-player RB inside-20/10/5 rushing topology and
+RB/WR/TE red-zone target topology with all frozen source gates passed.
+Optional end-zone-target source also passed.
+
+### High-value opportunity persistence V1
+
+Frozen question:
+does the named player's recent high-value share forecast next-game high-value
+share better than his ordinary overall usage share?
+
+Canonical result:
+`PLAYER_HIGH_VALUE_OPPORTUNITY_PERSISTENCE_CLOSED`
+- run `38848538570` SUCCESS
+- exact scored head `89b92b56d9b9786a3cc8802a3d2b645caeca9ba5`
+- artifact `12024037594`
+- digest `sha256:2b02f5a6c7a8a05962517f72a9d62ba287d06ffe5ced37abfd70b623a5120afe`
+- result `docs/research/PLAYER_HIGH_VALUE_OPPORTUNITY_PERSISTENCE_V1_RESULT.md`.
+
+Disposition:
+- RB rushing: CLOSED; 2025 favorable but clustered CIs cross zero and 2022 worsened.
+- RB receiving: favorable all four seasons and pooled-supported, but 2025
+  independent player/game clustered CIs cross zero; exact V1 CLOSED.
+- WR receiving: worse in all four seasons; CLOSED.
+- TE receiving: worse in all four seasons; CLOSED.
+
+Do not rescue by changing yardline bands, last-4/min-3 history, support floors,
+lead-back/WR1/TE1 subsets, pooling positions, or adding TD outcomes.
+
+Interpretation:
+the Dobbins manual reasoning is not reduced to a red-zone-share coefficient.
+It used current workload, trajectory, lead-back status, teammate competition,
+scoring-area role and team scoring-situation creation together. High-value share
+alone is insufficient.
+
+Current generic ATD remains execution-capable but not dedicated-science certified.
+
+No paid OddsAPI.
+No sportsbook upstream.
+No production mutation.
+Canonical status remains:
+`PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-15 — HIGH-VALUE SCORING OPPORTUNITY IDENTITY SOURCE AUDIT ACTIVE
 
 Player-first frontier has advanced.
