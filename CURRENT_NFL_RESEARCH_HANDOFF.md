@@ -1,5 +1,31 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-15 — PLAYER PROJECTION FIRST PRINCIPLE CANONICAL
+
+The repository-wide modeling objective is now explicit in `AGENTS.md` and:
+`docs/research/PLAYER_IDENTITY_ROLE_STATE_ARCHITECTURE_V1.md`.
+
+Non-negotiable interpretation:
+- this is a **named-player projection model**;
+- position-level MAE/RMSE is a downstream diagnostic / guardrail, not the primary modeling objective;
+- historical data should build the named player's identity, role, usage trajectory, situational opportunity, efficiency tendencies, teammate-allocation behavior and reliability;
+- current-week state determines which parts of that historical identity are active now;
+- teammate competition determines opportunity allocation;
+- opponent/defensive/game context is the weekly obstacle/environment the player faces, not the player's identity;
+- different markets map to different parts of the player state (for example, rushing yards and anytime TD can legitimately have different conclusions);
+- improving individual-player projections should improve aggregate position metrics as a consequence;
+- do not chase a cleaner position average while losing player-level football meaning;
+- do not declare a position solved from aggregate accuracy alone.
+
+Conceptual sequence:
+`PLAYER IDENTITY -> CURRENT ROLE -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+This is additive. Preserve all validated/promoted science and terminal closed-lineage stop rules. Do not restart the model.
+
+Current research work continues from the newest frozen player-level frontier below under this first principle.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-15 — WR DUAL TRUST SUPPORTED / QB WEEK-6 INTENT LEDGER FROZEN
 
 ### WR player reliability
