@@ -291,7 +291,7 @@ def attach_stage1_probability(
         mechanism[keep],
         on=["season", "week", "team", "family", "player_id"],
         how="left",
-        validate="one_to_one",
+        validate="many_to_one",
     )
     if z["stage1_p_active"].isna().any():
         raise RuntimeError(f"Stage-1 p_active attach misses={int(z['stage1_p_active'].isna().sum())}")
