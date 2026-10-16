@@ -43,22 +43,28 @@ jobs:
           test "$(git show "$FREEZE_COMMIT:scripts/research/evaluate_player_active_role_participation_v1.py" 2>/dev/null || true)" = ""
           echo "ACTIVE_ROLE_MECHANISM_PRE_SCORE_FREEZE_PROVEN"
 
-      - name: Prove qualified parent source logic has not drifted
+      - name: Prove qualified parent source file has not drifted
         run: |
           set -euo pipefail
           git diff --exit-code "$SOURCE_HEAD" -- scripts/research/audit_player_active_role_participation_v1.py
-          python - <<'PY'
-          from scripts.research import audit_player_active_role_participation_v1 as s
-          assert s.VERSION == 'PLAYER_ACTIVE_ROLE_PARTICIPATION_V1_SOURCE_AUDIT'
-          assert s.M78_SHA == 'd39aaf0feea101f3e0d2721ebd4118ef33fb1a4d3c76670e2a4f17734e37b609'
-          print('ACTIVE_ROLE_PARENT_SOURCE_PARITY_PASS')
-          PY
+          echo "ACTIVE_ROLE_PARENT_SOURCE_FILE_PARITY_PASS"
 
       - name: Install
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pyarrow nflreadpy
+
+      - name: Verify qualified parent source constants
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          from scripts.research import audit_player_active_role_participation_v1 as s
+          assert s.VERSION == 'PLAYER_ACTIVE_ROLE_PARTICIPATION_V1_SOURCE_AUDIT'
+          assert s.M78_SHA == 'd39aaf0feea101f3e0d2721ebd4118ef33fb1a4d3c76670e2a4f17734e37b609'
+          print('ACTIVE_ROLE_PARENT_SOURCE_CONSTANT_PARITY_PASS')
+          PY
 
       - name: Run frozen safeguards
         env:
