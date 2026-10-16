@@ -70,6 +70,7 @@ def prepare_stage1(universe: pd.DataFrame, mechanism: pd.DataFrame) -> tuple[pd.
         "season", "week", "team", "player_id", "position", "status",
         "player_name_key", "family", "known_official_inactive",
         "stable_roster_identity", "chronology_violations",
+        "positive_offensive_participation",
     }
     mreq = {"season", "week", "team", "family", "player_id", "player_name_key", "p_candidate"}
     if ureq - set(universe.columns):
@@ -93,18 +94,58 @@ def prepare_stage1(universe: pd.DataFrame, mechanism: pd.DataFrame) -> tuple[pd.
     if u.duplicated(["season", "week", "team", "player_id", "family"]).any():
         raise RuntimeError("duplicate Stage-1 pregame identity")
 
-    m = mechanism.loc[
+    # The frozen Stage-1 mechanism explicitly requires an unsupported-player
+    # baseline/fallback path if deployed. Reconstruct that exact strictly-prior
+    # Jeffreys position baseline for every bridge row. Player-specific candidate
+    # probability overrides it only where the qualified V1 support gate was met.
+    u["stage1_p_baseline"] = np.nan
+    for (season, family), g in u.groupby(["season", "family"], sort=False):
+        for week in sorted(g["week"].unique()):
+            prior = g.loc[g["week"].lt(int(week))]
+            n_pos = int(len(prior))
+            if n_pos < 100:
+                continue
+            k_pos = int(num(prior["positive_offensive_participation"]).fillna(0).sum())
+            p0 = (float(k_pos) + 0.5) / (float(n_pos) + 1.0)
+            u.loc[
+                u["season"].eq(int(season))
+                & u["family"].eq(str(family))
+                & u["week"].eq(int(week)),
+                "stage1_p_baseline",
+            ] = p0
+
+    m0 = mechanism.loc[
         num(mechanism["season"]).isin(TARGET_SEASONS)
         & num(mechanism["week"]).isin(TARGET_WEEKS)
     ].copy()
-    m["season"] = num(m["season"]).astype(int)
-    m["week"] = num(m["week"]).astype(int)
-    m["team"] = m["team"].map(canon_team)
-    m["player_name_key"] = m["player_name_key"].map(key)
-    m["stage1_history_attached"] = num(m["p_candidate"]).notna()
-    m = m[["season", "week", "team", "family", "player_id", "stage1_history_attached"]].copy()
-    if m.duplicated(["season", "week", "team", "family", "player_id"]).any():
+    m0["season"] = num(m0["season"]).astype(int)
+    m0["week"] = num(m0["week"]).astype(int)
+    m0["team"] = m0["team"].map(canon_team)
+    m0["player_name_key"] = m0["player_name_key"].map(key)
+    m0 = m0[["season", "week", "team", "family", "player_id", "p_candidate"]].copy()
+    if m0.duplicated(["season", "week", "team", "family", "player_id"]).any():
         raise RuntimeError("duplicate Stage-1 scored identity")
+
+    bridge = u.merge(
+        m0,
+        on=["season", "week", "team", "family", "player_id"],
+        how="left",
+        validate="one_to_one",
+    )
+    bridge["stage1_named_player_supported"] = num(bridge["p_candidate"]).notna()
+    bridge["stage1_p_active"] = num(bridge["p_candidate"]).where(
+        bridge["stage1_named_player_supported"], num(bridge["stage1_p_baseline"])
+    )
+    bridge["stage1_history_attached"] = (
+        bridge["stage1_p_active"].notna()
+        & np.isfinite(bridge["stage1_p_active"])
+        & bridge["stage1_p_active"].gt(0)
+        & bridge["stage1_p_active"].lt(1)
+    )
+    m = bridge[[
+        "season", "week", "team", "family", "player_id",
+        "stage1_history_attached", "stage1_named_player_supported", "stage1_p_active",
+    ]].copy()
     return u, m
 
 
@@ -328,8 +369,13 @@ def overlay_specialist(base: pd.DataFrame, spec: pd.DataFrame, family: str) -> p
         out["candidate_q"].notna(), out["candidate_q"], out["target_q"]
     )
     out["specialist_row"] = out["candidate_q"].notna()
+    # Specialist rules are overlays, not universe filters. Exact OOS specialist
+    # rows replace the base entitlement where available; every other player keeps
+    # the canonical base entitlement unchanged, preserving the full room.
     out["authority_covered"] = (
-        out["specialist_row"] | num(out["target_q"]).fillna(np.inf).abs().le(TOL)
+        num(out["authority_q"]).notna()
+        & np.isfinite(num(out["authority_q"]))
+        & num(out["authority_q"]).ge(0)
     )
     out["denominator_finite"] = np.where(
         out["specialist_row"],
