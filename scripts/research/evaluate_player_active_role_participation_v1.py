@@ -110,29 +110,32 @@ def per_player_frame(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def cluster_bootstrap_delta(df: pd.DataFrame, cluster_col: str) -> dict:
-    keys = np.array(sorted(df[cluster_col].astype(str).unique()), dtype=object)
-    if len(keys) < 2:
+    q = df.copy()
+    q["_base_loss"] = (q["p_baseline"].astype(float) - q["y"].astype(float)) ** 2
+    q["_cand_loss"] = (q["p_candidate"].astype(float) - q["y"].astype(float)) ** 2
+    agg = (
+        q.groupby(cluster_col, sort=True)
+        .agg(base_loss=("_base_loss", "sum"), cand_loss=("_cand_loss", "sum"), n=("y", "size"))
+        .reset_index(drop=True)
+    )
+    if len(agg) < 2:
         raise RuntimeError(f"insufficient bootstrap clusters for {cluster_col}")
-    groups = {k: df.loc[df[cluster_col].astype(str).eq(k)] for k in keys}
+
+    base = agg["base_loss"].to_numpy(dtype=float)
+    cand = agg["cand_loss"].to_numpy(dtype=float)
+    counts = agg["n"].to_numpy(dtype=float)
+    nclusters = len(agg)
     rng = np.random.default_rng(BOOT_SEED)
     vals = np.empty(BOOT_REPS, dtype=float)
+
     for i in range(BOOT_REPS):
-        sampled = rng.choice(keys, size=len(keys), replace=True)
-        total_base = 0.0
-        total_cand = 0.0
-        total_n = 0
-        for key in sampled:
-            g = groups[str(key)]
-            y = g["y"].to_numpy(dtype=float)
-            p0 = g["p_baseline"].to_numpy(dtype=float)
-            p1 = g["p_candidate"].to_numpy(dtype=float)
-            total_base += float(np.sum((p0 - y) ** 2))
-            total_cand += float(np.sum((p1 - y) ** 2))
-            total_n += len(g)
-        vals[i] = (total_base - total_cand) / max(total_n, 1)
+        idx = rng.integers(0, nclusters, size=nclusters)
+        total_n = float(np.sum(counts[idx]))
+        vals[i] = float((np.sum(base[idx]) - np.sum(cand[idx])) / max(total_n, 1.0))
+
     lo, hi = np.quantile(vals, [0.025, 0.975])
     return {
-        "clusters": int(len(keys)),
+        "clusters": int(nclusters),
         "replicates": BOOT_REPS,
         "seed": BOOT_SEED,
         "mean": float(np.mean(vals)),
