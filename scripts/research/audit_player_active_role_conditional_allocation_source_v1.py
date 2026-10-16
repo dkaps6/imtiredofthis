@@ -70,7 +70,7 @@ def prepare_stage1(universe: pd.DataFrame, mechanism: pd.DataFrame) -> tuple[pd.
         "season", "week", "team", "player_id", "position", "status",
         "player_name_key", "family", "known_official_inactive",
         "stable_roster_identity", "chronology_violations",
-        "positive_offensive_participation",
+        "positive_offensive_participation", "teamweek_snap_source_valid",
     }
     mreq = {"season", "week", "team", "family", "player_id", "player_name_key", "p_candidate"}
     if ureq - set(universe.columns):
@@ -78,28 +78,32 @@ def prepare_stage1(universe: pd.DataFrame, mechanism: pd.DataFrame) -> tuple[pd.
     if mreq - set(mechanism.columns):
         raise RuntimeError(f"Stage-1 mechanism missing {sorted(mreq-set(mechanism.columns))}")
 
-    u = universe.loc[
+    # Rebuild the frozen Stage-1 fallback from the same full-season eligible
+    # universe used by the qualified evaluator. Weeks 1-4 are prior evidence for
+    # Week 5+ and therefore must remain in the chronology even though the bridge
+    # source audit itself adjudicates Weeks 5-18.
+    full = universe.loc[
         num(universe["season"]).isin(TARGET_SEASONS)
-        & num(universe["week"]).isin(TARGET_WEEKS)
     ].copy()
-    u["season"] = num(u["season"]).astype(int)
-    u["week"] = num(u["week"]).astype(int)
-    u["team"] = u["team"].map(canon_team)
-    u["player_name_key"] = u["player_name_key"].map(key)
-    u = u.loc[
-        u["status"].astype(str).str.upper().eq("ACT")
-        & num(u["known_official_inactive"]).fillna(0).eq(0)
-        & num(u["stable_roster_identity"]).fillna(0).eq(1)
+    full["season"] = num(full["season"]).astype(int)
+    full["week"] = num(full["week"]).astype(int)
+    full["team"] = full["team"].map(canon_team)
+    full["player_name_key"] = full["player_name_key"].map(key)
+    full = full.loc[
+        full["status"].astype(str).str.upper().eq("ACT")
+        & num(full["known_official_inactive"]).fillna(0).eq(0)
+        & num(full["stable_roster_identity"]).fillna(0).eq(1)
+        & num(full["teamweek_snap_source_valid"]).fillna(0).eq(1)
+        & full["player_id"].astype(str).str.strip().ne("")
     ].copy()
-    if u.duplicated(["season", "week", "team", "player_id", "family"]).any():
+    if full.duplicated(["season", "week", "team", "player_id", "family"]).any():
         raise RuntimeError("duplicate Stage-1 pregame identity")
 
     # The frozen Stage-1 mechanism explicitly requires an unsupported-player
-    # baseline/fallback path if deployed. Reconstruct that exact strictly-prior
-    # Jeffreys position baseline for every bridge row. Player-specific candidate
-    # probability overrides it only where the qualified V1 support gate was met.
-    u["stage1_p_baseline"] = np.nan
-    for (season, family), g in u.groupby(["season", "family"], sort=False):
+    # baseline/fallback path if deployed. Reconstruct the exact strictly-prior
+    # Jeffreys position baseline from all earlier eligible weeks.
+    full["stage1_p_baseline"] = np.nan
+    for (season, family), g in full.groupby(["season", "family"], sort=False):
         for week in sorted(g["week"].unique()):
             prior = g.loc[g["week"].lt(int(week))]
             n_pos = int(len(prior))
@@ -107,12 +111,14 @@ def prepare_stage1(universe: pd.DataFrame, mechanism: pd.DataFrame) -> tuple[pd.
                 continue
             k_pos = int(num(prior["positive_offensive_participation"]).fillna(0).sum())
             p0 = (float(k_pos) + 0.5) / (float(n_pos) + 1.0)
-            u.loc[
-                u["season"].eq(int(season))
-                & u["family"].eq(str(family))
-                & u["week"].eq(int(week)),
+            full.loc[
+                full["season"].eq(int(season))
+                & full["family"].eq(str(family))
+                & full["week"].eq(int(week)),
                 "stage1_p_baseline",
             ] = p0
+
+    u = full.loc[full["week"].isin(TARGET_WEEKS)].copy()
 
     m0 = mechanism.loc[
         num(mechanism["season"]).isin(TARGET_SEASONS)
