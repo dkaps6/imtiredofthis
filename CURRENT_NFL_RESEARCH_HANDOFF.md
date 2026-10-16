@@ -1,5 +1,113 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-16 — ACTIVE-ROLE SOURCE READY ALL / NEXT MECHANISM MUST BE FROZEN
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-16_PLAYER_FIRST_ACTIVE_ROLE_SOURCE_READY_CURRENT.md`
+
+**Restart prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-16_PLAYER_FIRST_ACTIVE_ROLE_SOURCE_READY.md`
+
+Player Projection First Principle remains canonical:
+
+`PLAYER IDENTITY -> CURRENT ROLE/STATE -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+Position MAE/RMSE remains downstream QA, not the primary modeling objective.
+
+### Latest canonical scientific state
+
+1. `PLAYER_ROLE_ELASTICITY_SOURCE_BLOCKED`
+   - run `38847501580` SUCCESS;
+   - artifact `12024335417`;
+   - only frozen blocker was <90% strictly-prior same-team opportunity-history coverage;
+   - do not lower the gate.
+
+2. `PLAYER_HIGH_VALUE_SCORING_OPPORTUNITY_SOURCE_READY`
+   - run `38848080453` SUCCESS;
+   - artifact `12023852453`;
+   - named-player scoring-area topology is source-qualified.
+
+3. `PLAYER_HIGH_VALUE_OPPORTUNITY_PERSISTENCE_CLOSED`
+   - run `38848538570` SUCCESS;
+   - artifact `12024037594`;
+   - simple last-4 high-value share is not a robust replacement for ordinary player usage;
+   - do not rescue with alternate bands/windows/subsets/TD outcomes.
+
+4. **CURRENT FRONTIER:**
+   `PLAYER_ACTIVE_ROLE_PARTICIPATION_SOURCE_READY_ALL`.
+
+Canonical corrected source authority:
+- run `38895205962` — SUCCESS
+- job `116953914726`
+- exact head `28ebf8d7159fdd1fec8c2e4a0fe1c9e2c691537c`
+- artifact `12044155086`
+- digest `sha256:a42322579aee682497223c7f53bce0b14a96dc6f466558e811770e681a035dad`
+- result `docs/research/PLAYER_ACTIVE_ROLE_PARTICIPATION_V1_SOURCE_RESULT.md`.
+
+Corrected head excludes bye roster weeks.
+
+Per-position source dispositions:
+- `QB_ACTIVE_ROLE_PARTICIPATION_SOURCE_READY`
+- `RB_ACTIVE_ROLE_PARTICIPATION_SOURCE_READY`
+- `WR_ACTIVE_ROLE_PARTICIPATION_SOURCE_READY`
+- `TE_ACTIVE_ROLE_PARTICIPATION_SOURCE_READY`.
+
+No active-role predictive result exists yet.
+
+### Exact next action
+
+Freeze a separate active-role mechanism **before scoring anything**.
+
+Question:
+
+> Does this named player's own strictly-prior participation history forecast
+> whether he records any offensive snap in the target game better than a
+> strictly-prior position-level participation baseline?
+
+Keep the player model two-stage:
+
+1. active-role / zero-state participation;
+2. conditional opportunity allocation given participation.
+
+Do not collapse them.
+
+Use true pregame universe:
+weekly roster ACT + stable identity - exact official inactives.
+Target-game zero offensive snaps are valid outcomes.
+Do not use target-game stats/snaps to define pregame membership.
+
+Adjudicate QB/RB/WR/TE separately.
+Freeze exact baseline/candidate/probability mapping/support/inference gates before scoring.
+Require player-level heterogeneity + dependence-aware player/game inference.
+
+No sportsbook.
+No OddsAPI.
+No 2026 outcomes.
+No production mutation.
+
+### Why this matters
+
+SEA-DEN reinforced the user's core argument:
+manual J.K. Dobbins TD reasoning used **his** current role, usage and likely
+scoring-area opportunity, while most model-backed ticket legs failed.
+That game is motivation, not training proof.
+
+The model must learn player identity/current role instead of merely fitting a
+position average.
+
+### Protected continuity
+
+- WR opportunity-difficulty trust remains qualified; Week-6 WR lock remains frozen.
+- TE trust remains qualified; Week-6 TE lock remains frozen.
+- current generic ATD remains uncertified.
+- exactly one paid Week-6 OddsAPI acquisition was used; do not pull again without explicit authorization.
+- preserve all terminal anti-retest lanes in Issue #535 and the detailed handoff.
+- canonical model status remains `PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-15 — PLAYER-FIRST HIGH-VALUE OPPORTUNITY RESEARCH ADVANCED
 
 The named-player first principle remains non-negotiable.
