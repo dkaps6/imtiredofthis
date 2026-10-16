@@ -58,9 +58,21 @@ This does NOT authorize automatic player removal/zeroing or production mutation.
 Keep the player model two-stage.
 
 1. Stage 1 active-role / zero-state participation — **QUALIFIED**.
-2. Stage 2 conditional opportunity allocation given participation — **freeze next before scoring**.
+2. Stage 2 conditional opportunity allocation — **source/lineage reconciliation frozen next**.
 
-Before freezing Stage 2, reconcile the existing individual-opportunity roadmap and terminal allocation lanes so the new mechanism does not reopen closed science.
+The existing allocation roadmap has been reconciled. Do not launch another
+generic recent-share allocator.
+
+Frozen next source plan:
+`docs/research/PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_SOURCE_PLAN.md`.
+
+Audit 2024/2025 historical as-of/OOS-compatible canonical entitlement authority
+separately for QB passing, RB rushing, RB receiving, WR targets and TE targets.
+The bridge must preserve existing validated conditional-allocation science and
+fail a cell closed if its canonical historical parent cannot be proven.
+
+Only source-ready cells may advance to a separately frozen active-set bridge
+mechanism and scoring run.
 
 No sportsbook.
 No OddsAPI.
