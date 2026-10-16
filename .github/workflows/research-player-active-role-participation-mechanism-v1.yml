@@ -1,0 +1,124 @@
+name: Research Player Active Role Participation Mechanism V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - "docs/research/PLAYER_ACTIVE_ROLE_PARTICIPATION_V1_MECHANISM_FREEZE.md"
+      - "scripts/research/evaluate_player_active_role_participation_v1.py"
+      - "tests/test_player_active_role_participation_mechanism_v1.py"
+      - ".github/workflows/research-player-active-role-participation-mechanism-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "16df6e95388a5dd7d682a619ea0b6f49d50f37b4"
+  SOURCE_HEAD: "28ebf8d7159fdd1fec8c2e4a0fe1c9e2c691537c"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Prove mechanism was frozen before evaluator scoring
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          test "$(git show "$FREEZE_COMMIT:docs/research/PLAYER_ACTIVE_ROLE_PARTICIPATION_V1_MECHANISM_FREEZE.md" | grep -c 'FROZEN BEFORE SCORING')" -ge 1
+          test "$(git show "$FREEZE_COMMIT:scripts/research/evaluate_player_active_role_participation_v1.py" 2>/dev/null || true)" = ""
+          echo "ACTIVE_ROLE_MECHANISM_PRE_SCORE_FREEZE_PROVEN"
+
+      - name: Prove qualified parent source logic has not drifted
+        run: |
+          set -euo pipefail
+          git diff --exit-code "$SOURCE_HEAD" -- scripts/research/audit_player_active_role_participation_v1.py
+          python - <<'PY'
+          from scripts.research import audit_player_active_role_participation_v1 as s
+          assert s.VERSION == 'PLAYER_ACTIVE_ROLE_PARTICIPATION_V1_SOURCE_AUDIT'
+          assert s.M78_SHA == 'd39aaf0feea101f3e0d2721ebd4118ef33fb1a4d3c76670e2a4f17734e37b609'
+          print('ACTIVE_ROLE_PARENT_SOURCE_PARITY_PASS')
+          PY
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyarrow nflreadpy
+
+      - name: Run frozen safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_player_active_role_participation_v1.py
+          pytest -q tests/test_player_active_role_participation_mechanism_v1.py
+          pytest -q tests/test_player_active_role_participation_v1.py
+
+      - name: Score frozen active-role mechanism
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/player_active_role_mechanism
+          mkdir -p /tmp/player_active_role_mechanism
+          python scripts/research/evaluate_player_active_role_participation_v1.py             --inactives data/backtests/qb_m78_official_inactives_corrected/m78_corrected_candidate_teamweek.csv             --out-dir /tmp/player_active_role_mechanism
+
+      - name: Verify frozen research boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/player_active_role_mechanism/player_active_role_participation_mechanism_result.json'))
+          assert p['version']=='PLAYER_ACTIVE_ROLE_PARTICIPATION_V1_MECHANISM',p
+          assert p['freeze_version']=='PLAYER_ACTIVE_ROLE_PARTICIPATION_V1_MECHANISM_FREEZE',p
+          assert p['source_head']=='28ebf8d7159fdd1fec8c2e4a0fe1c9e2c691537c',p
+          assert p['source_run']==38895205962,p
+          assert p['source_artifact']==12044155086,p
+          assert set(p.get('position_dispositions',{}))=={'QB','RB','WR','TE'},p
+          assert p['frozen_parameters']['seasons']==[2024,2025],p
+          assert p['frozen_parameters']['player_window']==4,p
+          assert p['frozen_parameters']['player_min']==3,p
+          assert p['frozen_parameters']['baseline_min']==100,p
+          assert p['frozen_parameters']['candidate_position_prior_strength']==2.0,p
+          assert p['frozen_parameters']['bootstrap_replicates']==5000,p
+          assert p['frozen_parameters']['bootstrap_seed']==20261016,p
+          assert p['target_game_used_for_universe_membership']==0,p
+          assert p['target_game_snap_used_as_predictor']==0,p
+          assert p['stage2_opportunity_inputs_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['projection_values_changed']==0,p
+          assert p['production_changed'] is False,p
+          allowed={
+              'PLAYER_ACTIVE_ROLE_PARTICIPATION_MECHANISM_QUALIFIED_ALL',
+              'PLAYER_ACTIVE_ROLE_PARTICIPATION_MECHANISM_QUALIFIED_PARTIAL',
+              'PLAYER_ACTIVE_ROLE_PARTICIPATION_MECHANISM_SOURCE_BLOCKED_ALL',
+              'PLAYER_ACTIVE_ROLE_PARTICIPATION_MECHANISM_CLOSED',
+          }
+          assert p['disposition'] in allowed,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-active-role-participation-mechanism-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/player_active_role_mechanism/**
+            docs/research/PLAYER_ACTIVE_ROLE_PARTICIPATION_V1_MECHANISM_FREEZE.md
