@@ -591,7 +591,7 @@ def main() -> int:
             player_outcomes,
             on=["season", "week", "team", "player_id"],
             how="left",
-            validate="one_to_one",
+            validate="many_to_one",
         )
         for c in ("targets", "rushes", "pass_att"):
             detail[c] = num(detail[c]).fillna(0.0)
