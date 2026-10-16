@@ -176,31 +176,42 @@ The active-role research used:
 
 ## 9. Exact next scientific action
 
-Before scoring anything new, reconcile the current individual-opportunity roadmap and existing validated/terminal allocation lanes.
+The existing allocation roadmap has now been reconciled.
 
-Then freeze a **distinct Stage-2 conditional opportunity mechanism** that does not reopen closed science.
+Do **not** launch a generic recent-share allocator. That would duplicate or
+reopen existing RB carry/receiving, WR/TE trajectory, WR Dirichlet, TE
+allocation-difficulty, personnel-conditioned and high-value-persistence work.
 
-Scientific question:
+The next distinct seam is:
+`qualified Stage-1 active-role probability -> active-set state -> existing canonical conditional entitlement -> finite opportunity allocation`.
 
-> Conditional on this named player participating, does his own strictly-prior
-> same-team opportunity history forecast his target-game share of the relevant
-> finite team/room opportunity better than the current strictly-prior
-> position/room baseline?
+Frozen source/lineage plan:
+`docs/research/PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_SOURCE_PLAN.md`.
 
-Requirements:
-- true pregame universe;
-- condition evaluation on target-game participation for the Stage-2 scientific target only, without using it as a pregame predictor;
-- player identity and same-team chronology;
-- relevant finite opportunity denominator by market;
-- QB/RB/WR/TE adjudicated separately where the opportunity object differs;
-- named-player heterogeneity;
-- player/game dependence-aware inference;
-- exact baseline/candidate/support/probability or share mapping frozen before scoring;
-- no sportsbook;
-- no OddsAPI;
-- no 2026 outcomes;
-- no production mutation.
+Before any bridge scoring, audit 2024/2025 historical as-of/OOS-compatible
+canonical parent authority separately for:
+- QB passing opportunity;
+- RB rushing opportunity;
+- RB receiving opportunity;
+- WR target opportunity;
+- TE target opportunity.
 
+A cell whose current canonical historical entitlement cannot be proven is
+source-blocked. Do not substitute a new share model to rescue it.
+
+Only source-ready cells may advance to a separately frozen scored bridge.
+That later freeze must predeclare:
+- active-set sampling law from the already-qualified Stage-1 probability;
+- all-off / degenerate-room fallback;
+- exact conditional renormalization of existing canonical entitlement;
+- finite team/room conservation;
+- score and support gates;
+- player/game dependence-aware inference.
+
+No sportsbook.
+No OddsAPI.
+No 2026 outcomes.
+No production mutation.
 Do not collapse Stage 1 and Stage 2.
 
 ## 10. Operating style
