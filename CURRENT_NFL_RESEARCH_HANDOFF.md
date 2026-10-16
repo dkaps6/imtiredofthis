@@ -1,5 +1,87 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-15 — WR DUAL TRUST SUPPORTED / QB WEEK-6 INTENT LEDGER FROZEN
+
+### WR player reliability
+
+Historical WR dual-reliability integration:
+- disposition `WR_DUAL_RELIABILITY_TRUST_HISTORICAL_INTEGRATION_SUPPORTED__PROSPECTIVE_REQUIRED`;
+- run `38827426902` SUCCESS;
+- job `116738041310`;
+- exact head `ca4da46fe07341900263dacc8602a7aef002ed03`;
+- artifact `12015229072`;
+- digest `sha256:2b27705844beaf9c35cf181e6fc5b7efff2c029df0255f035ba8c88bf24722c2`;
+- result `docs/research/WR_DUAL_RELIABILITY_TRUST_INTEGRATION_V1_RESULT.md`.
+
+Frozen no-fit formula:
+`dual_fragility = 0.5 * opportunity_fragility + 0.5 * efficiency_fragility`.
+
+Pooled:
+- opportunity-only association +0.28853;
+- efficiency-only +0.30057;
+- dual +0.32746;
+- dual-minus-opportunity +0.03893;
+- player-cluster gain 95% CI [+0.02314,+0.05494];
+- team-week gain 95% CI [+0.02427,+0.05342];
+- DUAL_HIGH_TRUST final abs error 13.73 yd vs DUAL_LOW_TRUST 31.49 yd;
+- every frozen gate passed.
+
+This is historical integration support only. The parent seasons were already exposed.
+
+Prospective dual confirmation:
+- frozen plan `docs/research/WR_DUAL_RELIABILITY_TRUST_PROSPECTIVE_CONFIRMATION_V1_PLAN.md`;
+- starts Week 7, NOT Week 6;
+- fixed Weeks 7-10;
+- exact 50/50 formula, no fitted weights;
+- no retroactive Week-6 composite;
+- Week-6 opportunity and efficiency locks remain separate and immutable.
+
+### QB prospective pass-intent source lane
+
+Unchanged V1L Thursday Week-6 collector:
+- run `38827689707` SUCCESS;
+- job `116738872975`;
+- exact head `6c694209323a5af646e0b2d80c175d3fec281dd4`;
+- artifact `12016115756`;
+- digest `sha256:c741cbd9a94c17d0996c2a00e789710da0964cfe5c6a2e0ec3fcf0ac380c3b01`;
+- 28 scheduled team-weeks;
+- 15 teams with retained sources;
+- 38 retained first-party/timestamp-safe candidate sources;
+- candidate-source coverage 53.57%;
+- outcomes/residuals/sportsbook/OddsAPI/predictive fits all zero.
+
+Frozen semantic ledger:
+- `docs/research/QB_TEAM_PASS_INTENT_WEEK6_PROSPECTIVE_STRUCTURED_DECISIONS_V1L.md`;
+- commit `9e1b0c8b065958bced83b96ce8dbc165eca743d9`;
+- EXPLICIT 4 / NO_EXPLICIT 13 / INSUFFICIENT 21.
+
+Precision-safe explicit tags:
+- CAR: PROTECTION_ADJUSTMENT;
+- NYG: TEMPO_UP;
+- NYG: PERSONNEL_USAGE_CHANGE;
+- DAL: RUN_VOLUME_UP.
+
+Do not infer pass/run direction from NO_EXPLICIT or INSUFFICIENT rows.
+Week 6 alone does not authorize a predictive QB candidate or projection mutation.
+The exact collector may continue source-only snapshots before remaining team kickoffs under the unchanged frozen rules.
+
+### Immediate research action
+
+1. Preserve WR/QB milestones above.
+2. Audit only existing Week-5 and Week-6 RB-PD2 actions/artifacts for valid **pregame** prospective locks.
+3. Week 4 is permanently non-observation: no valid RB-PD2 lock existed and none may be reconstructed.
+4. Do not create a retrospective RB-PD2 lock from replay.
+5. Do not pull OddsAPI.
+6. Do not read/use Week-6 outcomes for WR/TE/QB prospective locks.
+7. RB retrospective M96 architecture remains stopped; only already-frozen prospective evidence may advance it.
+
+Canonical status remains:
+`PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+Exactly one Week-6 paid OddsAPI acquisition remains the hard limit. No additional paid pull without explicit authorization.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-15 — WR EFFICIENCY TRUST QUALIFIED + WEEK-6 LOCK FROZEN
 
 Canonical historical result:
