@@ -1,3 +1,31 @@
+# CURRENT NFL RESEARCH HANDOFF — READ FIRST
+
+## TOP CHECKPOINT — 2026-10-15 — PLAYER PROJECTION FIRST PRINCIPLE CANONICAL
+
+Repository-wide modeling objective:
+- this is a **named-player projection model**;
+- position-level average MAE/RMSE is a downstream diagnostic / guardrail, not the primary modeling objective;
+- historical data builds player identity: role, usage trajectory, situational opportunity, efficiency tendencies, teammate-allocation behavior and reliability;
+- current-week state decides which parts of that identity are active now;
+- teammates govern opportunity allocation;
+- opponent/defensive/game context is the weekly obstacle/environment, not the player's identity;
+- markets ask different football questions and must map to the relevant player state;
+- better individual-player projections should improve aggregate position accuracy as a consequence;
+- do not optimize position averages at the expense of player-level football meaning;
+- do not declare a position solved from aggregate metrics alone.
+
+Canonical architecture:
+`docs/research/PLAYER_IDENTITY_ROLE_STATE_ARCHITECTURE_V1.md`
+
+Conceptual sequence:
+`PLAYER IDENTITY -> CURRENT ROLE -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+This is additive. Preserve validated/promoted science and all terminal stop rules. Do not restart completed research.
+
+**For current research execution, reconcile the live research branch / PR #672 and Issue #535 after reading this principle.**
+
+---
+
 # ACTIVE CHECKPOINT — 2026-10-08 — WEEK 5 CANONICAL PRESERVED-ODDS GREEN / RESEARCH FRONTIER PRESERVED
 
 **Read this detailed handoff next:**
