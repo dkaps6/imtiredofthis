@@ -32,7 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh issue comment 535 --repo "${{ github.repository }}" --body "Frozen PRISM Stage-2 active-role conditional-allocation bridge scoring started: run `${{ github.run_id }}`, exact head `${{ github.sha }}`. Freeze commit: `87400a9c9c1db465c9c4bd70b0cb241dba27c6c9`. Eligible cells only: QB passing, RB rushing, RB receiving, TE receiving. WR remains source-blocked. No sportsbook, no OddsAPI, no 2026 outcomes, no production mutation."
+          gh issue comment 535 --repo \"${{ github.repository }}\" --body 'Frozen PRISM Stage-2 active-role conditional-allocation bridge scoring started: run ${{ github.run_id }}, exact head ${{ github.sha }}. Freeze commit 87400a9c9c1db465c9c4bd70b0cb241dba27c6c9. Eligible cells only: QB passing, RB rushing, RB receiving, TE receiving. WR remains source-blocked. No sportsbook, no OddsAPI, no 2026 outcomes, no production mutation.'
 
       - uses: actions/setup-python@v5
         with:
