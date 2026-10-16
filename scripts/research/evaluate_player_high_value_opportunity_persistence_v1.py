@@ -100,7 +100,7 @@ def prepare_channel(source,roster,cfg):
  hv=cfg["hv"];team_hv="team_"+hv
  u["target_hv"]=u[hv]
  u["target_team_hv"]=u[team_hv]
- u["actual_hv_share"]=np.where(u[target_hv]>0,u["target_hv"]/u[target_hv],np.nan)
+ u["actual_hv_share"]=np.where(u["target_team_hv"]>0,u["target_hv"]/u["target_team_hv"],np.nan)
  u["actual_overall_share"]=np.where(u.team_opp>0,u.opportunities/u.team_opp,np.nan)
  u["ordinal"]=u.season*100+u.week
  return u.sort_values(["player_id","team","season","week"]).reset_index(drop=True)
