@@ -1,0 +1,178 @@
+name: Research Player Active Role Conditional Allocation Source V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/audit_player_active_role_conditional_allocation_source_v1.py'
+      - '.github/workflows/research-player-active-role-conditional-allocation-source-v1.yml'
+      - 'docs/research/PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_SOURCE_PLAN.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyyaml 'pyarrow==18.1.0'
+
+      - name: Compile frozen source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_player_active_role_conditional_allocation_source_v1.py
+
+      - name: Verify immutable parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12044155086 --jq '.workflow_run.id')" = "38895205962"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12044155086 --jq '.digest')" = "sha256:a42322579aee682497223c7f53bce0b14a96dc6f466558e811770e681a035dad"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.workflow_run.id')" = "38907459996"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.digest')" = "sha256:41b1acd3f1b8d77abb53980db160ece32f8fc40351939d4827248b9caad0c64b"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11552447166 --jq '.workflow_run.id')" = "37782189538"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11552447166 --jq '.digest')" = "sha256:94a4bee7011877b1d7a24708d5ba3e86ccc5d29b427bea650af574fc1f09fa24"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-participation-source-v1-38895205962
+          path: /tmp/stage1-source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38895205962
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-participation-mechanism-v1-38907459996
+          path: /tmp/stage1-mechanism
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38907459996
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wr-te-fold-authorities-recovered-v1
+          path: /tmp/fold-authority
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 37782189538
+
+      - name: Resolve immutable source files
+        run: |
+          STAGE1_UNIVERSE="$(find /tmp/stage1-source -type f -name 'player_active_role_pregame_universe.csv' -print -quit)"
+          STAGE1_MECHANISM="$(find /tmp/stage1-mechanism -type f -name 'player_active_role_mechanism_scored_rows.csv' -print -quit)"
+          FOLD_ROOT="$(find /tmp/fold-authority -type f -name 'recovery_manifest.json' -printf '%h\n' -quit)"
+          test -n "$STAGE1_UNIVERSE" && test -s "$STAGE1_UNIVERSE"
+          test -n "$STAGE1_MECHANISM" && test -s "$STAGE1_MECHANISM"
+          test -n "$FOLD_ROOT" && test -d "$FOLD_ROOT"
+          echo "STAGE1_UNIVERSE=$STAGE1_UNIVERSE" >> "$GITHUB_ENV"
+          echo "STAGE1_MECHANISM=$STAGE1_MECHANISM" >> "$GITHUB_ENV"
+          echo "FOLD_ROOT=$FOLD_ROOT" >> "$GITHUB_ENV"
+
+      - name: Build leakage-safe 2024-2025 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/bridge-hist-2024 /tmp/bridge-hist-2025 /tmp/bridge-source
+          mkdir -p /tmp/bridge-hist-2024 /tmp/bridge-hist-2025 /tmp/bridge-source
+          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks 5-18 --out-dir /tmp/bridge-hist-2024
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks 5-18 --out-dir /tmp/bridge-hist-2025
+
+      - name: Combine schedule and team history
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/bridge-source')
+          roots=['/tmp/bridge-hist-2024','/tmp/bridge-hist-2025']
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([pd.read_csv(f'{r}/{name}') for r in roots],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build canonical historical player logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2023,2024,2025 \
+            --schedule /tmp/bridge-source/schedule_history.csv \
+            --out /tmp/bridge-source/player_game_logs_history.csv
+
+      - name: Run frozen source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/audit_player_active_role_conditional_allocation_source_v1.py \
+            --stage1-universe "$STAGE1_UNIVERSE" \
+            --stage1-mechanism "$STAGE1_MECHANISM" \
+            --team-weekly /tmp/bridge-source/team_weekly_history.csv \
+            --player-logs /tmp/bridge-source/player_game_logs_history.csv \
+            --schedule /tmp/bridge-source/schedule_history.csv \
+            --universe-dir-2024 /tmp/bridge-hist-2024/pregame_universe \
+            --universe-dir-2025 /tmp/bridge-hist-2025/pregame_universe \
+            --fold-root "$FOLD_ROOT" \
+            --out-dir /tmp/bridge-source/result
+
+      - name: Certify frozen contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/bridge-source/result/active_role_conditional_allocation_source_result.json'))
+          assert p['version']=='PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_SOURCE_AUDIT',p
+          assert p['target_seasons']==[2024,2025],p
+          assert p['target_weeks']==[5,18],p
+          assert len(p['season_cells'])==10,p
+          assert p['integrity']['target_game_outcomes_used_as_predictors']==0,p
+          assert p['integrity']['sportsbook_inputs_used']==0,p
+          assert p['integrity']['oddsapi_calls']==0,p
+          assert p['integrity']['outcomes_2026_used']==0,p
+          assert p['integrity']['new_share_models_fit']==0,p
+          assert p['integrity']['production_changed'] is False,p
+          assert p['integrity']['wr_2025_oos_authority_used'] is False,p
+          assert p['integrity']['qb_share_model_invented'] is False,p
+          assert p['disposition'] in {
+              'PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_SOURCE_READY_ALL',
+              'PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_SOURCE_READY_PARTIAL',
+              'PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_SOURCE_BLOCKED',
+              'PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_SOURCE_INTEGRITY_FAILURE',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-active-role-conditional-allocation-source-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/bridge-source/result/**
