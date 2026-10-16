@@ -1,5 +1,67 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-16 — PRISM STAGE-2 BRIDGE QUALIFIED PARTIAL / WEEK-6 PROSPECTIVE SHADOW NEXT
+
+**Model name:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-16_PRISM_STAGE2_BRIDGE_QUALIFIED_PARTIAL_CURRENT.md`
+
+Player-first order remains canonical:
+
+`PLAYER IDENTITY -> CURRENT ROLE/STATE -> TEAMMATE COMPETITION -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+### New canonical Stage-2 milestone
+
+`PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_QUALIFIED_PARTIAL`
+
+Frozen before scoring:
+- commit `87400a9c9c1db465c9c4bd70b0cb241dba27c6c9`;
+- contract `docs/research/PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_MECHANISM_FREEZE.md`.
+
+Canonical scored authority:
+- run `38957575645` — SUCCESS;
+- job `117164201650`;
+- exact head `eba5787c0b06aa5f975008965df7d023b3525ba7`;
+- artifact `12070774378`;
+- digest `sha256:e07edbad1bf97a4917ba95c58156c8941448e7b2668bd0eae2e9bcad5d4945b0`;
+- result `docs/research/PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_RESULT.md`.
+
+Qualified:
+- `RB_RUSHING_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_QUALIFIED`;
+- `RB_RECEIVING_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_QUALIFIED`;
+- `TE_RECEIVING_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_QUALIFIED`.
+
+Closed:
+- `QB_PASSING_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_CLOSED`.
+  QB improved CRPS but worsened expected attempts and room allocation and failed 2025 dependence-aware confirmation. Do not rescue the exact V1 mechanism.
+
+Not scored:
+- WR receiving, because 2025 WR-R15 independent OOS authority remains unavailable/forbidden.
+
+### Exact next action
+
+Do not production-promote historical Stage 2.
+
+Freeze an outcome-blind 2026 Week-6 prospective PRISM shadow for the three qualified cells only:
+- RB rushing;
+- RB receiving;
+- TE receiving.
+
+Use the exact Stage-1 p_active semantics and exact qualified Stage-2 bridge with current football-only pregame inputs. Preserve canonical entitlement and team opportunity volume. QB and WR remain baseline.
+
+No sportsbook upstream.
+No new OddsAPI call.
+No Week-6 outcomes at lock time.
+No production mutation.
+
+Before launching the shadow, reconcile whether existing preserved Week-6 football artifacts contain every required input. If not, build a no-live-odds football-only source path rather than spending another paid credit.
+
+Preserve all terminal anti-retest lanes, WR/TE trust locks, and current validated production science.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-16 — ACTIVE-ROLE MECHANISM QUALIFIED ALL / STAGE 2 NEXT
 
 **Read this detailed handoff next:**
