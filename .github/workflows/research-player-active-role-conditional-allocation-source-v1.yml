@@ -13,6 +13,7 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
 
 env:
   PYTHONDONTWRITEBYTECODE: "1"
@@ -162,6 +163,43 @@ jobs:
           },p
           print(json.dumps(p,indent=2,sort_keys=True))
           PY
+
+      - name: Record Issue 535 source-audit checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/bridge-source/result/active_role_conditional_allocation_source_result.json'))
+          lines=[
+              '### Player-first Stage-2 active-role -> conditional-allocation source audit',
+              '',
+              f"- Run: \`{os.environ['RUN_ID']}\`",
+              f"- Exact head: \`{os.environ['HEAD_SHA']}\`",
+              f"- Disposition: \`{p['disposition']}\`",
+              f"- Ready cells: {', '.join(p['ready_cells']) if p['ready_cells'] else 'none'}",
+              '',
+              'Per-cell season state:',
+          ]
+          for x in p['per_cell']:
+              lines.append(
+                  f"- {x['cell']}: 2024={'READY' if x['season_2024_ready'] else 'BLOCKED'}, "
+                  f"2025={'READY' if x['season_2025_ready'] else 'BLOCKED'} -> \`{x['disposition']}\`"
+              )
+          lines += [
+              '',
+              'Integrity: no sportsbook input, no OddsAPI call, no 2026 outcomes, '
+              'no target-game outcomes used as predictors, no new share model fit, '
+              'and no production mutation.',
+              '',
+              'QB remains fail-closed unless an existing canonical per-QB passing-opportunity '
+              'entitlement is proven. WR 2025 cannot use the WR-R15 final fit as OOS authority.',
+          ]
+          open('/tmp/issue535_source_audit.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/issue535_source_audit.md
 
       - name: Strict repository audit
         env:
