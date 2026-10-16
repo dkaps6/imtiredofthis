@@ -1,0 +1,167 @@
+name: Research RB Individual Run Location Matchup Predictive V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/RB_INDIVIDUAL_RUN_LOCATION_MATCHUP_PREDICTIVE_V1_FREEZE.md'
+      - 'scripts/research/score_rb_individual_run_location_matchup_predictive_v1.py'
+      - 'tests/test_rb_individual_run_location_matchup_predictive_v1.py'
+      - '.github/workflows/research-rb-individual-run-location-matchup-predictive-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyyaml tabulate 'pyarrow==18.1.0'
+
+      - name: Compile and test frozen predictive mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/score_rb_individual_run_location_matchup_predictive_v1.py
+          pytest -q tests/test_rb_individual_run_location_matchup_predictive_v1.py
+
+      - name: Create isolated workspace
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/rb_runloc_pred /tmp/rb_runloc_hist_2024 /tmp/rb_runloc_hist_2025 /tmp/rb_runloc_ref /tmp/rb_runloc_source
+          mkdir -p /tmp/rb_runloc_pred /tmp/rb_runloc_hist_2024 /tmp/rb_runloc_hist_2025 /tmp/rb_runloc_ref /tmp/rb_runloc_source
+
+      - name: Verify exact qualified RB source artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11720966759 --jq '.id')" = "11720966759"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11720966759 --jq '.workflow_run.id')" = "38189983578"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11720966759 --jq '.digest')" = "sha256:dec7d48d1a2c39ef255a6391b0014f75779ceb5939dfc7a90feca384074caad5"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rb-individual-run-location-matchup-source-v1-38189983578
+          path: /tmp/rb_runloc_source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38189983578
+
+      - name: Verify exact historical baseline authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11427113291 --jq '.id')" = "11427113291"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11427113291 --jq '.workflow_run.id')" = "37493425352"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11427113291 --jq '.digest')" = "sha256:5051111ebc20b79a334cfd1dc08ec8d8d52107e59acb023f7f5fefe4e5b771dd"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: distribution-right-tail-asymmetry-v1-37493425352
+          path: /tmp/rb_runloc_ref
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 37493425352
+
+      - name: Build leakage-safe historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py             --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/rb_runloc_hist_2024
+          python scripts/backtest/build_historical_inputs.py             --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/rb_runloc_hist_2025
+
+      - name: Combine schedule and team-week history
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/rb_runloc_pred')
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([
+                  pd.read_csv('/tmp/rb_runloc_hist_2024/'+name),
+                  pd.read_csv('/tmp/rb_runloc_hist_2025/'+name),
+              ],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build canonical historical player logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py             --seasons 2023,2024,2025             --schedule /tmp/rb_runloc_pred/schedule_history.csv             --out /tmp/rb_runloc_pred/player_game_logs_history.csv
+
+      - name: Resolve frozen artifacts
+        run: |
+          set -euo pipefail
+          SOURCE="$(find /tmp/rb_runloc_source -type f -name 'rb_individual_run_location_matchup_source_v1_rows.csv' -print -quit)"
+          RIGHT_TAIL="$(find /tmp/rb_runloc_ref -type f -name 'distribution_right_tail_asymmetry_detail.csv' -print -quit)"
+          test -n "$SOURCE" && test -s "$SOURCE"
+          test -n "$RIGHT_TAIL" && test -s "$RIGHT_TAIL"
+          echo "SOURCE=$SOURCE" >> "$GITHUB_ENV"
+          echo "RIGHT_TAIL=$RIGHT_TAIL" >> "$GITHUB_ENV"
+
+      - name: Score frozen RB individual run-location candidate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/score_rb_individual_run_location_matchup_predictive_v1.py             --team-weekly /tmp/rb_runloc_pred/team_weekly_history.csv             --player-logs /tmp/rb_runloc_pred/player_game_logs_history.csv             --schedule /tmp/rb_runloc_pred/schedule_history.csv             --universe-dir-2024 /tmp/rb_runloc_hist_2024/pregame_universe             --universe-dir-2025 /tmp/rb_runloc_hist_2025/pregame_universe             --right-tail-detail "$RIGHT_TAIL"             --source-rows "$SOURCE"             --weights data/model_ensemble_weights.csv             --iterations 2000             --out-dir /tmp/rb_runloc_pred/result
+
+      - name: Certify frozen governance
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/rb_runloc_pred/result/rb_individual_run_location_matchup_predictive_v1_result.json'))
+          assert p['version']=='RB_INDIVIDUAL_RUN_LOCATION_MATCHUP_PREDICTIVE_V1',p
+          assert p['evaluation_seasons']==[2024,2025],p
+          assert p['evaluation_weeks']==[2,18],p
+          assert p['baseline_authority_reproduction']['max_abs_gap'] <= 1e-8,p
+          assert p['source_ready_rows']==2654,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['candidate_coefficients_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['target_game_usage_used'] is False,p
+          assert p['production_change_authorized'] is False,p
+          assert p['candidate']['disposition'] in {
+              'RB_RUN_LOCATION_MATCHUP_HISTORICAL_PASS_FREEZE_FORWARD_SHADOW',
+              'RB_RUN_LOCATION_MATCHUP_HISTORICAL_FAIL_CLOSED',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload predictive result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-individual-run-location-matchup-predictive-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/rb_runloc_pred/result/**

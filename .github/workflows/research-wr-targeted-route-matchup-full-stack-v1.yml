@@ -1,0 +1,174 @@
+name: Research WR Targeted Route Matchup Full Stack V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - "docs/research/WR_TARGETED_ROUTE_MATCHUP_FULL_STACK_INTEGRATION_V1_FREEZE.md"
+      - "scripts/research/persist_wr_targeted_route_matchup_integration_v1.py"
+      - "scripts/research/summarize_wr_targeted_route_matchup_integration_v1.py"
+      - "tests/test_wr_targeted_route_matchup_integration_v1.py"
+      - ".github/workflows/research-wr-targeted-route-matchup-full-stack-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyarrow==17.0.0
+
+      - name: Compile and unit test frozen integration
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/persist_wr_targeted_route_matchup_integration_v1.py
+          python -m py_compile scripts/research/summarize_wr_targeted_route_matchup_integration_v1.py
+          pytest -q tests/test_wr_targeted_route_matchup_integration_v1.py
+
+      - name: Create workspace
+        run: |
+          rm -rf /tmp/wrroute /tmp/hist_2024 /tmp/wr_model /tmp/te_model /tmp/route_casebook
+          mkdir -p /tmp/wrroute /tmp/hist_2024 /tmp/wr_model /tmp/te_model /tmp/route_casebook
+
+      - name: Download frozen targeted-route Stage-B casebook
+        uses: actions/download-artifact@v4
+        with:
+          name: player-targeted-route-matchup-v1
+          path: /tmp/route_casebook
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38641891257
+
+      - name: Download certified recovered WR-R15 and TE-R5P fold authorities
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-te-fold-authorities-recovered-v1
+          path: /tmp/fold_authority
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37782189538
+
+      - name: Verify recovered fold authority manifest
+        run: |
+          test -s /tmp/fold_authority/recovery_manifest.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/fold_authority/recovery_manifest.json').read_text())
+          assert p['status']=='WR_TE_FOLD_AUTHORITIES_RECOVERED_EXACT', p
+          assert p['te_published_metrics_exact_match'] is True, p
+          assert p['provider_rebuild_used'] is False, p
+          assert p['sportsbook_inputs_used'] is False, p
+          assert int(p['paid_oddsapi_calls'])==0, p
+          print('recovered fold authority PASS')
+          PY
+
+      - name: Build independent 2024 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+
+      - name: Build canonical 2023-2024 player logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2023,2024 \
+            --schedule /tmp/hist_2024/schedule_history.csv \
+            --out /tmp/wrroute/player_game_logs_history.csv
+
+      - name: Build canonical 2024 component baseline
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/walk_forward.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/wrroute/player_game_logs_history.csv \
+            --team-weekly /tmp/hist_2024/team_weekly_history.csv \
+            --schedule /tmp/hist_2024/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --out /tmp/wrroute/component_2024_base.csv
+
+      - name: Generate promoted baseline and frozen route-matchup arms
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          CASEBOOK=$(find /tmp/route_casebook -type f -name player_targeted_route_matchup_casebook.csv | head -1)
+          test -n "$CASEBOOK"
+          python scripts/research/persist_wr_targeted_route_matchup_integration_v1.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/wrroute/player_game_logs_history.csv \
+            --team-weekly /tmp/hist_2024/team_weekly_history.csv \
+            --schedule /tmp/hist_2024/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --component-file /tmp/wrroute/component_2024_base.csv \
+            --casebook "$CASEBOOK" \
+            --te-coefficients /tmp/fold_authority/te_r5p_recovered/te_r5p_coefficients.csv \
+            --wr-coefficients /tmp/fold_authority/wr_r15_original/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv \
+            --out-dir /tmp/wrroute/integration
+
+      - name: Build promoted and candidate full-stack traces
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          for ARM in promoted_baseline route_ypt route_catch route_combined; do
+            python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
+              --component-file "/tmp/wrroute/integration/component_2024_${ARM}.csv" \
+              --schedule /tmp/hist_2024/schedule_history.csv \
+              --weights data/model_ensemble_weights.csv \
+              --out "/tmp/wrroute/full_stack_${ARM}.csv"
+          done
+
+      - name: Score frozen full-stack integration
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/summarize_wr_targeted_route_matchup_integration_v1.py \
+            --baseline-trace /tmp/wrroute/full_stack_promoted_baseline.csv \
+            --ypt-trace /tmp/wrroute/full_stack_route_ypt.csv \
+            --catch-trace /tmp/wrroute/full_stack_route_catch.csv \
+            --direct-rows /tmp/wrroute/integration/wr_route_matchup_direct_mc_rows.csv \
+            --audit /tmp/wrroute/integration/wr_route_matchup_integration_audit.csv \
+            --betas /tmp/wrroute/integration/wr_route_matchup_betas.json \
+            --out-dir /tmp/wrroute/result
+
+      - name: Show frozen result
+        if: always()
+        run: |
+          cat /tmp/wrroute/integration/wr_route_matchup_betas.json 2>/dev/null || true
+          echo "--- integration result ---"
+          cat /tmp/wrroute/result/wr_route_matchup_full_stack_result.json 2>/dev/null || true
+          echo "--- summary ---"
+          cat /tmp/wrroute/result/wr_route_matchup_full_stack_summary.csv 2>/dev/null || true
+
+      - name: Upload compact evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-targeted-route-matchup-full-stack-v1
+          path: |
+            /tmp/wrroute/integration/*.json
+            /tmp/wrroute/integration/*.csv
+            /tmp/wrroute/full_stack_*.csv
+            /tmp/wrroute/result/*
+            docs/research/WR_TARGETED_ROUTE_MATCHUP_FULL_STACK_INTEGRATION_V1_FREEZE.md
+          if-no-files-found: warn
+          retention-days: 30

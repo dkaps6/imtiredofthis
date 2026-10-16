@@ -1,0 +1,206 @@
+name: Research Distribution Q90 Upper-Tail Hinge V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/DISTRIBUTION_Q90_UPPER_TAIL_HINGE_V1_FREEZE.md'
+      - 'scripts/research/evaluate_distribution_q90_upper_tail_hinge_v1.py'
+      - 'tests/test_distribution_q90_upper_tail_hinge_v1.py'
+      - '.github/workflows/research-distribution-q90-upper-tail-hinge-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PARENT_SHA: 80bc5a2768c9be031757e830e4d8ae8d958d5a93
+  PARENT_RUN: "37493425352"
+  PARENT_ARTIFACT: distribution-right-tail-asymmetry-v1-37493425352
+
+jobs:
+  development:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install compatible dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyyaml tabulate 'pyarrow==18.1.0'
+
+      - name: Compile and test frozen candidate before scoring
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_distribution_q90_upper_tail_hinge_v1.py
+          pytest -q tests/test_distribution_q90_upper_tail_hinge_v1.py
+          cp scripts/research/evaluate_distribution_q90_upper_tail_hinge_v1.py /tmp/evaluate_q90_hinge_v1.py
+
+      - name: Download frozen parent artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf /tmp/parent_right_tail
+          mkdir -p /tmp/parent_right_tail
+          gh run download "$PARENT_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$PARENT_ARTIFACT" --dir /tmp/parent_right_tail
+          PARENT_DETAIL="$(find /tmp/parent_right_tail -type f -name distribution_right_tail_asymmetry_detail.csv -print -quit)"
+          test -n "$PARENT_DETAIL"
+          test -s "$PARENT_DETAIL"
+          echo "PARENT_DETAIL=$PARENT_DETAIL" >> "$GITHUB_ENV"
+
+      - name: Switch reconstruction code to exact frozen parent head
+        run: |
+          git fetch origin "$PARENT_SHA" --depth=1
+          git checkout --detach "$PARENT_SHA"
+          test "$(git rev-parse HEAD)" = "$PARENT_SHA"
+
+      - name: Build exact parent historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/hist_2024 /tmp/hist_2025 /tmp/q90_hinge
+          mkdir -p /tmp/hist_2024 /tmp/hist_2025 /tmp/q90_hinge/distributions /tmp/q90_hinge/result
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+
+      - name: Combine parent schedule and team history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/q90_hinge')
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([
+                  pd.read_csv('/tmp/hist_2024/'+name),
+                  pd.read_csv('/tmp/hist_2025/'+name),
+              ],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build parent player logs and component traces
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2023,2024,2025 \
+            --schedule /tmp/q90_hinge/schedule_history.csv \
+            --out /tmp/q90_hinge/player_game_logs_history.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/q90_hinge/player_game_logs_history.csv \
+            --team-weekly /tmp/q90_hinge/team_weekly_history.csv \
+            --schedule /tmp/q90_hinge/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --out /tmp/q90_hinge/component_predictions_2024.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/q90_hinge/player_game_logs_history.csv \
+            --team-weekly /tmp/q90_hinge/team_weekly_history.csv \
+            --schedule /tmp/q90_hinge/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --out /tmp/q90_hinge/component_predictions_2025.csv
+
+      - name: Reconstruct exact parent empirical arrays
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/persist_historical_simulated_outcomes_v1.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/q90_hinge/player_game_logs_history.csv \
+            --team-weekly /tmp/q90_hinge/team_weekly_history.csv \
+            --schedule /tmp/q90_hinge/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --component-file /tmp/q90_hinge/component_predictions_2024.csv \
+            --out-dir /tmp/q90_hinge/distributions
+          python scripts/research/persist_historical_simulated_outcomes_v1.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/q90_hinge/player_game_logs_history.csv \
+            --team-weekly /tmp/q90_hinge/team_weekly_history.csv \
+            --schedule /tmp/q90_hinge/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --component-file /tmp/q90_hinge/component_predictions_2025.csv \
+            --out-dir /tmp/q90_hinge/distributions
+
+      - name: Rebuild exact parent final football means
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
+            --component-file /tmp/q90_hinge/component_predictions_2024.csv \
+            --component-file /tmp/q90_hinge/component_predictions_2025.csv \
+            --schedule /tmp/q90_hinge/schedule_history.csv \
+            --weights data/model_ensemble_weights.csv \
+            --out /tmp/q90_hinge/full_stack_projection_trace.csv
+
+      - name: Score frozen q90 upper-tail hinge development candidate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python /tmp/evaluate_q90_hinge_v1.py \
+            --projection-file /tmp/q90_hinge/full_stack_projection_trace.csv \
+            --distribution-dir /tmp/q90_hinge/distributions \
+            --parent-detail "$PARENT_DETAIL" \
+            --out-dir /tmp/q90_hinge/result
+
+      - name: Certify no-fit development boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/q90_hinge/result/distribution_q90_upper_tail_hinge_result.json'))
+          assert p['version']=='DISTRIBUTION_Q90_UPPER_TAIL_HINGE_V1',p
+          assert p['development_only'] is True,p
+          assert p['historical_confirmation'] is False,p
+          assert p['markets']==['rush_yards','rec_yards','receptions','rush_rec_yards'],p
+          assert p['seasons']==[2024,2025],p
+          assert p['tail_excess_multiplier']==2.0,p
+          assert p['hinge_quantile']==0.90,p
+          assert p['parameters_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['football_mean_changed'] is False,p
+          assert p['production_changed'] is False,p
+          assert p['max_abs_mean_shift']<=1e-10,p
+          assert p['parent_parity']['rows']>0,p
+          assert max(p['parent_parity']['max_abs_gaps'].values())<=1e-8,p
+          assert p['disposition'] in {
+              'Q90_UPPER_TAIL_HINGE_DEVELOPMENT_SURVIVOR_EXISTS',
+              'Q90_UPPER_TAIL_HINGE_DEVELOPMENT_NULL',
+              'Q90_UPPER_TAIL_HINGE_INTEGRITY_FAILURE',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload development artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: distribution-q90-upper-tail-hinge-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/q90_hinge/result/**
+            /tmp/q90_hinge/distributions/*_distribution_rebuild_audit.csv

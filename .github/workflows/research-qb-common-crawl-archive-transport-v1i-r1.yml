@@ -1,0 +1,102 @@
+name: Research QB Strict Archive Identity Recertification V1I-R1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/QB_TEAM_PASS_INTENT_COMMON_CRAWL_ARCHIVE_TRANSPORT_V1I_R1_PLAN.md'
+      - 'scripts/research/audit_qb_team_pass_intent_common_crawl_archive_transport_v1i_r1.py'
+      - 'tests/test_qb_team_pass_intent_common_crawl_archive_transport_v1i_r1.py'
+      - '.github/workflows/research-qb-common-crawl-archive-transport-v1i-r1.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  recertify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml
+
+      - name: Compile and test strict recertifier
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_qb_team_pass_intent_common_crawl_archive_transport_v1i_r1.py
+          pytest -q tests/test_qb_team_pass_intent_common_crawl_archive_transport_v1i_r1.py
+
+      - name: Verify exact V1I artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11716151694 --jq '.id')" = "11716151694"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11716151694 --jq '.workflow_run.id')" = "38173788868"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11716151694 --jq '.digest')" = "sha256:4464dafff9928d0bd04774df44b56efef02fe876e91595538a801edbdff17470"
+
+      - name: Download exact preserved V1I artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: qb-common-crawl-archive-transport-v1i
+          path: /tmp/v1i
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38173788868
+
+      - name: Run strict archive identity recertification
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb-v1i-r1
+          python scripts/research/audit_qb_team_pass_intent_common_crawl_archive_transport_v1i_r1.py             --v1i-rows /tmp/v1i/qb_intent_common_crawl_archive_transport_v1i_rows.json             --out-dir /tmp/qb-v1i-r1
+
+      - name: Certify repaired transport result
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open("/tmp/qb-v1i-r1/qb_intent_common_crawl_archive_transport_v1i_r1_result.json"))
+          assert p["version"]=="QB_TEAM_PASS_INTENT_COMMON_CRAWL_ARCHIVE_TRANSPORT_V1I_R1", p
+          assert p["rows"]==158, p
+          assert p["direct_ready_rows"]==123, p
+          assert p["archive_needed_rows"]==35, p
+          assert p["new_network_retrieval"] is False, p
+          assert p["football_outcomes_read"]==0, p
+          assert p["model_residuals_read"]==0, p
+          assert p["sportsbook_inputs_used"] is False, p
+          assert p["paid_oddsapi_calls"]==0, p
+          assert p["week5_2026_outcomes_read"]==0, p
+          assert p["football_predictive_models_fit"]==0, p
+          assert p["production_changed"] is False, p
+          assert p["disposition"] in {
+              "STRICT_ARCHIVE_IDENTITY_RECERTIFICATION_PASSES_V1H_GATE",
+              "STRICT_ARCHIVE_IDENTITY_RECERTIFICATION_FAILS_V1H_GATE",
+          }, p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload V1I-R1 recertification artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-common-crawl-archive-transport-v1i-r1
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb-v1i-r1/

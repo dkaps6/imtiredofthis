@@ -1,0 +1,125 @@
+name: Week5 Player Failure Casebook V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/WEEK5_PLAYER_FAILURE_CASEBOOK_V1_PROTOCOL.md'
+      - 'scripts/research/grade_week5_player_failure_casebook_v1.py'
+      - 'tests/test_week5_player_failure_casebook_v1.py'
+      - '.github/workflows/week5-player-failure-casebook-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  casebook:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml 'pyarrow==18.1.0'
+
+      - name: Compile and test casebook mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/grade_week5_player_failure_casebook_v1.py
+          pytest -q tests/test_week5_player_failure_casebook_v1.py
+
+      - name: Verify exact Week5 pregame artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11585973062 --jq '.id')" = "11585973062"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11585973062 --jq '.workflow_run.id')" = "37860592615"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11585973062 --jq '.digest')" = "sha256:bf52aa4bc30bf6e8cc6029a0a86c0f33cdfaa09f587c38a138f23cef6b7436f4"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: run_37860592615
+          path: /tmp/week5-pregame
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 37860592615
+
+      - name: Verify exact Week5 postmortem artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11812200405 --jq '.id')" = "11812200405"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11812200405 --jq '.workflow_run.id')" = "38395384228"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11812200405 --jq '.digest')" = "sha256:5888cab39506ae0bf70034dfb60f297defd28dd3219ea8118870738706f55ac3"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: week5-full-model-postmortem-v1-38395384228
+          path: /tmp/week5-postmortem
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38395384228
+
+      - name: Resolve immutable inputs
+        run: |
+          set -euo pipefail
+          WORST="$(find /tmp/week5-postmortem -type f -name 'week5_full_board_worst_misses.csv' -print -quit)"
+          INPUTS="$(find /tmp/week5-pregame -type f -name 'model_rule_simulation_inputs.csv' -print -quit)"
+          PRICED="$(find /tmp/week5-pregame -type f -path '*/outputs/props_priced_clean.csv' -print -quit)"
+          if [ -z "$PRICED" ]; then
+            PRICED="$(find /tmp/week5-pregame -type f -name 'props_priced_clean.csv' -print -quit)"
+          fi
+          test -s "$WORST"
+          test -s "$INPUTS"
+          test -s "$PRICED"
+          echo "WORST=$WORST" >> "$GITHUB_ENV"
+          echo "INPUTS=$INPUTS" >> "$GITHUB_ENV"
+          echo "PRICED=$PRICED" >> "$GITHUB_ENV"
+
+      - name: Grade Week5 player failure components
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/week5-player-casebook
+          python scripts/research/grade_week5_player_failure_casebook_v1.py             --worst-misses "$WORST"             --model-inputs "$INPUTS"             --priced-board "$PRICED"             --out-dir /tmp/week5-player-casebook
+
+      - name: Certify casebook contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/week5-player-casebook/week5_player_failure_casebook_v1_result.json'))
+          assert p['version']=='WEEK5_PLAYER_FAILURE_CASEBOOK_V1',p
+          assert p['season']==2026 and p['week']==5,p
+          assert p['top_n']==40 and p['case_rows']==40,p
+          assert p['nflverse_week5_rows']>0,p
+          assert p['sportsbook_refetch'] is False,p
+          assert p['model_fitting'] is False,p
+          assert p['production_changed'] is False,p
+          assert len(p['watson_case'])==1,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload casebook
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: week5-player-failure-casebook-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/week5-player-casebook/**

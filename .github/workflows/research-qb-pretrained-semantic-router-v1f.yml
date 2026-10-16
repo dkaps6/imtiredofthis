@@ -1,0 +1,98 @@
+name: Research QB Pretrained Semantic Router V1F
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/QB_TEAM_PASS_INTENT_PRETRAINED_SEMANTIC_ROUTER_V1F_PLAN.md'
+      - 'docs/research/QB_TEAM_PASS_INTENT_V1D_GOLD_PREFIX.csv'
+      - 'scripts/research/audit_qb_team_pass_intent_gold_semantic_extractor_v1e.py'
+      - 'scripts/research/audit_qb_team_pass_intent_pretrained_semantic_router_v1f.py'
+      - 'tests/test_qb_team_pass_intent_pretrained_semantic_router_v1f.py'
+      - '.github/workflows/research-qb-pretrained-semantic-router-v1f.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pretrained-semantic-gold:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install repository and frozen semantic dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml nflreadpy
+          pip install sentence-transformers==3.4.1
+
+      - name: Compile and run frozen mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_qb_team_pass_intent_pretrained_semantic_router_v1f.py
+          pytest -q tests/test_qb_team_pass_intent_pretrained_semantic_router_v1f.py
+
+      - name: Run frozen pretrained semantic gold validation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb-v1f
+          python scripts/research/audit_qb_team_pass_intent_pretrained_semantic_router_v1f.py \
+            --gold docs/research/QB_TEAM_PASS_INTENT_V1D_GOLD_PREFIX.csv \
+            --out-dir /tmp/qb-v1f \
+            --workers 6
+
+      - name: Certify frozen model identity and source-only governance
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open("/tmp/qb-v1f/qb_intent_pretrained_semantic_v1f_result.json"))
+          assert p["version"]=="QB_TEAM_PASS_INTENT_PRETRAINED_SEMANTIC_ROUTER_V1F", p
+          assert p["model_id"]=="sentence-transformers/all-MiniLM-L6-v2", p
+          assert p["model_revision"]=="1110a243fdf4706b3f48f1d95db1a4f5529b4d41", p
+          assert p["min_positive_score"]==0.38, p
+          assert p["min_margin"]==0.05, p
+          assert p["positive_rows"]==12, p
+          assert p["negative_rows"]==1, p
+          assert p["external_search_engine_html_contacted"] is False, p
+          assert p["football_outcomes_read"]==0, p
+          assert p["model_residuals_read"]==0, p
+          assert p["sportsbook_inputs_used"] is False, p
+          assert p["paid_oddsapi_calls"]==0, p
+          assert p["week5_2026_outcomes_read"]==0, p
+          assert p["supervised_fit_or_finetune_used"] is False, p
+          assert p["football_predictive_models_fit"]==0, p
+          assert p["production_changed"] is False, p
+          assert p["predictive_candidate_authorized"] is False, p
+          assert p["disposition"] in {
+              "PRETRAINED_SEMANTIC_ROUTER_QUALIFIED_FOR_FULL_SOURCE_SCREEN",
+              "PRETRAINED_SEMANTIC_ROUTER_NOT_QUALIFIED",
+          }, p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload frozen pretrained semantic audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-pretrained-semantic-router-v1f
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb-v1f/

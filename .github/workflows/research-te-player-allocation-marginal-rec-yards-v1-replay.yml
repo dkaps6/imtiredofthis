@@ -1,0 +1,143 @@
+name: Research TE Player Allocation Marginal Rec Yards V1 Replay
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - ".github/workflows/research-te-player-allocation-marginal-rec-yards-v1-replay.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install evaluation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy scipy pytest
+
+      - name: Run frozen implementation safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_te_player_allocation_marginal_rec_yards_v1.py
+          pytest -q tests/test_te_player_allocation_marginal_rec_yards_v1.py
+
+      - name: Download confirmed allocation-only parent
+        uses: actions/download-artifact@v4
+        with:
+          name: player-allocation-only-difficulty-v1
+          path: /tmp/allocation
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38656442803
+
+      - name: Download exact rebuilt marginal metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: te-player-allocation-marginal-rec-yards-v1-38798480183
+          path: /tmp/rebuild_compact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38798480183
+
+      - name: Download exact rebuilt marginal arrays
+        uses: actions/download-artifact@v4
+        with:
+          name: te-player-allocation-marginal-rec-yards-raw-38798480183
+          path: /tmp/rebuild_raw
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38798480183
+
+      - name: Resolve and verify pinned replay sources
+        run: |
+          set -euo pipefail
+          ALLOC_ROWS="$(find /tmp/allocation -type f -name 'player_allocation_only_difficulty_rows.csv' -print -quit)"
+          ALLOC_RESULT="$(find /tmp/allocation -type f -name 'player_allocation_only_difficulty_result.json' -print -quit)"
+          META_DIR="$(dirname "$(find /tmp/rebuild_compact -type f -name '2024_week_01_metadata.csv' -print -quit)")"
+          RAW_DIR="$(dirname "$(find /tmp/rebuild_raw -type f -name '2024_week_01.npz' -print -quit)")"
+          test -n "$ALLOC_ROWS" && test -s "$ALLOC_ROWS"
+          test -n "$ALLOC_RESULT" && test -s "$ALLOC_RESULT"
+          test -n "$META_DIR" && test -d "$META_DIR"
+          test -n "$RAW_DIR" && test -d "$RAW_DIR"
+
+          # Merge metadata and raw NPZ shards into one read-only evaluation directory.
+          rm -rf /tmp/eval_distributions
+          mkdir -p /tmp/eval_distributions
+          cp "$META_DIR"/*_metadata.csv /tmp/eval_distributions/
+          cp "$RAW_DIR"/*.npz /tmp/eval_distributions/
+          test "$(find /tmp/eval_distributions -name '*_metadata.csv' | wc -l)" -eq 36
+          test "$(find /tmp/eval_distributions -name '*.npz' | wc -l)" -eq 36
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(next(Path('/tmp/allocation').rglob('player_allocation_only_difficulty_result.json')).read_text())
+          assert p['te']['disposition']=='TE_PLAYER_ALLOCATION_DIFFICULTY_CONFIRMED',p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_read']==0,p
+          print('REPLAY_SOURCES_CERTIFIED')
+          PY
+          echo "ALLOC_ROWS=$ALLOC_ROWS" >> "$GITHUB_ENV"
+          echo "ALLOC_RESULT=$ALLOC_RESULT" >> "$GITHUB_ENV"
+
+      - name: Evaluate frozen named-TE marginal overlay from preserved arrays
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/result
+          mkdir -p /tmp/result
+          python scripts/research/evaluate_te_player_allocation_marginal_rec_yards_v1.py             --allocation-rows "$ALLOC_ROWS"             --parent-result "$ALLOC_RESULT"             --distribution-dir /tmp/eval_distributions             --out-dir /tmp/result
+
+      - name: Verify frozen boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/result/te_player_allocation_marginal_rec_yards_result.json').read_text())
+          assert p['version']=='TE_PLAYER_ALLOCATION_MARGINAL_REC_YARDS_V1',p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['projection_mean_changes']==0,p
+          assert p['joint_distribution_claimed'] is False,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'TE_PLAYER_ALLOCATION_MARGINAL_REC_YARDS_QUALIFIED',
+              'NO_ACTIONABLE_TE_PLAYER_ALLOCATION_MARGINAL_REC_YARDS',
+          },p
+          print('TE_PLAYER_ALLOCATION_MARGINAL_REC_YARDS_V1_REPLAY_CERTIFIED')
+          PY
+
+      - name: Show result
+        if: always()
+        run: cat /tmp/result/te_player_allocation_marginal_rec_yards_result.json 2>/dev/null || true
+
+      - name: Upload frozen replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-player-allocation-marginal-rec-yards-v1-replay-${{ github.run_id }}
+          path: |
+            /tmp/result/**
+            docs/research/TE_PLAYER_ALLOCATION_MARGINAL_REC_YARDS_V1_FREEZE.md
+          if-no-files-found: warn
+          retention-days: 90

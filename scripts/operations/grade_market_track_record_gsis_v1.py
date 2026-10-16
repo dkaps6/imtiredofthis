@@ -56,6 +56,7 @@ TG = ["season", "week", "team"]
 DNP_VOID_BOOKS = {"draftkings", "fanduel"}
 ACTIVE_ROSTER_STATUSES = {"ACT", "ACTIVE"}
 INACTIVE_ROSTER_STATUSES = {"INA", "INACTIVE", "DNP"}
+VERIFIED_IDENTITY_ALIASES = Path(__file__).resolve().parents[2] / "data" / "player_identity_aliases.csv"
 
 EMPTY_GRADED_COLUMNS = {
     "gsis_id": "string",
@@ -351,6 +352,38 @@ def build_alias_index(actual: pd.DataFrame, roster: pd.DataFrame) -> dict:
             idx["team_base"].setdefault((r.team, key_base), set()).add(r.gsis_id)
             idx["global_exact"].setdefault(key_exact, set()).add(r.gsis_id)
             idx["global_base"].setdefault(key_base, set()).add(r.gsis_id)
+
+    # Reuse the repository's already-verified current/historical alias registry
+    # for postgame grading. This is identity evidence only; it never changes a
+    # football projection or outcome. It closes cases such as Joshua/Josh Palmer
+    # where the target-week roster/stat provider uses the historical name.
+    if VERIFIED_IDENTITY_ALIASES.exists() and VERIFIED_IDENTITY_ALIASES.stat().st_size:
+        aliases = pd.read_csv(VERIFIED_IDENTITY_ALIASES)
+        aliases.columns = [str(col).strip().lower() for col in aliases.columns]
+        required = {"current_name", "historical_name", "player_id", "current_team"}
+        if required.issubset(aliases.columns):
+            for a in aliases.itertuples(index=False):
+                gid = str(getattr(a, "player_id", "") or "").strip()
+                team = canon_team(getattr(a, "current_team", ""))
+                if not gid:
+                    continue
+                for raw_name in (
+                    getattr(a, "current_name", ""),
+                    getattr(a, "historical_name", ""),
+                ):
+                    try:
+                        _, exact = canonicalize_player_name_safe(raw_name)
+                    except Exception:
+                        exact = ""
+                    exact = str(exact or "").strip()
+                    if not exact:
+                        continue
+                    base = _suffix_strip(exact)
+                    if team:
+                        idx["team_exact"].setdefault((team, exact), set()).add(gid)
+                        idx["team_base"].setdefault((team, base), set()).add(gid)
+                    idx["global_exact"].setdefault(exact, set()).add(gid)
+                    idx["global_base"].setdefault(base, set()).add(gid)
     return idx
 
 
@@ -373,9 +406,21 @@ def resolve_gsis(player_clean_key: str, team: str, idx: dict) -> tuple[str, str]
     return "", "UNRESOLVED_IDENTITY"
 
 
-def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict:
-    board = apply_final_board_quarantine(load_boards(season, weeks))
-    board = apply_production_decision_gates(board)
+def grade(
+    season: int,
+    weeks: list[int],
+    detail_out: Path | None = None,
+    *,
+    production_gate_evidence: dict | None = None,
+    final_board_already_gated: bool = False,
+) -> dict:
+    board = load_boards(season, weeks)
+    if not final_board_already_gated:
+        board = apply_final_board_quarantine(board)
+        board = apply_production_decision_gates(
+            board,
+            evidence=production_gate_evidence,
+        )
     bets = select_model_bet(board)
     if bets.empty:
         graded = empty_graded_frame(bets)

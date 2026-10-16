@@ -1,0 +1,144 @@
+name: Research WR Player Efficiency Difficulty Trust Week6 Pregame Lock V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - "docs/research/WR_PLAYER_EFFICIENCY_DIFFICULTY_TRUST_WEEK6_PREGAME_LOCK_V1_FREEZE.md"
+      - "scripts/research/lock_wr_player_efficiency_difficulty_trust_week6_v1.py"
+      - ".github/workflows/research-wr-player-efficiency-difficulty-trust-week6-pregame-lock-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  lock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy
+
+      - name: Compile frozen lock
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/lock_wr_player_efficiency_difficulty_trust_week6_v1.py
+
+      - name: Download qualified historical efficiency-trust parent
+        uses: actions/download-artifact@v4
+        with:
+          name: pass-catcher-efficiency-difficulty-trust-selectivity-v1-38826418315
+          path: /tmp/eff_parent
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38826418315
+
+      - name: Download frozen Week6 WR opportunity-trust parent
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-player-opportunity-difficulty-trust-week6-pregame-lock-v1-38823520954
+          path: /tmp/opp_lock
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38823520954
+
+      - name: Download football-only Week6 Full Slate
+        uses: actions/download-artifact@v4
+        with:
+          name: run_38790425676
+          path: /tmp/full_slate
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38790425676
+
+      - name: Resolve exact frozen inputs
+        run: |
+          set -euo pipefail
+          PARENT_RESULT="$(find /tmp/eff_parent -type f -name 'pass_catcher_efficiency_difficulty_trust_selectivity_result.json' -print -quit)"
+          OPP_RESULT="$(find /tmp/opp_lock -type f -name 'wr_week6_trust_lock.json' -print -quit)"
+          OPP_ROWS="$(find /tmp/opp_lock -type f -name 'wr_week6_trust_lock.csv' -print -quit)"
+          OPP_HISTORY="$(find /tmp/opp_lock -type f -name 'wr_week6_reconstructed_2026_opportunity_errors.csv' -print -quit)"
+          PLAYER_LOGS="$(find /tmp/full_slate -type f -path '*/data/player_game_logs.csv' -print -quit)"
+          for p in "$PARENT_RESULT" "$OPP_RESULT" "$OPP_ROWS" "$OPP_HISTORY" "$PLAYER_LOGS"; do
+            test -n "$p" && test -s "$p"
+          done
+          echo "PARENT_RESULT=$PARENT_RESULT" >> "$GITHUB_ENV"
+          echo "OPP_RESULT=$OPP_RESULT" >> "$GITHUB_ENV"
+          echo "OPP_ROWS=$OPP_ROWS" >> "$GITHUB_ENV"
+          echo "OPP_HISTORY=$OPP_HISTORY" >> "$GITHUB_ENV"
+          echo "PLAYER_LOGS=$PLAYER_LOGS" >> "$GITHUB_ENV"
+
+      - name: Certify historical and prospective parent boundaries
+        run: |
+          python - <<'PY'
+          import json,os
+          parent=json.load(open(os.environ["PARENT_RESULT"]))
+          opp=json.load(open(os.environ["OPP_RESULT"]))
+          assert parent["disposition"]=="PASS_CATCHER_EFFICIENCY_DIFFICULTY_TRUST_SELECTIVITY_PARTIAL",parent
+          assert parent["wr"]["disposition"]=="WR_PLAYER_EFFICIENCY_DIFFICULTY_TRUST_SELECTIVITY_QUALIFIED",parent
+          assert parent["te"]["disposition"]=="NO_ACTIONABLE_TE_PLAYER_EFFICIENCY_DIFFICULTY_TRUST_SELECTIVITY",parent
+          assert parent["outcomes_2026_read"]==0,parent
+          assert parent["sportsbook_inputs_used"]==0,parent
+          assert parent["oddsapi_calls"]==0,parent
+          assert opp["status"]=="WEEK6_WR_TRUST_PREGAME_LOCK_FROZEN",opp
+          assert opp["week6_outcomes_read"]==0,opp
+          assert opp["sportsbook_inputs_used"]==0,opp
+          assert opp["oddsapi_calls"]==0,opp
+          print("WR efficiency-trust parents PASS")
+          PY
+
+      - name: Freeze Week6 WR efficiency-trust labels
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/result
+          mkdir -p /tmp/result
+          python scripts/research/lock_wr_player_efficiency_difficulty_trust_week6_v1.py             --parent-result "$PARENT_RESULT"             --opportunity-lock-result "$OPP_RESULT"             --opportunity-lock-rows "$OPP_ROWS"             --opportunity-history "$OPP_HISTORY"             --player-logs "$PLAYER_LOGS"             --out-dir /tmp/result
+
+      - name: Verify immutable prospective lock
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/result/wr_week6_efficiency_trust_lock.json'))
+          assert p['version']=='WR_PLAYER_EFFICIENCY_DIFFICULTY_TRUST_WEEK6_PREGAME_LOCK_V1',p
+          assert p['status']=='WEEK6_WR_EFFICIENCY_TRUST_PREGAME_LOCK_FROZEN',p
+          assert p['historical_parent_run']==38826418315,p
+          assert p['current_wr_cohort']==152,p
+          assert p['supported_wr']==141,p
+          assert p['unsupported_wr']==11,p
+          assert p['reconstructed_2026_rows']==717,p
+          assert p['history_source_max_week_2026']==5,p
+          assert p['actual_target_parity_max_gap']<=1e-9,p
+          assert p['efficiency_decomposition_max_gap']<=1e-8,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['week6_outcomes_read']==0,p
+          assert p['models_fit']==0,p
+          assert p['projection_distribution_values_changed']==0,p
+          assert p['production_changed'] is False,p
+          assert p['opportunity_efficiency_scores_combined'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload frozen Week6 WR efficiency-trust lock
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-player-efficiency-difficulty-trust-week6-pregame-lock-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/result/**
+            docs/research/WR_PLAYER_EFFICIENCY_DIFFICULTY_TRUST_WEEK6_PREGAME_LOCK_V1_FREEZE.md

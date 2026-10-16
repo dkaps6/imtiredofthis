@@ -1,0 +1,72 @@
+name: Research Player Targeted Route Matchup V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - "docs/research/PLAYER_TARGETED_ROUTE_MATCHUP_V1_FREEZE.md"
+      - "docs/research/PLAYER_TARGETED_ROUTE_MATCHUP_V1_STAGE_B_FREEZE.md"
+      - "scripts/research/audit_player_targeted_route_matchup_source_v1.py"
+      - "scripts/research/evaluate_player_targeted_route_matchup_v1.py"
+      - "tests/test_player_targeted_route_matchup_v1.py"
+      - ".github/workflows/research-player-targeted-route-matchup-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy scipy pytest nflreadpy pyarrow
+
+      - name: Compile
+        run: |
+          python -m py_compile scripts/research/audit_player_targeted_route_matchup_source_v1.py
+          python -m py_compile scripts/research/evaluate_player_targeted_route_matchup_v1.py
+
+      - name: Unit tests
+        run: |
+          PYTHONPATH=. pytest -q tests/test_player_targeted_route_matchup_v1.py
+
+      - name: Evaluate frozen player targeted-route matchup
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/research/player_targeted_route_matchup_v1
+          python scripts/research/evaluate_player_targeted_route_matchup_v1.py \
+            --out-dir data/research/player_targeted_route_matchup_v1
+
+      - name: Show result
+        if: always()
+        run: |
+          cat data/research/player_targeted_route_matchup_v1/player_targeted_route_matchup_result.json 2>/dev/null || true
+          echo "--- family summary ---"
+          cat data/research/player_targeted_route_matchup_v1/player_targeted_route_matchup_family_summary.csv 2>/dev/null || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-targeted-route-matchup-v1
+          path: |
+            data/research/player_targeted_route_matchup_v1/*
+            docs/research/PLAYER_TARGETED_ROUTE_MATCHUP_V1_FREEZE.md
+            docs/research/PLAYER_TARGETED_ROUTE_MATCHUP_V1_STAGE_B_FREEZE.md
+          if-no-files-found: warn
+          retention-days: 30
+
+# Canonical Stage-B rerun trigger: Stage-A source authority 38637901016

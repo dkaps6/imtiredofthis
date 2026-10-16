@@ -1,0 +1,122 @@
+name: Research Player Personnel-Conditioned Opportunity V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PLAYER_PERSONNEL_CONDITIONED_OPPORTUNITY_V1_FREEZE.md'
+      - 'scripts/research/evaluate_player_personnel_conditioned_opportunity_v1.py'
+      - 'tests/test_player_personnel_conditioned_opportunity_v1.py'
+      - '.github/workflows/research-player-personnel-conditioned-opportunity-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest scipy nflreadpy
+
+      - name: Run frozen safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_player_personnel_conditioned_opportunity_v1.py
+          pytest -q tests/test_player_personnel_conditioned_opportunity_v1.py
+
+      - name: Download exact WR mechanism parent
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-player-mechanism-persistence-v1-37634044900
+          path: /tmp/wr_parent
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37634044900
+
+      - name: Download exact TE mechanism parent
+        uses: actions/download-artifact@v4
+        with:
+          name: te-player-mechanism-persistence-v1-37631011196
+          path: /tmp/te_parent
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37631011196
+
+      - name: Resolve exact parent rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          WR_ROWS="$(find /tmp/wr_parent -type f -name 'wr_player_mechanism_persistence_rows.csv' -print -quit)"
+          TE_ROWS="$(find /tmp/te_parent -type f -name 'te_player_mechanism_persistence_rows.csv' -print -quit)"
+          test -n "$WR_ROWS" && test -s "$WR_ROWS"
+          test -n "$TE_ROWS" && test -s "$TE_ROWS"
+          echo "WR_ROWS=$WR_ROWS" >> "$GITHUB_ENV"
+          echo "TE_ROWS=$TE_ROWS" >> "$GITHUB_ENV"
+
+      - name: Evaluate frozen player-first personnel diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/player_personnel_v1
+          mkdir -p /tmp/player_personnel_v1
+          python scripts/research/evaluate_player_personnel_conditioned_opportunity_v1.py             --wr-rows "$WR_ROWS"             --te-rows "$TE_ROWS"             --out-dir /tmp/player_personnel_v1
+
+      - name: Verify research boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/player_personnel_v1/player_personnel_conditioned_opportunity_result.json').read_text())
+          assert p['wr_source_run']==37634044900,p
+          assert p['te_source_run']==37631011196,p
+          assert p['candidate_models_fit']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['target_game_personnel_used']==0,p
+          assert p['prior_residual_fed_to_projection']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+            'PLAYER_PERSONNEL_CONDITIONED_OPPORTUNITY_INTEGRITY_FAILURE',
+            'PLAYER_PERSONNEL_CONDITIONED_OPPORTUNITY_SOURCE_LIMITED',
+            'WR_PERSONNEL_CONDITIONED_OPPORTUNITY_CONFIRMED',
+            'TE_PERSONNEL_CONDITIONED_OPPORTUNITY_CONFIRMED',
+            'WR_TE_PERSONNEL_CONDITIONED_OPPORTUNITY_CONFIRMED',
+            'NO_ACTIONABLE_PLAYER_PERSONNEL_CONDITIONED_OPPORTUNITY',
+          },p
+          print('PLAYER_PERSONNEL_CONDITIONED_OPPORTUNITY_V1_CONTRACT_CERTIFIED')
+          PY
+
+      - name: Display result
+        if: always()
+        run: cat /tmp/player_personnel_v1/player_personnel_conditioned_opportunity_result.json 2>/dev/null || true
+
+      - name: Upload frozen evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-personnel-conditioned-opportunity-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/player_personnel_v1/**
+            docs/research/PLAYER_PERSONNEL_CONDITIONED_OPPORTUNITY_V1_FREEZE.md

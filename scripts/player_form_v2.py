@@ -40,6 +40,11 @@ PROPS = OUTPUTS / "props_raw.csv"
 def _to_pandas(obj) -> pd.DataFrame:
     if isinstance(obj, pd.DataFrame):
         return obj
+    # Prefer a record conversion for Polars-like frames.  This avoids the
+    # optional pyarrow bridge, which is incompatible with the repo's pinned
+    # NumPy 1.26 runtime in current CI images.
+    if hasattr(obj, "to_dicts"):
+        return pd.DataFrame(obj.to_dicts())
     if hasattr(obj, "to_pandas"):
         return obj.to_pandas()
     return pd.DataFrame(obj)

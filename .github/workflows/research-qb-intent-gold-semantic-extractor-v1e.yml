@@ -1,0 +1,89 @@
+name: Research QB Intent Gold Semantic Extractor V1E
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/QB_TEAM_PASS_INTENT_GOLD_SEMANTIC_EXTRACTOR_V1E_PLAN.md'
+      - 'docs/research/QB_TEAM_PASS_INTENT_V1D_GOLD_PREFIX.csv'
+      - 'scripts/research/audit_qb_team_pass_intent_first_party_gold_validation_v1d.py'
+      - 'scripts/research/audit_qb_team_pass_intent_gold_semantic_extractor_v1e.py'
+      - 'tests/test_qb_team_pass_intent_gold_semantic_extractor_v1e.py'
+      - '.github/workflows/research-qb-intent-gold-semantic-extractor-v1e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  semantic-gold:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install repository audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml nflreadpy
+
+      - name: Compile and run frozen semantic mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_qb_team_pass_intent_gold_semantic_extractor_v1e.py
+          pytest -q tests/test_qb_team_pass_intent_gold_semantic_extractor_v1e.py
+
+      - name: Run frozen 12-positive plus ATL-negative gold semantic validation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb-v1e
+          python scripts/research/audit_qb_team_pass_intent_gold_semantic_extractor_v1e.py \
+            --gold docs/research/QB_TEAM_PASS_INTENT_V1D_GOLD_PREFIX.csv \
+            --out-dir /tmp/qb-v1e \
+            --workers 6
+
+      - name: Certify source-only governance
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open("/tmp/qb-v1e/qb_intent_gold_semantic_v1e_result.json"))
+          assert p["version"]=="QB_TEAM_PASS_INTENT_GOLD_SEMANTIC_EXTRACTOR_V1E", p
+          assert p["positive_rows"]==12, p
+          assert p["negative_rows"]==1, p
+          assert p["external_search_engine_html_contacted"] is False, p
+          assert p["football_outcomes_read"]==0, p
+          assert p["model_residuals_read"]==0, p
+          assert p["sportsbook_inputs_used"] is False, p
+          assert p["paid_oddsapi_calls"]==0, p
+          assert p["week5_2026_outcomes_read"]==0, p
+          assert p["predictive_models_fit"]==0, p
+          assert p["production_changed"] is False, p
+          assert p["predictive_candidate_authorized"] is False, p
+          assert p["disposition"] in {
+              "GOLD_SEMANTIC_EXTRACTOR_QUALIFIED_FOR_FULL_SOURCE_SCREEN",
+              "GOLD_SEMANTIC_EXTRACTOR_NOT_QUALIFIED",
+          }, p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload frozen semantic gold validation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-intent-gold-semantic-extractor-v1e
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb-v1e/

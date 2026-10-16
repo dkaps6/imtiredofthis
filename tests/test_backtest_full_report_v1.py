@@ -222,7 +222,7 @@ def test_full_report_all_pass_returns_downstream_safe_empty_frame(monkeypatch):
 def test_full_report_unsupported_only_selection_returns_safe_empty_frame(monkeypatch):
     monkeypatch.setattr(G, "load_boards", lambda season, weeks: _unsupported_only_board())
     monkeypatch.setattr(G, "apply_final_board_quarantine", lambda board: board)
-    monkeypatch.setattr(G, "apply_production_decision_gates", lambda board: board)
+    monkeypatch.setattr(G, "apply_production_decision_gates", lambda board, **kwargs: board)
     graded = BF.build_graded(2026, [1])
 
     assert graded.empty
@@ -237,7 +237,7 @@ def test_gsis_grader_unsupported_only_selection_returns_structured_zero(
 ):
     monkeypatch.setattr(GG, "load_boards", lambda season, weeks: _unsupported_only_board())
     monkeypatch.setattr(GG, "apply_final_board_quarantine", lambda board: board)
-    monkeypatch.setattr(GG, "apply_production_decision_gates", lambda board: board)
+    monkeypatch.setattr(GG, "apply_production_decision_gates", lambda board, **kwargs: board)
     detail_path = tmp_path / "unsupported_detail.csv"
 
     summary = GG.grade(2026, [1], detail_out=detail_path)

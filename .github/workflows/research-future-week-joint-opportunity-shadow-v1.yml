@@ -1,0 +1,153 @@
+name: Research Future-Week Joint Opportunity Shadow V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - '.github/workflows/research-future-week-joint-opportunity-shadow-v1.yml'
+      - 'docs/research/WEEK6_JOINT_OPPORTUNITY_SHADOW_LAUNCH.md'
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Target NFL season'
+        required: true
+        default: '2026'
+        type: string
+      week:
+        description: 'Target NFL week'
+        required: true
+        default: '6'
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  shadow-lock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Resolve target context
+        run: |
+          set -euo pipefail
+          SEASON="${{ inputs.season }}"
+          WEEK="${{ inputs.week }}"
+          if [ -z "$SEASON" ]; then SEASON="2026"; fi
+          if [ -z "$WEEK" ]; then WEEK="6"; fi
+          PRIOR_SEASON="$((SEASON-1))"
+          ROOT="/tmp/joint-shadow"
+          echo "SEASON=$SEASON" >> "$GITHUB_ENV"
+          echo "WEEK=$WEEK" >> "$GITHUB_ENV"
+          echo "PRIOR_SEASON=$PRIOR_SEASON" >> "$GITHUB_ENV"
+          echo "ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyyaml 'pyarrow==18.1.0'
+
+      - name: Test frozen shadow mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_lock_joint_opportunity_allocation_dirichlet_future_week_v1.py
+          pytest -q tests/test_joint_opportunity_allocation_dirichlet_v1.py
+
+      - name: Probe exact target-week player-state authority
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT/player_state" "$ROOT/hist" "$ROOT/volatility" "$ROOT/shadow"
+          python scripts/research/audit_player_state_future_week_coverage_v1.py             --season "$SEASON"             --target-week "$WEEK"             --out-dir "$ROOT/player_state"
+          python - <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          root=Path(os.environ["ROOT"]); week=int(os.environ["WEEK"])
+          p=json.loads((root/"player_state"/f"player_state_future_week{week}_result.json").read_text())
+          print(json.dumps(p,indent=2,sort_keys=True))
+          assert p["season"]==int(os.environ["SEASON"]),p
+          assert p["target_week"]==week,p
+          if p["disposition"]!="PLAYER_STATE_FUTURE_WEEK_READY":
+              raise SystemExit("TARGET_WEEK_PLAYER_STATE_NOT_READY")
+          if p["target_week_roster_source_ready"] is not True:
+              raise SystemExit("EXACT_TARGET_WEEK_ROSTER_NOT_READY")
+          assert p["roster_source_week"]==week,p
+          assert p["prior_week_source_completion"]["complete"] is True,p
+          assert p["chronology_violations"]==0,p
+          PY
+
+      - name: Build leakage-safe target-week context
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py             --season "$SEASON"             --prior-season "$PRIOR_SEASON"             --weeks "$WEEK"             --out-dir "$ROOT/hist"
+          python scripts/backtest/historical_player_logs.py             --seasons "$PRIOR_SEASON,$SEASON"             --schedule "$ROOT/hist/schedule_history.csv"             --out "$ROOT/player_game_logs_history.csv"
+
+      - name: Freeze strictly-prior share-volatility authority
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/lock_player_opportunity_share_volatility_future_week_v1.py             --season "$SEASON"             --target-week "$WEEK"             --parent-rows "$ROOT/player_state/player_state_future_week${WEEK}_rows.csv"             --parent-result "$ROOT/player_state/player_state_future_week${WEEK}_result.json"             --out-dir "$ROOT/volatility"
+
+      - name: Freeze prospective joint allocation shadow
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          UNIVERSE="$(printf '%s/hist/pregame_universe/%s_week_%02d.csv' "$ROOT" "$SEASON" "$WEEK")"
+          test -s "$UNIVERSE"
+          python scripts/research/lock_joint_opportunity_allocation_dirichlet_future_week_v1.py             --season "$SEASON"             --week "$WEEK"             --player-state-result "$ROOT/player_state/player_state_future_week${WEEK}_result.json"             --volatility-rows "$ROOT/volatility/player_opportunity_share_volatility_week${WEEK}_lock.csv"             --volatility-result "$ROOT/volatility/player_opportunity_share_volatility_week${WEEK}_lock.json"             --team-weekly "$ROOT/hist/team_weekly_history.csv"             --player-logs "$ROOT/player_game_logs_history.csv"             --schedule "$ROOT/hist/schedule_history.csv"             --universe "$UNIVERSE"             --out-dir "$ROOT/shadow"
+
+      - name: Certify immutable prospective shadow
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"]); week=int(os.environ["WEEK"])
+          p=json.loads((root/"shadow"/f"joint_allocation_dirichlet_week{week}_result.json").read_text())
+          assert p["version"]=="PLAYER_OPPORTUNITY_JOINT_ALLOCATION_DIRICHLET_V1_PROSPECTIVE_SHADOW",p
+          assert p["season"]==int(os.environ["SEASON"]) and p["target_week"]==week,p
+          assert p["status"]==f"WEEK{week}_JOINT_ALLOCATION_DIRICHLET_SHADOW_FROZEN",p
+          assert p["authorized_cells"]==["RB_CARRY_SHARE","WR_TARGET_SHARE"],p
+          assert p["rooms"]>0 and p["player_rows"]>0,p
+          assert p["min_canonical_q_match_rate"]>=.95,p
+          assert p["max_expected_share_gap"]<=1e-12,p
+          assert p["chronology_violations"]==0,p
+          assert p["target_week_outcomes_read"]==0,p
+          assert p["sportsbook_inputs_used"]==0,p
+          assert p["oddsapi_calls"]==0,p
+          assert p["fitted_coefficients"]==0,p
+          assert p["threshold_searches"]==0,p
+          assert p["production_changed"] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload immutable joint shadow
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: joint-opportunity-shadow-v1-week${{ inputs.week }}-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/joint-shadow/player_state/**
+            /tmp/joint-shadow/volatility/**
+            /tmp/joint-shadow/shadow/**

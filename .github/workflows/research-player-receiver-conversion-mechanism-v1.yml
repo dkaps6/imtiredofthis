@@ -1,0 +1,128 @@
+name: Research Player Receiver Conversion Mechanism V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PLAYER_RECEIVER_CONVERSION_MECHANISM_V1_FREEZE.md'
+      - 'scripts/research/audit_player_receiver_conversion_mechanism_v1.py'
+      - '.github/workflows/research-player-receiver-conversion-mechanism-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONPATH: ${{ github.workspace }}
+
+jobs:
+  historical-mechanism:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy scikit-learn pyyaml 'pyarrow==18.1.0'
+
+      - name: Download certified source snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: player-receiver-conversion-source-v1-38409898663
+          path: /tmp/receiver-conversion-source
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38409898663
+
+      - name: Resolve certified source snapshot
+        run: |
+          set -euo pipefail
+          SNAPSHOT="$(find /tmp/receiver-conversion-source -type f -name 'player_receiver_conversion_source_snapshot.csv' -print -quit)"
+          test -n "$SNAPSHOT" && test -s "$SNAPSHOT"
+          echo "SOURCE_SNAPSHOT=$SNAPSHOT" >> "$GITHUB_ENV"
+
+      - name: Compile frozen mechanism
+        run: python -m py_compile scripts/research/audit_player_receiver_conversion_mechanism_v1.py
+
+      - name: Build leakage-safe canonical historical inputs
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/player-receiver-conversion-inputs
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT"
+          for SEASON in 2023 2024 2025; do
+            PRIOR=$((SEASON-1))
+            OUT="$ROOT/$SEASON"
+            mkdir -p "$OUT"
+            python scripts/backtest/build_historical_inputs.py \
+              --season "$SEASON" --prior-season "$PRIOR" --weeks 1-18 --out-dir "$OUT"
+            python scripts/backtest/historical_player_logs.py \
+              --seasons "$PRIOR,$SEASON" \
+              --schedule "$OUT/schedule_history.csv" \
+              --out "$OUT/player_game_logs_history.csv"
+            python scripts/backtest/build_historical_injuries.py \
+              --seasons "$PRIOR,$SEASON" --out "$OUT/injuries_history.csv"
+            python scripts/backtest/build_historical_weather.py \
+              --schedule "$OUT/schedule_history.csv" --out "$OUT/weather_history.csv"
+          done
+
+      - name: Run frozen receiver-level conversion mechanism
+        run: |
+          rm -rf /tmp/player-receiver-conversion-mechanism-v1
+          python scripts/research/audit_player_receiver_conversion_mechanism_v1.py \
+            --input-root /tmp/player-receiver-conversion-inputs \
+            --source-snapshot "$SOURCE_SNAPSHOT" \
+            --out-dir /tmp/player-receiver-conversion-mechanism-v1
+
+      - name: Certify frozen integrity
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/player-receiver-conversion-mechanism-v1/player_receiver_conversion_mechanism_result.json'))
+          assert p['version']=='PLAYER_RECEIVER_CONVERSION_MECHANISM_V1',p
+          assert p['development_season']==2023,p
+          assert p['confirmation_seasons']==[2024,2025],p
+          assert p['target_weeks']==[5,18],p
+          assert p['source_authority']['run']==38409898663,p
+          assert p['source_authority']['artifact']==11820921870,p
+          assert p['source_authority']['hashes_verified'] is True,p
+          assert p['features']==['prior_drop_per_catchable','prior_relative_catchable_rate'],p
+          assert p['ridge_alpha']==20.0,p
+          assert p['integrity']['chronology_violations']==0,p
+          assert p['integrity']['same_team_history_violations']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['models_fit']<=2,p
+          assert p['threshold_searches']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'PLAYER_RECEIVER_CONVERSION_MECHANISM_EXISTS',
+              'PLAYER_RECEIVER_CONVERSION_MECHANISM_NOT_CONFIRMED',
+              'PLAYER_RECEIVER_CONVERSION_MECHANISM_INTEGRITY_FAILURE',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload research artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-receiver-conversion-mechanism-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/player-receiver-conversion-mechanism-v1/**

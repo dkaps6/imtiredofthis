@@ -1,0 +1,148 @@
+name: Research Joint Opportunity Allocation Dirichlet V1 Historical
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PLAYER_OPPORTUNITY_JOINT_ALLOCATION_DIRICHLET_V1_HISTORICAL_FREEZE.md'
+      - 'scripts/research/score_joint_opportunity_allocation_dirichlet_v1.py'
+      - 'tests/test_score_joint_opportunity_allocation_dirichlet_v1.py'
+      - '.github/workflows/research-joint-opportunity-allocation-dirichlet-v1-historical.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyyaml 'pyarrow==18.1.0'
+
+      - name: Compile and test frozen historical mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/score_joint_opportunity_allocation_dirichlet_v1.py
+          pytest -q tests/test_score_joint_opportunity_allocation_dirichlet_v1.py
+          pytest -q tests/test_joint_opportunity_allocation_dirichlet_v1.py
+
+      - name: Verify exact V2 excess-variance authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11768432238 --jq '.id')" = "11768432238"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11768432238 --jq '.workflow_run.id')" = "38295515693"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11768432238 --jq '.digest')" = "sha256:7b31dd29e4b94674d6948cf84af24fae7181d1a4f502a07beaa43919d4d7f3a6"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-opportunity-share-volatility-mechanism-v2-38295515693
+          path: /tmp/joint-v2
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38295515693
+
+      - name: Create isolated workspace
+        run: |
+          rm -rf /tmp/joint-hist-2023 /tmp/joint-hist-2024 /tmp/joint-hist-2025 /tmp/joint-score
+          mkdir -p /tmp/joint-hist-2023 /tmp/joint-hist-2024 /tmp/joint-hist-2025 /tmp/joint-score
+
+      - name: Build leakage-safe historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py             --season 2023 --prior-season 2022 --weeks 5-18 --out-dir /tmp/joint-hist-2023
+          python scripts/backtest/build_historical_inputs.py             --season 2024 --prior-season 2023 --weeks 5-18 --out-dir /tmp/joint-hist-2024
+          python scripts/backtest/build_historical_inputs.py             --season 2025 --prior-season 2024 --weeks 5-18 --out-dir /tmp/joint-hist-2025
+
+      - name: Combine 2022-2025 schedule and team history
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/joint-score')
+          roots=['/tmp/joint-hist-2023','/tmp/joint-hist-2024','/tmp/joint-hist-2025']
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([pd.read_csv(f'{r}/{name}') for r in roots],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build canonical historical player logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py             --seasons 2022,2023,2024,2025             --schedule /tmp/joint-score/schedule_history.csv             --out /tmp/joint-score/player_game_logs_history.csv
+
+      - name: Resolve exact V2 rows
+        run: |
+          V2_ROWS="$(find /tmp/joint-v2 -type f -name 'player_opportunity_share_volatility_mechanism_v2_rows.csv' -print -quit)"
+          test -n "$V2_ROWS" && test -s "$V2_ROWS"
+          echo "V2_ROWS=$V2_ROWS" >> "$GITHUB_ENV"
+
+      - name: Score frozen joint allocation candidate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/score_joint_opportunity_allocation_dirichlet_v1.py             --v2-rows "$V2_ROWS"             --team-weekly /tmp/joint-score/team_weekly_history.csv             --player-logs /tmp/joint-score/player_game_logs_history.csv             --schedule /tmp/joint-score/schedule_history.csv             --universe-dir-2023 /tmp/joint-hist-2023/pregame_universe             --universe-dir-2024 /tmp/joint-hist-2024/pregame_universe             --universe-dir-2025 /tmp/joint-hist-2025/pregame_universe             --out-dir /tmp/joint-score/result
+
+      - name: Certify frozen result contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/joint-score/result/joint_allocation_dirichlet_v1_result.json'))
+          assert p['version']=='PLAYER_OPPORTUNITY_JOINT_ALLOCATION_DIRICHLET_V1_HISTORICAL',p
+          assert p['target_seasons']==[2023,2024,2025],p
+          assert p['target_weeks']==[5,18],p
+          assert p['cells_authorized']==['RB_CARRY_SHARE','WR_TARGET_SHARE'],p
+          assert p['max_room_expected_count_gap']<=1e-12,p
+          assert p['max_marginal_expected_count_gap']<=1e-12,p
+          assert p['min_canonical_q_match_rate']>=.95,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['fitted_coefficients']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'JOINT_ALLOCATION_DIRICHLET_HAS_PASSING_CELLS',
+              'JOINT_ALLOCATION_DIRICHLET_ALL_FAIL_CLOSED',
+              'JOINT_ALLOCATION_DIRICHLET_INTEGRITY_FAILURE',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload joint historical result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: joint-opportunity-allocation-dirichlet-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/joint-score/result/**

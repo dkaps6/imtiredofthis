@@ -1,0 +1,111 @@
+name: Research WR Player Opportunity Difficulty Trust Selectivity V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - "docs/research/WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_SELECTIVITY_V1_FREEZE.md"
+      - "scripts/research/evaluate_wr_player_opportunity_difficulty_trust_selectivity_v1.py"
+      - ".github/workflows/research-wr-player-opportunity-difficulty-trust-selectivity-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy
+
+      - name: Compile frozen evaluator
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m py_compile scripts/research/evaluate_wr_player_opportunity_difficulty_trust_selectivity_v1.py
+
+      - name: Download exact WR mechanism parent
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-player-mechanism-persistence-v1-37634044900
+          path: /tmp/wr_parent
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37634044900
+
+      - name: Download recovered exact WR-R15 authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-te-fold-authorities-recovered-v1
+          path: /tmp/wr_authority
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37782189538
+
+      - name: Resolve exact sources
+        run: |
+          set -euo pipefail
+          PARENT="$(find /tmp/wr_parent -type f -name 'wr_player_mechanism_persistence_rows.csv' -print -quit)"
+          WR="$(find /tmp/wr_authority -type f -name 'wr_r15_confirmation_predictions.csv' -print -quit)"
+          test -n "$PARENT" && test -s "$PARENT"
+          test -n "$WR" && test -s "$WR"
+          echo "PARENT=$PARENT" >> "$GITHUB_ENV"
+          echo "WR=$WR" >> "$GITHUB_ENV"
+
+      - name: Evaluate frozen WR trust selector
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/result
+          mkdir -p /tmp/result
+          python scripts/research/evaluate_wr_player_opportunity_difficulty_trust_selectivity_v1.py             --parent-rows "$PARENT"             --wr-authority "$WR"             --out-dir /tmp/result
+
+      - name: Verify research-only boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/result/wr_player_opportunity_difficulty_trust_selectivity_result.json'))
+          assert p['version']=='WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_SELECTIVITY_V1',p
+          assert p['disposition'] in {
+            'WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_SELECTIVITY_QUALIFIED',
+            'NO_ACTIONABLE_WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_SELECTIVITY',
+          },p
+          assert p['parent_parity']['matched_rows']==3224,p
+          assert p['parent_parity']['players']==211,p
+          assert p['parent_parity']['max_signed_total_error_gap']<=1e-9,p
+          assert p['parent_parity']['max_abs_total_error_gap']<=1e-9,p
+          assert p['parent_parity']['max_decomposition_identity_gap']<=1e-9,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['models_fit']==0,p
+          assert p['projection_distribution_values_changed']==0,p
+          assert p['production_changed'] is False,p
+          print('WR trust/selectivity boundary PASS')
+          PY
+
+      - name: Show result
+        if: always()
+        run: cat /tmp/result/wr_player_opportunity_difficulty_trust_selectivity_result.json 2>/dev/null || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-player-opportunity-difficulty-trust-selectivity-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/result/**
+            docs/research/WR_PLAYER_OPPORTUNITY_DIFFICULTY_TRUST_SELECTIVITY_V1_FREEZE.md

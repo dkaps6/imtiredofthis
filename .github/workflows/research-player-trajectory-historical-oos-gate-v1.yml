@@ -1,0 +1,63 @@
+name: Research Player Trajectory Historical OOS Gate V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PLAYER_TARGET_SHARE_TRAJECTORY_HISTORICAL_INTEGRATION_V1_GATE.md'
+      - 'scripts/research/audit_player_trajectory_historical_oos_gate_v1.py'
+      - 'tests/test_player_trajectory_historical_oos_gate_v1.py'
+      - 'tests/test_wr_r15_fold_archive_provenance_v1.py'
+      - 'docs/research/authority_snapshots/wr_r15_fold_coefficients_original_10061328722.csv'
+      - '.github/workflows/research-player-trajectory-historical-oos-gate-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install focused test dependency
+        run: python -m pip install pytest
+      - name: Compile bounded research gate
+        run: python -m compileall -q scripts/research/audit_player_trajectory_historical_oos_gate_v1.py tests/test_player_trajectory_historical_oos_gate_v1.py
+      - name: Frozen Gate-0 unit tests
+        env:
+          PYTHONPATH: .
+        run: pytest -q tests/test_player_trajectory_historical_oos_gate_v1.py tests/test_wr_r15_fold_archive_provenance_v1.py
+      - name: Audit committed specialist training-seasons
+        env:
+          PYTHONPATH: .
+        run: |
+          mkdir -p /tmp/trajectory-gate
+          python scripts/research/audit_player_trajectory_historical_oos_gate_v1.py --out /tmp/trajectory-gate/trajectory_historical_oos_gate_v1.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/trajectory-gate/trajectory_historical_oos_gate_v1.json').read_text())
+          assert p['status']=='HISTORICAL_INTEGRATION_DIAGNOSTIC_ONLY__SPECIALIST_TRAINING_OVERLAP', p
+          assert p['candidate_seasons']==[2023,2024,2025], p
+          assert all(set(r['overlapping_specialists']) == {'te','wr'} for r in p['season_dispositions']), p
+          assert p['sportsbook_inputs_used'] is False, p
+          assert p['target_outcomes_read'] is False, p
+          assert p['week5_2026_outcomes_read'] is False, p
+          assert p['production_changed'] is False, p
+          assert p['independent_oos_certified'] is False, p
+          print('WR_TE_TRAJECTORY_HISTORICAL_OOS_SOURCE_GATE_CERTIFIED')
+          PY
+      - name: Upload source-only eligibility certificate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-trajectory-historical-oos-gate-v1
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/trajectory-gate/trajectory_historical_oos_gate_v1.json

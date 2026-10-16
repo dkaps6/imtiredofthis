@@ -1,0 +1,48 @@
+name: Research Future-Week Player-State Mechanics V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/INDIVIDUAL_OPPORTUNITY_PROSPECTIVE_WEEK6_LOCK_CONTINUATION_V1.md'
+      - 'scripts/research/audit_player_state_future_week_coverage_v1.py'
+      - 'tests/test_player_state_future_week_coverage_v1.py'
+      - '.github/workflows/research-future-week-player-state-mechanics-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mechanics-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install mechanics-test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pyyaml pandas==1.5.3 numpy==1.26.4
+
+      - name: Compile and test future-week mechanics only
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_player_state_future_week_coverage_v1.py
+          pytest -q tests/test_player_state_future_week_coverage_v1.py
+
+      - name: Certify no live Week-6 audit executed
+        run: |
+          test ! -e /tmp/player_state_future_week6_result.json
+          echo "FUTURE_WEEK_PLAYER_STATE_MECHANICS_ONLY_CERTIFIED"
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict

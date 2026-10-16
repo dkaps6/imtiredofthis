@@ -1,0 +1,98 @@
+name: Research QB Full Official-First Source Screen V1G
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/QB_TEAM_PASS_INTENT_FULL_OFFICIAL_FIRST_SOURCE_SCREEN_V1G_PLAN.md'
+      - 'scripts/research/audit_qb_team_pass_intent_full_official_first_source_screen_v1g.py'
+      - 'tests/test_qb_team_pass_intent_full_official_first_source_screen_v1g.py'
+      - '.github/workflows/research-qb-full-official-first-source-screen-v1g.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-official-screen:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install repository and frozen semantic dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml nflreadpy
+          pip install sentence-transformers==3.4.1
+
+      - name: Compile and run frozen V1G mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_qb_team_pass_intent_full_official_first_source_screen_v1g.py
+          pytest -q tests/test_qb_team_pass_intent_full_official_first_source_screen_v1g.py
+
+      - name: Run frozen 536-team-week official-first source screen
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb-v1g
+          python scripts/research/audit_qb_team_pass_intent_full_official_first_source_screen_v1g.py \
+            --out-dir /tmp/qb-v1g \
+            --workers 24
+
+      - name: Certify frozen source-only result
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open("/tmp/qb-v1g/qb_intent_full_official_screen_v1g_result.json"))
+          assert p["version"]=="QB_TEAM_PASS_INTENT_FULL_OFFICIAL_FIRST_SOURCE_SCREEN_V1G", p
+          assert p["team_weeks"]==536, p
+          assert p["model_id"]=="sentence-transformers/all-MiniLM-L6-v2", p
+          assert p["model_revision"]=="1110a243fdf4706b3f48f1d95db1a4f5529b4d41", p
+          assert p["min_positive_score"]==0.38, p
+          assert p["min_margin"]==0.05, p
+          assert p["window_days"]==9, p
+          assert p["max_candidates_per_team_week"]==20, p
+          assert p["official_rows_finalized_as_no_source"]==0, p
+          assert p["external_search_engine_html_contacted"] is False, p
+          assert p["football_outcomes_read"]==0, p
+          assert p["model_residuals_read"]==0, p
+          assert p["sportsbook_inputs_used"] is False, p
+          assert p["paid_oddsapi_calls"]==0, p
+          assert p["week5_2026_outcomes_read"]==0, p
+          assert p["supervised_fit_or_finetune_used"] is False, p
+          assert p["football_predictive_models_fit"]==0, p
+          assert p["production_changed"] is False, p
+          assert p["predictive_candidate_authorized"] is False, p
+          assert p["final_source_qualification_claimed"] is False, p
+          assert p["disposition"] in {
+              "OFFICIAL_AUTO_READY_LOWER_BOUND_CLEARS_PARENT_DENSITY_GATES",
+              "OFFICIAL_AUTO_READY_LOWER_BOUND_DOES_NOT_CLEAR_PARENT_DENSITY_GATES",
+          }, p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload frozen V1G source screen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-full-official-first-source-screen-v1g
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb-v1g/

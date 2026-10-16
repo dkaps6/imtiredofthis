@@ -1,0 +1,84 @@
+name: Research QB Prospective Structured Source Collection V1L
+# 2026-10-15 Thursday source-only refresh trigger; collector science unchanged.
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/QB_TEAM_PASS_INTENT_PROSPECTIVE_STRUCTURED_SOURCE_COLLECTION_V1L_PLAN.md'
+      - 'scripts/research/collect_qb_team_pass_intent_prospective_structured_v1l.py'
+      - 'tests/test_qb_team_pass_intent_prospective_structured_v1l.py'
+      - '.github/workflows/research-qb-prospective-structured-source-v1l.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect-week6:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install collection dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml nflreadpy
+
+      - name: Compile and test V1L mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/collect_qb_team_pass_intent_prospective_structured_v1l.py
+          pytest -q tests/test_qb_team_pass_intent_prospective_structured_v1l.py
+
+      - name: Run prospective Week-6 structured collection
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb-v1l
+          python scripts/research/collect_qb_team_pass_intent_prospective_structured_v1l.py             --season 2026             --week 6             --out-dir /tmp/qb-v1l             --workers 20
+
+      - name: Certify prospective collection contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open("/tmp/qb-v1l/qb_intent_prospective_structured_v1l_summary.json"))
+          assert p["version"]=="QB_TEAM_PASS_INTENT_PROSPECTIVE_STRUCTURED_SOURCE_COLLECTION_V1L", p
+          assert p["season"]==2026, p
+          assert p["week"]==6, p
+          assert p["scheduled_team_weeks"]>0, p
+          assert p["football_outcomes_read"]==0, p
+          assert p["model_residuals_read"]==0, p
+          assert p["sportsbook_inputs_used"] is False, p
+          assert p["paid_oddsapi_calls"]==0, p
+          assert p["week5_2026_outcomes_read"]==0, p
+          assert p["football_predictive_models_fit"]==0, p
+          assert p["production_changed"] is False, p
+          assert p["disposition"] in {
+              "PROSPECTIVE_STRUCTURED_COLLECTION_READY",
+              "PROSPECTIVE_STRUCTURED_COLLECTION_NOT_READY",
+          }, p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload prospective V1L snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-prospective-structured-source-v1l-week6
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb-v1l/

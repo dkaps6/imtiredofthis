@@ -1,0 +1,87 @@
+name: Research Player Opportunity Share Stability 2023 Holdout V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PLAYER_OPPORTUNITY_SHARE_STABILITY_2023_HOLDOUT_FREEZE.md'
+      - 'scripts/research/audit_player_opportunity_share_stability_2023_holdout_v1.py'
+      - 'tests/test_player_opportunity_share_stability_2023_holdout_v1.py'
+      - '.github/workflows/research-player-opportunity-share-stability-2023-holdout-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  holdout:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyyaml 'pyarrow==18.1.0'
+
+      - name: Compile and test frozen holdout mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_player_opportunity_share_stability_2023_holdout_v1.py
+          pytest -q tests/test_player_opportunity_share_stability_2023_holdout_v1.py
+
+      - name: Run untouched 2023 holdout
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/share-stability-2023-holdout
+          python scripts/research/audit_player_opportunity_share_stability_2023_holdout_v1.py             --out-dir /tmp/share-stability-2023-holdout
+
+      - name: Certify holdout contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/share-stability-2023-holdout/player_opportunity_share_stability_2023_holdout_result.json'))
+          assert p['version']=='PLAYER_OPPORTUNITY_SHARE_STABILITY_2023_HOLDOUT_V1',p
+          assert p['target_season']==2023,p
+          assert p['target_weeks']==[5,18],p
+          assert p['parent_prior_window_games']==8,p
+          assert p['parent_min_prior_games']==4,p
+          assert p['integrity']['same_future_feature_violations']==0,p
+          assert p['integrity']['same_team_feature_violations']==0,p
+          assert p['scoreable_identity_coverage'] >= .95,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['model_residuals_used']==0,p
+          assert p['fitted_predictive_models']==0,p
+          assert p['candidate_projection_changes']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'PLAYER_OPPORTUNITY_SHARE_STABILITY_THREE_SEASON_CONFIRMED',
+              'PLAYER_OPPORTUNITY_SHARE_STABILITY_HOLDOUT_PARTIAL_OR_FAIL',
+              'PLAYER_OPPORTUNITY_SHARE_STABILITY_HOLDOUT_INTEGRITY_FAILURE',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload holdout artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-opportunity-share-stability-2023-holdout-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/share-stability-2023-holdout/**
