@@ -293,16 +293,23 @@ Canonical scoring run:
 
 ## Next authorized scientific step
 
-Preserve Stage 1 as qualified and freeze Stage 2 separately.
+Preserve Stage 1 as qualified.
 
-The next question is:
+The repo reconciliation shows that a new generic recent-share allocator would
+duplicate existing RB/WR/TE allocation science. The next distinct seam is the
+bridge between the qualified probabilistic active-role state and the existing
+canonical conditional allocation authorities.
 
-> Conditional on this named player participating, does his own strictly-prior
-> same-team opportunity history forecast his target-game share of the relevant
-> finite team/room opportunity better than the current strictly-prior
-> position/room baseline?
+Frozen next source plan:
+`docs/research/PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_SOURCE_PLAN.md`.
 
-Do not collapse Stage 1 probability into Stage 2 scoring.
+Before any Stage-2 bridge scoring:
+- prove historical as-of/OOS-compatible canonical entitlement authority by
+  cell;
+- preserve current QB/RB/WR/TE allocation science rather than fitting a new
+  share mean;
+- fail a cell closed if its canonical historical parent cannot be proven;
+- only after source readiness freeze the active-set sampling,
+  renormalization, all-off fallback, scoring and clustered inference.
 
-Freeze the exact Stage-2 target, baseline, candidate, support and
-dependence-aware inference before outcome scoring.
+Do not collapse Stage 1 and Stage 2.
