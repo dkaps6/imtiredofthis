@@ -1,0 +1,176 @@
+name: GSIS RB Week4 Public Source Lock V1
+
+on:
+  push:
+    branches:
+      - research-gsis-rb-successor-lineup-v1
+    paths:
+      - 'scripts/research/rb_vacancy_opportunity_state_v1.py'
+      - '.github/workflows/research-gsis-rb-week4-public-source-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  SOURCE_RUN_ID: "36800721395"
+  SOURCE_ARTIFACT_NAME: "run_36800721395"
+  SOURCE_ARTIFACT_ID: "11135626008"
+  SOURCE_ARTIFACT_DIGEST: "sha256:ecc7231cd8fe033af026b9cd96520d49f12f1d407ba951a7bb58cdd5da289509"
+  SOURCE_SHA: "2483c5a5b787089a120c6b5a258233d33600a670"
+  TARGET_SEASON: "2026"
+  TARGET_WEEK: "4"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow pytest
+
+      - name: Download exact no-odds Week4 football source
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.SOURCE_ARTIFACT_NAME }}
+          path: /tmp/source
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+
+      - name: Verify source contract
+        run: |
+          set -euo pipefail
+          test -s /tmp/source/data/current_player_availability.csv
+          test -s /tmp/source/data/roles_current_production_eligible_v1.csv
+          test -s /tmp/source/data/player_game_logs.csv
+          test -s /tmp/source/data/player_form_consensus.csv
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/source/data/master_betting_workbook_audit.json')
+          if p.exists():
+              a=json.loads(p.read_text())
+              if a.get('pricing_status')!='NO_LIVE_ODDS_REQUESTED':
+                  raise SystemExit(f"FATAL source not no-odds: {a.get('pricing_status')}")
+          print('WEEK4_NO_ODDS_SOURCE_PASS')
+          PY
+
+      - name: Materialize certified strict-prior snap source
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p /tmp/week4
+          python - <<'PY'
+          from scripts.modeling.te_r5p_entitlement_adapter_v1 import _load_snaps
+          import pandas as pd
+          q,dup,seasons=_load_snaps(target_season=2026,target_week=4)
+          out=q[['season','week','team','player_key','offense_pct']].copy()
+          out=out.rename(columns={'player_key':'player_clean_key'})
+          out.to_csv('/tmp/week4/strict_prior_snaps.csv',index=False)
+          print({
+            'rows':len(out),
+            'seasons':seasons,
+            'dup_rate':dup,
+            'week3_rows':int(((out.season==2026)&(out.week==3)).sum()),
+            'week3_teams':int(out.loc[(out.season==2026)&(out.week==3),'team'].nunique()),
+          })
+          PY
+
+      - name: Build frozen Vacancy V1 Week4 no-outcome state
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/rb_vacancy_opportunity_state_v1.py             --availability /tmp/source/data/current_player_availability.csv             --roles /tmp/source/data/roles_current_production_eligible_v1.csv             --logs /tmp/source/data/player_game_logs.csv             --snaps /tmp/week4/strict_prior_snaps.csv             --season 2026             --week 4             --outdir /tmp/week4/vacancy
+
+      - name: Build full active successor pool and public source audit
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          import pandas as pd
+          from pathlib import Path
+
+          root=Path('/tmp/week4')
+          state=pd.read_csv(root/'vacancy/rb_vacancy_state_no_outcomes.csv')
+          roles=pd.read_csv('/tmp/source/data/roles_current_production_eligible_v1.csv')
+          roles['team']=roles['team'].astype(str).str.upper().str.strip()
+          roles['position_group']=roles['position_group'].astype(str).str.upper().str.strip()
+          teams=sorted(state['team'].astype(str).str.upper().unique()) if len(state) else []
+          pool=roles.loc[
+              roles.team.isin(teams) & roles.position_group.isin(['RB','FB']),
+              ['team','player','player_clean_key','position_group','role']
+          ].copy()
+          pool.insert(0,'target_week',4)
+          pool.insert(0,'target_season',2026)
+          pool.to_csv(root/'active_successor_pool.csv',index=False)
+
+          # Frozen target event file: exact official NFL Week-4 kickoff times
+          # checked pregame 2026-10-01. These are public schedule facts only.
+          event_rows=[]
+          if 'PIT' in teams:
+              event_rows.append({
+                'target_season':2026,'target_week':4,'team':'PIT',
+                'event_id':'2026_04_PIT_CLE',
+                'kickoff_utc':'2026-10-02T00:15:00+00:00',
+                'schedule_source':'NFL.com Week 4 schedule pregame check 2026-10-01',
+              })
+          if 'NO' in teams:
+              event_rows.append({
+                'target_season':2026,'target_week':4,'team':'NO',
+                'event_id':'2026_04_ATL_NO',
+                'kickoff_utc':'2026-10-06T00:15:00+00:00',
+                'schedule_source':'NFL.com Week 4 schedule pregame check 2026-10-01',
+              })
+          pd.DataFrame(event_rows).to_csv(root/'target_events.csv',index=False)
+
+          def sha(path):
+              return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+          audit={
+            'disposition':'GSIS_RB_WEEK4_PUBLIC_SOURCE_READY' if len(state) else 'NO_QUALIFYING_VACANCY_EVENT',
+            'target_season':2026,'target_week':4,
+            'source_run_id':36800721395,
+            'source_artifact_id':11135626008,
+            'source_artifact_digest':'sha256:ecc7231cd8fe033af026b9cd96520d49f12f1d407ba951a7bb58cdd5da289509',
+            'source_sha':'2483c5a5b787089a120c6b5a258233d33600a670',
+            'source_live_odds_requested':False,
+            'vacancy_teams':teams,
+            'vacancy_state_rows':int(len(state)),
+            'active_successor_rows':int(len(pool)),
+            'vacancy_state_sha256':sha(root/'vacancy/rb_vacancy_state_no_outcomes.csv'),
+            'successor_pool_sha256':sha(root/'active_successor_pool.csv'),
+            'target_events_sha256':sha(root/'target_events.csv'),
+            'target_outcomes_read':False,
+            'sportsbook_inputs_read':False,
+            'gsis_inputs_read':False,
+          }
+          (root/'public_source_audit.json').write_text(json.dumps(audit,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(audit,indent=2,sort_keys=True))
+          print('\nVACANCY STATE')
+          print(state.to_string(index=False))
+          print('\nACTIVE SUCCESSOR POOL')
+          print(pool.to_string(index=False))
+          PY
+
+      - name: Upload Week4 public-source lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: gsis-rb-week4-public-source-v1
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            /tmp/week4/vacancy/rb_vacancy_state_no_outcomes.csv
+            /tmp/week4/vacancy/rb_vacancy_exclusions.csv
+            /tmp/week4/active_successor_pool.csv
+            /tmp/week4/target_events.csv
+            /tmp/week4/public_source_audit.json
