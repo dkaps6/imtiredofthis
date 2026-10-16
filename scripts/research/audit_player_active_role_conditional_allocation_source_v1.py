@@ -132,6 +132,13 @@ def build_base_authority(metrics: pd.DataFrame, season: int, week: int) -> tuple
     ent["pass_rate"] = num(ent["rules_pass_rate"])
     ent["target_denominator_mean"] = ent["plays"] * ent["pass_rate"]
     ent["rush_denominator_mean"] = ent["plays"] * (1.0 - ent["pass_rate"])
+    ent["qb_pass_att_share"] = num(ent.get("qb_pass_att_share", pd.Series(np.nan, index=ent.index)))
+    ent["qb_projection_eligible"] = num(ent.get("qb_projection_eligible", pd.Series(0, index=ent.index))).fillna(0)
+    # Historical QB opportunity is already player-specific upstream: one leakage-safe
+    # primary QB per team receives a strictly-prior pass-attempt share and backups
+    # receive explicit zero share. The finite shared denominator here is the
+    # canonical pregame pass/dropback opportunity state; no new QB mean is fit.
+    ent["qb_pass_denominator_mean"] = ent["target_denominator_mean"]
 
     player_rows, room_rows = [], []
     for (event_id, team), g in ent.groupby(["event_id", "team"], sort=False):
@@ -150,11 +157,27 @@ def build_base_authority(metrics: pd.DataFrame, season: int, week: int) -> tuple
                 "rush_q": float(q[j]), "target_q": float(r["target_q"]),
                 "target_denominator_mean": float(r["target_denominator_mean"]),
                 "rush_denominator_mean": float(r["rush_denominator_mean"]),
+                "qb_pass_att_share": float(r["qb_pass_att_share"]) if np.isfinite(r["qb_pass_att_share"]) else np.nan,
+                "qb_projection_eligible": float(r["qb_projection_eligible"]),
+                "qb_pass_denominator_mean": float(r["qb_pass_denominator_mean"]),
             })
+        qbg = g.loc[g.get("position", pd.Series("", index=g.index)).astype(str).str.upper().eq("QB")].copy()
+        qbshares = num(qbg.get("qb_pass_att_share", pd.Series(dtype=float))).dropna()
+        qb_sum = float(qbshares.sum()) if len(qbshares) else np.nan
+        qb_residual = max(0.0, 1.0 - qb_sum) if np.isfinite(qb_sum) and qb_sum <= 1.0 + TOL else np.nan
+        qb_mass_gap = abs(qb_sum + qb_residual - 1.0) if np.isfinite(qb_residual) else np.inf
+        qb_primary_count = int(num(qbg.get("qb_projection_eligible", pd.Series(dtype=float))).fillna(0).eq(1).sum())
         room_rows.append({
             "season": season, "week": week, "event_id": str(event_id), "team": str(team),
             "target_mass_gap": abs(target_sum + target_residual - 1.0),
             "rush_mass_gap": abs(float(q.sum()) + residual - 1.0),
+            "qb_mass_gap": float(qb_mass_gap),
+            "qb_primary_count": qb_primary_count,
+            "qb_denominator_finite": bool(
+                len(qbg)
+                and np.isfinite(num(qbg["qb_pass_denominator_mean"])).all()
+                and (num(qbg["qb_pass_denominator_mean"]) > 0).all()
+            ),
             "target_denominator_finite": bool(
                 np.isfinite(g["target_denominator_mean"]).all()
                 and (g["target_denominator_mean"] > 0).all()
@@ -463,6 +486,19 @@ def main() -> int:
     base = pd.concat(base_parts, ignore_index=True)
     base_rooms = pd.concat(base_room_parts, ignore_index=True)
 
+    qb = base.loc[base["position"].eq("QB")].copy()
+    qb_pass = qb.assign(
+        authority_q=qb["qb_pass_att_share"],
+        authority_covered=qb["qb_pass_att_share"].notna(),
+        denominator_finite=np.isfinite(qb["qb_pass_denominator_mean"])
+        & qb["qb_pass_denominator_mean"].gt(0),
+    )
+    qb_rooms = base_rooms.assign(
+        conservation_pass=base_rooms["qb_mass_gap"].le(TOL)
+        & base_rooms["qb_primary_count"].eq(1)
+        & base_rooms["qb_denominator_finite"].fillna(False)
+    )
+
     rb_pos = {"RB", "HB", "FB"}
     rb = base.loc[base["position"].isin(rb_pos)].copy()
     rb_rush = rb.assign(
@@ -495,11 +531,7 @@ def main() -> int:
     for season in TARGET_SEASONS:
         rec, det = evaluate_cell(
             cell="QB_PASSING", season=season, stage1=stage1, mechanism=mechanism,
-            authority=None, rooms=None,
-            forced_block_reason=(
-                "NO_EXISTING_CANONICAL_PER_QB_PASSING_ENTITLEMENT__"
-                "TEAM_PASS_ATTEMPTS_ARE_SHARED_NOT_PLAYER_ALLOCATED"
-            ),
+            authority=qb_pass, rooms=qb_rooms,
         )
         results.append(rec)
         detail_parts.append(det.assign(cell="QB_PASSING"))
