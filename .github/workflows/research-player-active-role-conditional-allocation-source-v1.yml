@@ -26,6 +26,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Announce source-audit run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "Stage-2 conditional-allocation source audit started: run \`${{ github.run_id }}\`, exact head \`${{ github.sha }}\`. This run is source-only: no bridge scoring, no sportsbook, no OddsAPI, no 2026 outcomes, no production mutation."
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
