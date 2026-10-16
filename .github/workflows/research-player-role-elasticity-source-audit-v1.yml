@@ -2,6 +2,14 @@ name: Research Player Role Elasticity Source Audit V1
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "docs/research/PLAYER_ROLE_ELASTICITY_TEAMMATE_AVAILABILITY_V1_SOURCE_AUDIT.md"
+      - "scripts/research/audit_player_role_elasticity_teammate_availability_v1.py"
+      - "tests/test_player_role_elasticity_teammate_availability_v1.py"
+      - ".github/workflows/research-player-role-elasticity-source-audit-v1.yml"
   push:
     branches:
       - research-individual-opportunity-roadmap-2026-10-08
