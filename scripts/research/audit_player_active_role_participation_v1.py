@@ -196,9 +196,22 @@ def inactive_name_map(inactive_rows: pd.DataFrame) -> dict[tuple[int,int,str], s
     }
 
 
-def build_universe(roster: pd.DataFrame, inactive_rows: pd.DataFrame) -> pd.DataFrame:
+def build_universe(
+    roster: pd.DataFrame,
+    inactive_rows: pd.DataFrame,
+    teamweeks: pd.DataFrame,
+) -> pd.DataFrame:
+    # Weekly roster files include bye/non-game weeks.  The player-game universe
+    # must be restricted to the frozen official M78 team-game authority before
+    # any snap coverage or strict-prior game counts are computed.
+    game_keys = teamweeks[["season", "week", "team"]].drop_duplicates()
+    x = roster.merge(
+        game_keys,
+        on=["season", "week", "team"],
+        how="inner",
+        validate="many_to_one",
+    )
     imap = inactive_name_map(inactive_rows)
-    x = roster.copy()
     x["known_official_inactive"] = [
         int(str(r.player_name_key) in imap.get((int(r.season), int(r.week), str(r.team)), set()))
         for r in x.itertuples(index=False)
@@ -377,7 +390,7 @@ def main() -> int:
         teamweeks, inactive_rows = parse_inactives(args.inactives)
         source_meta: list[dict] = []
         roster = load_rosters(source_meta)
-        universe = build_universe(roster, inactive_rows)
+        universe = build_universe(roster, inactive_rows, teamweeks)
         snaps = load_snaps(source_meta)
         universe, mapped_positive = attach_snap_source(universe, snaps)
         universe = attach_prior_universe_support(universe)
