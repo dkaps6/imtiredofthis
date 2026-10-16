@@ -63,6 +63,7 @@ Required PBP fields:
 - `week`
 - `season_type` or equivalent regular-season marker
 - `game_id`
+- `play_id`
 - `posteam`
 - `rush_attempt`
 - `rusher_player_id`
