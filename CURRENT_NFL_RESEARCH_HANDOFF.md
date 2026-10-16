@@ -1,5 +1,105 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-15 — PLAYER ROLE-ELASTICITY SOURCE AUDIT FROZEN / IMPLEMENTED / RESULT PENDING
+
+Player-first continuation after the canonical first-principle update.
+
+### Why this lane
+
+The new question is **named-player role elasticity under teammate/room change**:
+
+> when a player's competitive room changes before kickoff, does this exact player
+> historically absorb or lose opportunity in a repeatable way?
+
+This is broader and more player-specific than a universal vacancy-transfer rule.
+
+### Anti-retest protection
+
+Do NOT reopen:
+- QB M78/M79 generic official-inactive identity;
+- generic injury burden;
+- RB Vacancy Opportunity V1 deterministic vacated-share -> snap-weight transfer;
+- M96 retrospective RB router/threshold work;
+- WR simple vacated-target / higher-usage absence formulas;
+- situational-target residual V1;
+- postgame inference of absence from zero participation.
+
+RB Vacancy V1 Week-3 remains `WEEK3_OBSERVATIONAL_MIXED`:
+- rush-attempt MAE improved `4.0279 -> 3.8549`;
+- rush-yard MAE improved `28.1177 -> 26.6182`;
+- DEN worsened in both markets;
+- PIT improved in both.
+That mixed team behavior motivates successor/player identity research; it does not authorize retuning the old formula.
+
+### Frozen source audit
+
+Contract:
+`docs/research/PLAYER_ROLE_ELASTICITY_TEAMMATE_AVAILABILITY_V1_SOURCE_AUDIT.md`
+
+Freeze commit:
+`5c7881abff1275abc3d7e4eb328ea6ae6a7aa5bd`
+
+Positions adjudicated separately:
+- RB/FB
+- WR
+- TE.
+
+Pregame absence authority:
+- committed corrected M78 official-inactive snapshot;
+- 1,088 team-weeks / 544 per season for 2024 and 2025;
+- CSV SHA-256 `d39aaf0feea101f3e0d2721ebd4118ef33fb1a4d3c76670e2a4f17734e37b609`;
+- official inactive identity is treated only as a fixed pre-kickoff fact.
+
+Other source inputs:
+- weekly roster identity;
+- nflverse weekly player usage;
+- PFR offensive snap participation;
+- strictly-prior rows only.
+
+Source audit reads:
+- target-game outcomes 0;
+- sportsbook 0;
+- OddsAPI 0;
+- predictive models 0;
+- projection mutations 0;
+- production mutations 0.
+
+Implementation:
+- `scripts/research/audit_player_role_elasticity_teammate_availability_v1.py`
+- commit `871762e47fbbeef7135bd0f913f000abe487d8a5`.
+
+Safeguards:
+- `tests/test_player_role_elasticity_teammate_availability_v1.py`
+- commit `9ceafbbb97051cf29112eed58aa86e20209c903f`.
+
+Workflow:
+- `.github/workflows/research-player-role-elasticity-source-audit-v1.yml`
+- commit `edfc09cb3a151372cfffd43e306b236c91453426`.
+- mechanical trigger-only follow-up head `fb516aea9e8af21563af71a6f1506edd154d29af`.
+
+### Current disposition
+
+`PLAYER_ROLE_ELASTICITY_SOURCE_AUDIT_PENDING_CANONICAL_ACTION`
+
+No scientific/source-ready disposition has been claimed yet because no authoritative run is visible through the current GitHub Actions connector.
+
+Do not convert implementation into a PASS.
+Do not attach target-game outcomes until source readiness is genuinely adjudicated.
+
+If a position becomes SOURCE_READY, the next step is a separately frozen named-player mechanism test comparing that player's own role under different room states, with opportunity and efficiency separated and position-average MAE/RMSE only as guardrails.
+
+### Other protected current state
+
+- RB-PD2 Weeks 4/5/6 remain permanent prospective non-observations; Week 3 remains 1/8 weeks, 46/400 rows.
+- WR dual-reliability historical support remains valid; prospective confirmation starts Week 7.
+- WR/TE/QB Week-6 prospective locks remain immutable; do not use Week-6 outcomes to alter them.
+- exactly one Week-6 paid OddsAPI acquisition remains the hard limit.
+
+Canonical model status:
+`PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-15 — PLAYER PROJECTION FIRST PRINCIPLE CANONICAL
 
 The repository-wide modeling objective is now explicit in `AGENTS.md` and:
