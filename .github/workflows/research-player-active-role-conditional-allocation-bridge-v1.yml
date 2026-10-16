@@ -1,0 +1,217 @@
+name: Research Player Active Role Conditional Allocation Bridge V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/evaluate_player_active_role_conditional_allocation_bridge_v1.py'
+      - 'tests/test_player_active_role_conditional_allocation_bridge_v1.py'
+      - '.github/workflows/research-player-active-role-conditional-allocation-bridge-v1.yml'
+      - 'docs/research/PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_MECHANISM_FREEZE.md'
+      - 'docs/research/PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_SOURCE_RESULT.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Announce frozen bridge scoring
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "Frozen PRISM Stage-2 active-role conditional-allocation bridge scoring started: run `${{ github.run_id }}`, exact head `${{ github.sha }}`. Freeze commit: `87400a9c9c1db465c9c4bd70b0cb241dba27c6c9`. Eligible cells only: QB passing, RB rushing, RB receiving, TE receiving. WR remains source-blocked. No sportsbook, no OddsAPI, no 2026 outcomes, no production mutation."
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyyaml 'pyarrow==18.1.0'
+
+      - name: Verify immutable pre-score freeze
+        run: |
+          git merge-base --is-ancestor 87400a9c9c1db465c9c4bd70b0cb241dba27c6c9 HEAD
+          git cat-file -e 87400a9c9c1db465c9c4bd70b0cb241dba27c6c9:docs/research/PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_MECHANISM_FREEZE.md
+          if git cat-file -e 87400a9c9c1db465c9c4bd70b0cb241dba27c6c9:scripts/research/evaluate_player_active_role_conditional_allocation_bridge_v1.py 2>/dev/null; then
+            echo "ERROR: scorer existed at pre-score freeze commit"
+            exit 1
+          fi
+          grep -q 'bridge outcomes scored: \*\*0\*\*' docs/research/PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_MECHANISM_FREEZE.md
+
+      - name: Verify immutable source and Stage-1 parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070806828 --jq '.workflow_run.id')" = "38955368643"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070806828 --jq '.digest')" = "sha256:e91a108495d7a2b6eb289e0618ab6af09e3d6cdf6895e534742a07340e4a2a83"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12044155086 --jq '.workflow_run.id')" = "38895205962"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12044155086 --jq '.digest')" = "sha256:a42322579aee682497223c7f53bce0b14a96dc6f466558e811770e681a035dad"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.workflow_run.id')" = "38907459996"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.digest')" = "sha256:41b1acd3f1b8d77abb53980db160ece32f8fc40351939d4827248b9caad0c64b"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-conditional-allocation-source-v1-38955368643
+          path: /tmp/bridge-source-parent
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38955368643
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-participation-source-v1-38895205962
+          path: /tmp/stage1-source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38895205962
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-participation-mechanism-v1-38907459996
+          path: /tmp/stage1-mechanism
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38907459996
+
+      - name: Resolve immutable input files
+        run: |
+          SOURCE_RESULT="$(find /tmp/bridge-source-parent -type f -name 'active_role_conditional_allocation_source_result.json' -print -quit)"
+          SOURCE_DETAIL="$(find /tmp/bridge-source-parent -type f -name 'active_role_conditional_allocation_source_join_detail.csv' -print -quit)"
+          STAGE1_UNIVERSE="$(find /tmp/stage1-source -type f -name 'player_active_role_pregame_universe.csv' -print -quit)"
+          STAGE1_MECHANISM="$(find /tmp/stage1-mechanism -type f -name 'player_active_role_mechanism_scored_rows.csv' -print -quit)"
+          for f in "$SOURCE_RESULT" "$SOURCE_DETAIL" "$STAGE1_UNIVERSE" "$STAGE1_MECHANISM"; do
+            test -n "$f" && test -s "$f"
+          done
+          echo "SOURCE_RESULT=$SOURCE_RESULT" >> "$GITHUB_ENV"
+          echo "SOURCE_DETAIL=$SOURCE_DETAIL" >> "$GITHUB_ENV"
+          echo "STAGE1_UNIVERSE=$STAGE1_UNIVERSE" >> "$GITHUB_ENV"
+          echo "STAGE1_MECHANISM=$STAGE1_MECHANISM" >> "$GITHUB_ENV"
+
+      - name: Run focused frozen mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_player_active_role_conditional_allocation_bridge_v1.py
+          pytest -q tests/test_player_active_role_conditional_allocation_bridge_v1.py
+
+      - name: Build leakage-safe historical outcome inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/bridge-score-hist-2024 /tmp/bridge-score-hist-2025 /tmp/bridge-score
+          mkdir -p /tmp/bridge-score-hist-2024 /tmp/bridge-score-hist-2025 /tmp/bridge-score
+          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks 5-18 --out-dir /tmp/bridge-score-hist-2024
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks 5-18 --out-dir /tmp/bridge-score-hist-2025
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/bridge-score')
+          roots=['/tmp/bridge-score-hist-2024','/tmp/bridge-score-hist-2025']
+          for name in ['schedule_history.csv']:
+              x=pd.concat([pd.read_csv(f'{r}/{name}') for r in roots],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+          python scripts/backtest/historical_player_logs.py             --seasons 2024,2025             --schedule /tmp/bridge-score/schedule_history.csv             --out /tmp/bridge-score/player_game_logs_history.csv
+
+      - name: Score frozen Stage-2 bridge
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/evaluate_player_active_role_conditional_allocation_bridge_v1.py             --source-result "$SOURCE_RESULT"             --source-detail "$SOURCE_DETAIL"             --stage1-universe "$STAGE1_UNIVERSE"             --stage1-mechanism "$STAGE1_MECHANISM"             --player-logs /tmp/bridge-score/player_game_logs_history.csv             --schedule /tmp/bridge-score/schedule_history.csv             --out-dir /tmp/bridge-score/result
+
+      - name: Certify frozen contract and integrity
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/bridge-score/result/active_role_conditional_allocation_bridge_result.json'))
+          assert p['version']=='PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_MECHANISM',p
+          assert p['freeze_version']=='PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_MECHANISM_FREEZE',p
+          assert p['freeze_commit']=='87400a9c9c1db465c9c4bd70b0cb241dba27c6c9',p
+          assert p['source_run']==38955368643,p
+          assert p['source_artifact']==12070806828,p
+          assert p['eligible_cells']==['QB_PASSING','RB_RUSHING','RB_RECEIVING','TE_RECEIVING'],p
+          assert p['wr_receiving_scored'] is False,p
+          assert p['target_game_outcomes_used_as_predictors']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['new_share_models_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_QUALIFIED_ALL_ELIGIBLE',
+              'PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_QUALIFIED_PARTIAL',
+              'PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_CLOSED',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 bridge result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/bridge-score/result/active_role_conditional_allocation_bridge_result.json'))
+          lines=[
+              '### PRISM Stage-2 active-role -> conditional-allocation bridge V1',
+              '',
+              f"- Run: `{os.environ['RUN_ID']}`",
+              f"- Exact head: `{os.environ['HEAD_SHA']}`",
+              f"- Frozen-before-scoring commit: `{p['freeze_commit']}`",
+              f"- Disposition: `{p['disposition']}`",
+              '',
+          ]
+          for cell,disp in p['position_dispositions'].items():
+              m24=p['season_metrics'][cell]['2024']
+              m25=p['season_metrics'][cell]['2025']
+              lines += [
+                  f"- {cell}: `{disp}`",
+                  f"  - 2024 CRPS delta: {m24['mean_delta_crps']:+.6f}; AE delta: {m24['mean_delta_ae']:+.6f}; room delta: {m24['mean_delta_room_error']:+.6f}",
+                  f"  - 2025 CRPS delta: {m25['mean_delta_crps']:+.6f}; player-CI low: {m25['player_cluster_bootstrap']['ci95_low']:+.6f}; game-CI low: {m25['game_cluster_bootstrap']['ci95_low']:+.6f}; equal-player CI low: {m25['equal_player_bootstrap']['ci95_low']:+.6f}",
+              ]
+          lines += [
+              '',
+              'WR receiving was not scored because 2025 WR-R15 OOS authority remains source-blocked.',
+              '',
+              'Integrity: exact active-state enumeration; no share fit; no thresholds; no sportsbook; no OddsAPI; no 2026 outcomes; no production mutation.',
+          ]
+          open('/tmp/issue535_bridge_result.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/issue535_bridge_result.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload frozen bridge score
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-active-role-conditional-allocation-bridge-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/bridge-score/result/**
