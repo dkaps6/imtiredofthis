@@ -1,3 +1,4 @@
+# Frozen source-audit safeguard tests.
 from scripts.research.audit_player_role_elasticity_teammate_availability_v1 import (
     family, gate_metrics
 )
