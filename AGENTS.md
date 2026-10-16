@@ -10,6 +10,40 @@ This file defines how automation should operate the repository after the 2026 pr
 
 ---
 
+## PLAYER PROJECTION FIRST PRINCIPLE — NON-NEGOTIABLE
+
+This repository builds **individual-player projections**. The named player in his current football situation is the primary scientific unit.
+
+The model must reason in this order:
+
+1. **Player identity** — what this specific player has shown he is: role, usage, trajectory, situational opportunity, efficiency tendencies, role elasticity and projection reliability.
+2. **Current role/state** — what is true now: starter status, current-season usage, teammate availability, coaching/QB context, recent role changes and current opportunity trajectory.
+3. **Opportunity allocation** — how much of the team's opportunity belongs to this player versus teammates, including high-value opportunity such as goal-line, red-zone, third-down, two-minute and other market-relevant situations.
+4. **Opponent/environment** — what obstacle this player faces this week: defensive strength, matchup, game environment and other source-qualified context. The environment can make the path easier or harder; it does **not** define the player.
+5. **Market-specific outcome** — carries, targets, receptions, yards, touchdowns and other markets ask different football questions. A player can be a weak yards candidate and a strong touchdown candidate without contradiction.
+6. **Reliability** — how much confidence should be placed in the named-player projection given his own historical difficulty/state.
+
+Historical position aggregates remain useful as priors, shrinkage, sparse-player fallback, calibration context and QA guardrails. They are **not the primary object of optimization**.
+
+**Position-level average MAE/RMSE is a downstream diagnostic, not the modeling objective.** Individual players generate those aggregate errors. Reducing aggregate error by improving named-player projections is valid; chasing a lower position average without understanding which players/situations drive it is not sufficient evidence of progress.
+
+A research result must therefore be interpreted at the player level whenever the hypothesis is player-specific:
+- stable player identity and strictly-prior player evidence;
+- per-player heterogeneity / named-player diagnostics;
+- current role and teammate competition;
+- market-specific opportunity quality;
+- player- and game/team-dependent inference where applicable;
+- position aggregate metrics only as guardrails.
+
+Do not declare a position "solved" merely because its average metric is acceptable. Do not erase meaningful player differences to make a position-wide number look cleaner.
+
+Canonical architecture note:
+`docs/research/PLAYER_IDENTITY_ROLE_STATE_ARCHITECTURE_V1.md`
+
+This principle is additive to the validated production stack. Do not kill or rewrite prior promoted science merely to satisfy it; use it to drive the next level of player individualization.
+
+---
+
 ## 0) Canonical production authority
 
 The only canonical production orchestration path is:
