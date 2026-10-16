@@ -439,7 +439,7 @@ def support_gates(cell: str, rows: pd.DataFrame, rooms: pd.DataFrame, players: p
     return {
         "rows": int(len(rows)) >= req["rows"],
         "players": int(rows["player_id"].nunique()) >= req["players"],
-        "games": int(rooms["game_key"].nunique()) >= req["games"],
+        "team_rooms": int(len(rooms)) >= req["games"],
         "evaluable_players": int(len(players)) >= req["eval_players"],
     }
 
