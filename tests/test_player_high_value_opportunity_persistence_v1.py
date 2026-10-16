@@ -40,3 +40,25 @@ def test_prior_high_value_support_gate_is_enforced():
     ])
     z = attach_predictors(u)
     assert z.empty
+
+
+
+def test_actual_high_value_share_uses_team_pool_denominator():
+    from scripts.research.evaluate_player_high_value_opportunity_persistence_v1 import (
+        CHANNELS,
+        prepare_channel,
+    )
+
+    source = pd.DataFrame([
+        {"season":2025,"week":5,"team":"AAA","player_id":"p1","opportunities":2,"inside20":2,"inside10":2,"inside5":1,"channel":"rush"},
+        {"season":2025,"week":5,"team":"AAA","player_id":"p2","opportunities":2,"inside20":1,"inside10":1,"inside5":0,"channel":"rush"},
+    ])
+    roster = pd.DataFrame([
+        {"season":2025,"week":5,"team":"AAA","player_id":"p1","family":"RB"},
+        {"season":2025,"week":5,"team":"AAA","player_id":"p2","family":"RB"},
+    ])
+    u = prepare_channel(source, roster, CHANNELS["RB_RUSH"])
+    p1 = u.loc[u["player_id"].eq("p1")].iloc[0]
+    assert float(p1["target_hv"]) == 2.0
+    assert float(p1["target_team_hv"]) == 3.0
+    assert abs(float(p1["actual_hv_share"]) - (2.0/3.0)) < 1e-12
