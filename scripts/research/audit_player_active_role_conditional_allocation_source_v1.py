@@ -19,6 +19,10 @@ import pandas as pd
 
 from scripts._opponent_map import canon_team
 from scripts.modeling.target_entitlement_v1 import materialize_target_entitlement
+from scripts.modeling.te_r5p_entitlement_adapter_v1 import _load_snaps as load_participation_snaps
+from scripts.research.persist_wr_te_production_order_historical_v1 import (
+    TE_FEATURES, WR_FEATURES, _load_fold_params, apply_te_fold, apply_wr_fold,
+)
 from scripts.research.score_joint_opportunity_allocation_dirichlet_v1 import build_week_metrics
 from scripts.simulation_v2 import _top_n_shares
 from scripts.utils.canonical_names import canonicalize_player_name_safe
@@ -115,7 +119,7 @@ def cap_with_residual(shares: np.ndarray) -> tuple[np.ndarray, float]:
     return probs[:-1], float(probs[-1])
 
 
-def build_base_authority(metrics: pd.DataFrame, season: int, week: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+def build_base_authority(metrics: pd.DataFrame, season: int, week: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     x = metrics.copy()
     x["team"] = x["team"].map(canon_team)
     x["player_name_key"] = x.get("player_clean_key", x["player"]).map(key)
@@ -187,7 +191,53 @@ def build_base_authority(metrics: pd.DataFrame, season: int, week: int) -> tuple
                 and (g["rush_denominator_mean"] > 0).all()
             ),
         })
-    return pd.DataFrame(player_rows), pd.DataFrame(room_rows)
+    return pd.DataFrame(player_rows), pd.DataFrame(room_rows), ent
+
+
+def specialist_authority(
+    before: pd.DataFrame, after: pd.DataFrame, *, family: str, season: int, week: int
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    positions = {"TE"} if family == "TE" else {"WR", "LWR", "RWR", "SWR"}
+    b = before.copy()
+    a = after.copy()
+    bpos = b["position"].astype(str).str.upper().str.strip()
+    apos = a["position"].astype(str).str.upper().str.strip()
+    bg = b.loc[bpos.isin(positions)].copy()
+    ag = a.loc[apos.isin(positions)].copy()
+    if ag.empty:
+        raise RuntimeError(f"zero reconstructed specialist rows family={family} {season} W{week}")
+    ag["team"] = ag["team"].map(canon_team)
+    ag["player_name_key"] = ag["player_clean_key"].map(key)
+    ag["authority_q"] = num(ag["entitlement_tgt_share"])
+    ag["target_denominator_mean"] = num(ag["rules_plays_est"]) * num(ag["rules_pass_rate"])
+    ag["authority_covered"] = (
+        ag["authority_q"].notna() & np.isfinite(ag["authority_q"]) & ag["authority_q"].ge(0)
+    )
+    ag["denominator_finite"] = (
+        np.isfinite(ag["target_denominator_mean"]) & ag["target_denominator_mean"].gt(0)
+    )
+    ag["season"] = int(season)
+    ag["week"] = int(week)
+    out = ag[
+        [
+            "season", "week", "team", "player_name_key", "authority_q",
+            "authority_covered", "denominator_finite",
+        ]
+    ].copy()
+
+    before_mass = (
+        bg.groupby(["event_id", "team"])["entitlement_tgt_share"].sum().rename("before")
+    )
+    after_mass = (
+        ag.groupby(["event_id", "team"])["entitlement_tgt_share"].sum().rename("after")
+    )
+    room = pd.concat([before_mass, after_mass], axis=1).reset_index()
+    room["season"] = int(season)
+    room["week"] = int(week)
+    room["team"] = room["team"].map(canon_team)
+    room["mass_gap"] = (num(room["after"]) - num(room["before"])).abs()
+    room["conservation_pass"] = room["mass_gap"].le(TOL)
+    return out, room[["season", "week", "team", "conservation_pass", "mass_gap"]]
 
 
 def wr_fold_authority(fold_root: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -461,14 +511,33 @@ def main() -> int:
     if "opponent" in schedule.columns:
         schedule["opponent"] = schedule["opponent"].map(canon_team)
 
-    wr_spec, wr_rooms = wr_fold_authority(args.fold_root)
-    te_spec, te_rooms, te_result = te_fold_authority(args.fold_root)
+    _, _, te_result = te_fold_authority(args.fold_root)
     if int(te_result.get("same_or_future_observations_used", 0) or 0) != 0:
         raise RuntimeError("TE-R5P recovered authority reports same/future participation")
     if int(te_result.get("sportsbook_inputs_used", 0) or 0) != 0:
         raise RuntimeError("TE-R5P recovered authority reports sportsbook input")
 
+    snaps, snap_dup_rate, snap_source_seasons = load_participation_snaps()
+    if snap_dup_rate > 0.01:
+        raise RuntimeError(f"participation snap duplicate rate too high: {snap_dup_rate}")
+    te_coeff = args.fold_root / "te_r5p_recovered/te_r5p_coefficients.csv"
+    wr_coeff = (
+        args.fold_root
+        / "wr_r15_original/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv"
+    )
+    te_params = {
+        s: _load_fold_params(
+            te_coeff, test_season=s, features=TE_FEATURES, label="TE-R5P"
+        )
+        for s in TARGET_SEASONS
+    }
+    wr_params_2024 = _load_fold_params(
+        wr_coeff, test_season=2024, features=WR_FEATURES, label="WR-R15"
+    )
+
     base_parts, base_room_parts = [], []
+    te_auth_parts, te_room_parts = [], []
+    wr_auth_parts, wr_room_parts = [], []
     udirs = {2024: args.universe_dir_2024, 2025: args.universe_dir_2025}
     for season in TARGET_SEASONS:
         for week in TARGET_WEEKS:
@@ -480,9 +549,47 @@ def main() -> int:
                 player_logs=logs, team_weekly=team, pregame_universe=universe,
                 schedule=schedule, season=season, week=week,
             )
-            auth, rooms = build_base_authority(metrics, season, week)
+            auth, rooms, explicit = build_base_authority(metrics, season, week)
             base_parts.append(auth)
             base_room_parts.append(rooms)
+
+            te_final, _, te_audit = apply_te_fold(
+                explicit, snaps=snaps, params=te_params[season]
+            )
+            if (
+                te_audit["team_te_pool_max_abs_gap"] > TOL
+                or te_audit["non_te_max_abs_gap"] > TOL
+            ):
+                raise RuntimeError(
+                    f"TE reconstructed fold conservation failed {season} W{week}: {te_audit}"
+                )
+            ta, tr = specialist_authority(
+                explicit, te_final, family="TE", season=season, week=week
+            )
+            te_auth_parts.append(ta)
+            te_room_parts.append(tr)
+
+            if season == 2024:
+                wr_final, _, wr_audit = apply_wr_fold(
+                    te_final, snaps=snaps, params=wr_params_2024
+                )
+                if (
+                    max(
+                        wr_audit["m38_wr1_anchor_max_abs_gap"],
+                        wr_audit["wr2plus_pool_max_abs_gap"],
+                        wr_audit["wr_room_mass_max_abs_gap"],
+                        wr_audit["non_wr_max_abs_gap"],
+                    ) > TOL
+                    or int(wr_audit["same_future_participation"]) != 0
+                ):
+                    raise RuntimeError(
+                        f"WR reconstructed fold conservation failed {season} W{week}: {wr_audit}"
+                    )
+                wa, wr = specialist_authority(
+                    te_final, wr_final, family="WR", season=season, week=week
+                )
+                wr_auth_parts.append(wa)
+                wr_room_parts.append(wr)
     base = pd.concat(base_parts, ignore_index=True)
     base_rooms = pd.concat(base_room_parts, ignore_index=True)
 
@@ -520,12 +627,10 @@ def main() -> int:
         conservation_pass=base_rooms["target_mass_gap"].le(TOL)
     )
 
-    te_auth = overlay_specialist(base, te_spec, "TE")
-    wr24_auth = overlay_specialist(
-        base.loc[base["season"].eq(2024)], wr_spec, "WR"
-    )
-    te_rooms = te_rooms[["season", "week", "team", "conservation_pass"]].copy()
-    wr_rooms = wr_rooms[["season", "week", "team", "conservation_pass"]].copy()
+    te_auth = pd.concat(te_auth_parts, ignore_index=True)
+    te_rooms = pd.concat(te_room_parts, ignore_index=True)
+    wr24_auth = pd.concat(wr_auth_parts, ignore_index=True)
+    wr_rooms = pd.concat(wr_room_parts, ignore_index=True)
 
     results, detail_parts = [], []
     for season in TARGET_SEASONS:
@@ -621,6 +726,9 @@ def main() -> int:
             ),
             "wr_2025_oos_authority_used": False,
             "qb_share_model_invented": False,
+            "historical_specialist_reconstruction": "EXACT_OOS_FOLD_COEFFICIENTS_STRICT_PRIOR",
+            "participation_snap_duplicate_rate": float(snap_dup_rate),
+            "participation_snap_source_seasons": [int(v) for v in snap_source_seasons],
         },
     }
     if result["integrity"]["stage1_chronology_violations"] != 0:
