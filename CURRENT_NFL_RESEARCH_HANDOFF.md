@@ -1,5 +1,114 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-15 — PLAYER ACTIVE-ROLE PARTICIPATION SOURCE AUDIT ACTIVE
+
+Player Projection First Principle remains canonical.
+
+### Previous frontier closed cleanly
+
+`PLAYER_HIGH_VALUE_OPPORTUNITY_PERSISTENCE_CLOSED`
+- run `38848538570` SUCCESS;
+- artifact `12024037594`;
+- exact high-value-share persistence V1 is terminal;
+- scoring-area usage remains valid descriptive player identity, but recent
+  high-value share alone is not a robust next-game entitlement replacement.
+
+### New Stage-1 player-opportunity frontier
+
+The W1-W4 full-roster replay exposed a distinct pregame zero-state problem:
+610 / 1,837 player-weeks (33.21%) had no weekly-stat row while the model still
+assigned material opportunity to many rostered players.
+
+By position:
+- QB 7.81%;
+- RB 30.15%;
+- WR 31.55%;
+- TE 45.31%.
+
+This is now framed explicitly as a two-stage player question:
+
+1. **active-role participation:** will this named player have a real offensive
+   role at all?
+2. **conditional opportunity allocation:** if yes, how much team/room
+   opportunity belongs to him?
+
+Do not combine the two stages before Stage 1 is source-qualified.
+
+Frozen source contract:
+`docs/research/PLAYER_ACTIVE_ROLE_PARTICIPATION_V1_SOURCE_AUDIT.md`
+freeze commit `78b2dc54452c8a84f0866883ae80dcf397212b6f`.
+
+Implementation:
+`scripts/research/audit_player_active_role_participation_v1.py`
+commit `30bb39fe9f93b904fdfff08ca7f23c2cd2fe22c3`.
+
+Safeguards:
+`tests/test_player_active_role_participation_v1.py`
+initial commit `20a159a5eca070abad42cce606b7b4f534961aef`.
+
+Workflow:
+`.github/workflows/research-player-active-role-participation-source-v1.yml`
+commit `0122f493fde6223bca704810d9147c2526c5b2f7`.
+
+Trigger head:
+`ae845ac6279e91bee9a13f69dffb61042417bd8c`.
+
+### Exact source design
+
+Historical seasons:
+- 2024
+- 2025.
+
+Pregame player universe:
+- weekly roster authority;
+- QB/RB/WR/TE family;
+- roster ACT where status is available;
+- stable GSIS identity;
+- exact M78 official game-day inactives removed;
+- player remains in universe even if target-game offensive snaps are zero.
+
+Official inactive authority:
+- 1,088 team-weeks;
+- exact SHA-256
+  `d39aaf0feea101f3e0d2721ebd4118ef33fb1a4d3c76670e2a4f17734e37b609`.
+
+Participation source:
+- historical PFR offensive snap counts;
+- missing player row is treated as zero only when the entire team-week snap
+  source is proven valid.
+
+Source audit adjudicates QB/RB/WR/TE separately.
+
+It fits no model and makes no scientific prediction.
+
+### Anti-retest protection
+
+Do not relabel/reopen:
+- Availability -> Opportunity rule-order gap;
+- M78/M79 generic inactive QB identity;
+- RB Vacancy;
+- role-elasticity teammate-availability V1;
+- RB carry/snap allocation;
+- RB receiving-room share;
+- WR/TE target-share trajectory;
+- WR-R15 / TE-R5P snap entitlement;
+- route participation/YPRR historical source block.
+
+This active-role probability is a separate upstream zero-state layer.
+
+Current disposition:
+`PLAYER_ACTIVE_ROLE_PARTICIPATION_SOURCE_AUDIT_PENDING`.
+
+No sportsbook.
+No OddsAPI.
+No 2026 outcomes.
+No production mutation.
+
+Canonical status:
+`PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-15 — PLAYER HIGH-VALUE OPPORTUNITY SOURCE READY / SIMPLE PERSISTENCE CLOSED
 
 Player-first principle remains canonical:
