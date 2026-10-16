@@ -83,19 +83,24 @@ def audit_season(season,roster):
     rpid=p[rc].astype("string").fillna("").str.strip()
     xpid=p[xc].astype("string").fillna("").str.strip()
 
-    rushq=pd.DataFrame({
+    rush_all=pd.DataFrame({
         "season":season,"week":week,"team":team,"yardline_100":yard,"player_id":rpid,
         "game_id":p[gc].astype(str) if gc else "",
         "play_id":p[pc].astype(str) if pc else p.index.astype(str),
-    })
-    rushq=rushq.loc[rush & rushq.player_id.ne("")].copy()
-    tarq=pd.DataFrame({
+    }).loc[rush].copy()
+    receiver_name_col=first(p,["receiver_player_name","receiver_name"])
+    has_receiver=(p[receiver_name_col].astype("string").fillna("").str.strip().ne("") if receiver_name_col else xpid.ne(""))
+    tar_all=pd.DataFrame({
         "season":season,"week":week,"team":team,"yardline_100":yard,"player_id":xpid,
         "game_id":p[gc].astype(str) if gc else "",
         "play_id":p[pc].astype(str) if pc else p.index.astype(str),
         "air_yards":num(p["air_yards"]) if "air_yards" in p.columns else np.nan,
-    })
-    tarq=tarq.loc[pas & tarq.player_id.ne("")].copy()
+    }).loc[pas & has_receiver].copy()
+
+    rusher_id_coverage=float(rush_all.player_id.ne("").mean()) if len(rush_all) else 0.0
+    receiver_id_coverage=float(tar_all.player_id.ne("").mean()) if len(tar_all) else 0.0
+    rushq=rush_all.loc[rush_all.player_id.ne("")].copy()
+    tarq=tar_all.loc[tar_all.player_id.ne("")].copy()
 
     r=roster.loc[roster.season.eq(season),["season","week","team","player_id","position","family"]]
     rushq=rushq.merge(r,on=["season","week","team","player_id"],how="left",validate="many_to_one")
@@ -114,11 +119,9 @@ def audit_season(season,roster):
     duplicate_rush=int(rushq.duplicated(["game_id","play_id","player_id"]).sum())
     duplicate_tar=int(tarq.duplicated(["game_id","play_id","player_id"]).sum())
 
-    skill_rush=rushq.loc[rushq.family.isin(["RB","WR","TE"])]
-    skill_tar=tarq.loc[tarq.family.isin(["RB","WR","TE"])]
-    rush_pos_bridge=float(rushq.family.notna().mean()) if len(rushq) else 0.0
-    tar_pos_bridge=float(tarq.family.notna().mean()) if len(tarq) else 0.0
-    skill_bridge=float(pd.concat([skill_rush.family,skill_tar.family],ignore_index=True).notna().mean()) if (len(skill_rush)+len(skill_tar)) else 0.0
+    rush_pos_bridge=float(rushq.family.astype("string").fillna("").ne("").mean()) if len(rushq) else 0.0
+    tar_pos_bridge=float(tarq.family.astype("string").fillna("").isin(["RB","WR","TE"]).mean()) if len(tarq) else 0.0
+    skill_bridge=min(rush_pos_bridge,tar_pos_bridge)
 
     playerweeks=[]
     for channel,q in [("rush",rushq),("target",tarq)]:
@@ -143,8 +146,8 @@ def audit_season(season,roster):
         "week_team_coverage_target":float((tarq.week.notna() & tarq.team.astype(str).ne("")).mean()) if len(tarq) else 0.0,
         "yardline_coverage_rush":float(rushq.yardline_100.notna().mean()) if len(rushq) else 0.0,
         "yardline_coverage_target":float(tarq.yardline_100.notna().mean()) if len(tarq) else 0.0,
-        "rusher_stable_identity_coverage":float(rushq.player_id.ne("").mean()) if len(rushq) else 0.0,
-        "receiver_stable_identity_coverage":float(tarq.player_id.ne("").mean()) if len(tarq) else 0.0,
+        "rusher_stable_identity_coverage":rusher_id_coverage,
+        "receiver_stable_identity_coverage":receiver_id_coverage,
         "rusher_position_bridge":rush_pos_bridge,
         "receiver_position_bridge":tar_pos_bridge,
         "skill_position_bridge":skill_bridge,
