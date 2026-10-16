@@ -1,5 +1,73 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-15 — WR EFFICIENCY TRUST QUALIFIED + WEEK-6 LOCK FROZEN
+
+Canonical historical result:
+- `PASS_CATCHER_EFFICIENCY_DIFFICULTY_TRUST_SELECTIVITY_PARTIAL`
+- run `38826418315` SUCCESS
+- job `116734822024`
+- exact head `c15f70f3bacf9d0d7f301d334419841ad6d9d492`
+- artifact `12015303274`
+- digest `sha256:cbab5ac5b424861d7dfd1fc8e965b6ad579936eab5e53820019392e25f2b6cdf`
+- result `docs/research/PASS_CATCHER_EFFICIENCY_DIFFICULTY_TRUST_SELECTIVITY_V1_RESULT.md`.
+
+WR:
+- `WR_PLAYER_EFFICIENCY_DIFFICULTY_TRUST_SELECTIVITY_QUALIFIED`;
+- 3,224 rows / 211 WRs;
+- pooled partial rank association +0.16238 after controlling opportunity difficulty;
+- pooled player-cluster 95% CI [+0.12437,+0.19757];
+- pooled team-week 95% CI [+0.12851,+0.19455];
+- 2024 confirmation player/team-week CIs strictly positive;
+- HIGH_EFFICIENCY_TRUST final abs error 15.27 yd vs LOW 31.07 yd;
+- every frozen WR gate passed.
+
+TE:
+- `NO_ACTIONABLE_TE_PLAYER_EFFICIENCY_DIFFICULTY_TRUST_SELECTIVITY`;
+- direction favorable but 2025 confirmation player/team-week clustered CIs crossed zero;
+- exact V1 is CLOSED; no rescue;
+- existing TE opportunity trust remains qualified and frozen.
+
+Week-6 WR efficiency trust prospective authority:
+- `WEEK6_WR_EFFICIENCY_TRUST_PREGAME_LOCK_FROZEN`
+- run `38826804491` SUCCESS
+- job `116736044870`
+- exact head `4f7443ed21273040c91dd29593a47654acad61be`
+- artifact `12015596169`
+- digest `sha256:6fc91bee57067219c69f6817950afa87ac07588a391275fe9ffe0c04f58b05dd`
+- row digest `sha256:0bf72b516548fed6ba6c48d464674f011ef357e09388695b28ca5dd3ae9cf20f`
+- result `docs/research/WR_PLAYER_EFFICIENCY_DIFFICULTY_TRUST_WEEK6_PREGAME_LOCK_V1_RESULT.md`.
+
+Frozen Week-6 WR efficiency cohort:
+- 152 WRs;
+- 141 supported / 11 unsupported;
+- HIGH_EFFICIENCY_TRUST 35 / MIDDLE 70 / LOW_EFFICIENCY_TRUST 36;
+- 717 reconstructed W1-W5 rows;
+- history max week 5;
+- Week-6 outcomes read 0;
+- sportsbook 0 / OddsAPI 0 / models fit 0;
+- projection/distribution changes 0;
+- production unchanged.
+
+Interpretation:
+- WR now has **two separate qualified same-player reliability axes** around unchanged WR-R15: opportunity difficulty and efficiency difficulty.
+- Do NOT combine them yet.
+- HIGH/LOW on either axis is reliability only, not over/under or bet/fade.
+- Week-6 locks are immutable until target-week settlement.
+- no production promotion yet.
+
+Immediate research rule:
+- do not read or use Week-6 outcomes;
+- do not reopen generic efficiency volatility, WR mean integration, TE efficiency trust, or other closed lanes;
+- anti-retest the remaining RB/QB/player-reliability frontier before opening a new historical experiment;
+- a prospective scoring/comparison contract may be frozen now, but no Week-6 scoring until settlement.
+
+Canonical status:
+`PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+Exactly one Week-6 paid OddsAPI acquisition remains the hard limit. No additional paid pull without explicit authorization.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-15 — SEA-DEN TICKET CONTINUITY + WR/TE TRUST LOCKS FROZEN
 
 Authoritative detailed handoff:
