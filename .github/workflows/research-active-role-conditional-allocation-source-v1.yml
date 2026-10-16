@@ -28,76 +28,89 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nflreadpy scipy pytest scikit-learn 'pyarrow==18.1.0'
-      - name: Compile and test audit mechanics
+
+      - name: Compile and test frozen source audit
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python -m py_compile scripts/research/audit_player_active_role_conditional_allocation_source_v1.py
           pytest -q tests/test_player_active_role_conditional_allocation_source_v1.py
+
       - name: Download immutable parent authorities
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p /tmp/parents/stage1 /tmp/parents/rush /tmp/parents/wrte
-          gh run download 38895205962 --repo "$GITHUB_REPOSITORY" --name player-active-role-participation-source-v1-38895205962 --dir /tmp/parents/stage1
-          gh run download 36285507895 --repo "$GITHUB_REPOSITORY" --name rush-att-zero-mc-allocation-lineage-v1 --dir /tmp/parents/rush
-          gh run download 37782189538 --repo "$GITHUB_REPOSITORY" --name wr-te-fold-authorities-recovered-v1 --dir /tmp/parents/wrte
-          test -s /tmp/parents/stage1/tmp/player_active_role/player_active_role_pregame_universe.csv
-          test -s /tmp/parents/rush/combined/rush_att_allocation_lineage.csv
+          rm -rf /tmp/parents
+          mkdir -p /tmp/parents/stage1_source /tmp/parents/stage1_mechanism /tmp/parents/wrte
+          gh run download 38895205962 --repo "$GITHUB_REPOSITORY"             --name player-active-role-participation-source-v1-38895205962             --dir /tmp/parents/stage1_source
+          gh run download 38907459996 --repo "$GITHUB_REPOSITORY"             --name player-active-role-participation-mechanism-v1-38907459996             --dir /tmp/parents/stage1_mechanism
+          gh run download 37782189538 --repo "$GITHUB_REPOSITORY"             --name wr-te-fold-authorities-recovered-v1             --dir /tmp/parents/wrte
+          test -s /tmp/parents/stage1_source/tmp/player_active_role/player_active_role_pregame_universe.csv
+          test -s /tmp/parents/stage1_mechanism/tmp/player_active_role_mechanism/player_active_role_mechanism_scored_rows.csv
           test -s /tmp/parents/wrte/te_r5p_recovered/te_r5p_oos_player_casebook.csv
-      - name: Build leakage-safe historical inputs
+
+      - name: Build leakage-safe 2024/2025 historical inputs
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           rm -rf /tmp/h24 /tmp/h25 /tmp/audit
-          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks 5-18 --out-dir /tmp/h24
-          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks 5-18 --out-dir /tmp/h25
+          mkdir -p /tmp/audit
+          python scripts/backtest/build_historical_inputs.py             --season 2024 --prior-season 2023 --weeks 5-18 --out-dir /tmp/h24
+          python scripts/backtest/build_historical_inputs.py             --season 2025 --prior-season 2024 --weeks 5-18 --out-dir /tmp/h25
           python - <<'PY'
           import pandas as pd
           from pathlib import Path
-          out=Path('/tmp/audit');out.mkdir(parents=True,exist_ok=True)
+          out=Path('/tmp/audit')
           for name in ['schedule_history.csv','team_weekly_history.csv']:
-              x=pd.concat([pd.read_csv('/tmp/h24/'+name),pd.read_csv('/tmp/h25/'+name)],ignore_index=True)
-              keys=['season','week','team'];x=x.sort_values(keys).drop_duplicates(keys,keep='last')
+              x=pd.concat([
+                  pd.read_csv('/tmp/h24/'+name),
+                  pd.read_csv('/tmp/h25/'+name),
+              ],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined {name}')
               x.to_csv(out/name,index=False)
           PY
-          python scripts/backtest/historical_player_logs.py --seasons 2023,2024,2025 --schedule /tmp/audit/schedule_history.csv --out /tmp/audit/player_game_logs_history.csv
+          python scripts/backtest/historical_player_logs.py             --seasons 2023,2024,2025             --schedule /tmp/audit/schedule_history.csv             --out /tmp/audit/player_game_logs_history.csv
+
       - name: Run frozen source reconciliation
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/research/audit_player_active_role_conditional_allocation_source_v1.py \
-            --stage1-universe /tmp/parents/stage1/tmp/player_active_role/player_active_role_pregame_universe.csv \
-            --rush-lineage /tmp/parents/rush/combined/rush_att_allocation_lineage.csv \
-            --wrte-root /tmp/parents/wrte \
-            --player-logs /tmp/audit/player_game_logs_history.csv \
-            --team-weekly /tmp/audit/team_weekly_history.csv \
-            --schedule /tmp/audit/schedule_history.csv \
-            --hist-2024 /tmp/h24 --hist-2025 /tmp/h25 --out-dir /tmp/audit/result
+          rm -rf /tmp/audit/result
+          python scripts/research/audit_player_active_role_conditional_allocation_source_v1.py             --stage1-universe /tmp/parents/stage1_source/tmp/player_active_role/player_active_role_pregame_universe.csv             --stage1-mechanism /tmp/parents/stage1_mechanism/tmp/player_active_role_mechanism/player_active_role_mechanism_scored_rows.csv             --team-weekly /tmp/audit/team_weekly_history.csv             --player-logs /tmp/audit/player_game_logs_history.csv             --schedule /tmp/audit/schedule_history.csv             --universe-dir-2024 /tmp/h24/pregame_universe             --universe-dir-2025 /tmp/h25/pregame_universe             --fold-root /tmp/parents/wrte             --out-dir /tmp/audit/result
+
       - name: Certify source-only boundary
         run: |
           python - <<'PY'
           import json
-          p=json.load(open('/tmp/audit/result/player_active_role_conditional_allocation_source_result.json'))
-          assert p['version']=='PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_SOURCE_RECONCILIATION',p
-          assert p['bridge_outcomes_scored']==0,p
-          assert p['new_share_models_fit']==0,p
-          assert p['sportsbook_inputs']==0,p
-          assert p['oddsapi_calls']==0,p
-          assert p['outcomes_2026_used']==0,p
-          assert p['production_changed'] is False,p
-          assert p['wr_2025_exact_oos_authority']=='NO_WR_R15_OOS_AUTHORITY',p
-          assert p['overall_disposition'] in {
+          p=json.load(open('/tmp/audit/result/active_role_conditional_allocation_source_result.json'))
+          assert p['version']=='PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_SOURCE_AUDIT',p
+          i=p['integrity']
+          assert i['target_game_outcomes_used_as_predictors']==0,p
+          assert i['sportsbook_inputs_used']==0,p
+          assert i['oddsapi_calls']==0,p
+          assert i['outcomes_2026_used']==0,p
+          assert i['new_share_models_fit']==0,p
+          assert i['production_changed'] is False,p
+          assert i['wr_2025_oos_authority_used'] is False,p
+          assert i['qb_share_model_invented'] is False,p
+          assert p['disposition'] in {
             'PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_SOURCE_READY_ALL',
             'PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_SOURCE_READY_PARTIAL',
             'PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_SOURCE_BLOCKED',
+            'PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_SOURCE_INTEGRITY_FAILURE',
           },p
+          print(json.dumps(p,indent=2,sort_keys=True))
           PY
+
       - name: Upload source audit
         if: always()
         uses: actions/upload-artifact@v4
