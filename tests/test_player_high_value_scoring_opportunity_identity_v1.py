@@ -1,3 +1,4 @@
+# Frozen canonical high-value opportunity source safeguards.
 from scripts.research.audit_player_high_value_scoring_opportunity_identity_v1 import family
 
 def test_family_mapping():
