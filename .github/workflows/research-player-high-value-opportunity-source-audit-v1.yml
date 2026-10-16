@@ -1,0 +1,85 @@
+name: Research Player High Value Opportunity Source Audit V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - "docs/research/PLAYER_HIGH_VALUE_SCORING_OPPORTUNITY_IDENTITY_V1_PLAN.md"
+      - "scripts/research/audit_player_high_value_scoring_opportunity_identity_v1.py"
+      - "tests/test_player_high_value_scoring_opportunity_identity_v1.py"
+      - ".github/workflows/research-player-high-value-opportunity-source-audit-v1.yml"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyarrow nflreadpy
+
+      - name: Safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_player_high_value_scoring_opportunity_identity_v1.py
+          pytest -q tests/test_player_high_value_scoring_opportunity_identity_v1.py
+
+      - name: Run frozen source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/high_value_opportunity_v1
+          mkdir -p /tmp/high_value_opportunity_v1
+          python scripts/research/audit_player_high_value_scoring_opportunity_identity_v1.py             --out-dir /tmp/high_value_opportunity_v1
+
+      - name: Verify research boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/high_value_opportunity_v1/high_value_opportunity_source_result.json'))
+          assert p['version']=='PLAYER_HIGH_VALUE_SCORING_OPPORTUNITY_IDENTITY_V1_SOURCE_AUDIT',p
+          assert p['disposition'] in {
+            'PLAYER_HIGH_VALUE_SCORING_OPPORTUNITY_SOURCE_READY',
+            'PLAYER_HIGH_VALUE_SCORING_OPPORTUNITY_SOURCE_BLOCKED',
+          },p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['predictive_models_fit']==0,p
+          assert p['production_changed'] is False,p
+          print('HIGH_VALUE_OPPORTUNITY_SOURCE_AUDIT_BOUNDARY_PASS')
+          PY
+
+      - name: Show result
+        if: always()
+        run: |
+          cat /tmp/high_value_opportunity_v1/high_value_opportunity_source_result.json 2>/dev/null || true
+          cat /tmp/high_value_opportunity_v1/high_value_opportunity_source_metrics.csv 2>/dev/null || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-high-value-opportunity-source-audit-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/high_value_opportunity_v1/**
+            docs/research/PLAYER_HIGH_VALUE_SCORING_OPPORTUNITY_IDENTITY_V1_PLAN.md
