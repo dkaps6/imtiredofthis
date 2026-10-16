@@ -1,5 +1,105 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-15 — HIGH-VALUE SCORING OPPORTUNITY IDENTITY SOURCE AUDIT ACTIVE
+
+Player-first frontier has advanced.
+
+### Role-elasticity V1 closed at source gate
+
+Canonical source audit:
+- run `38847501580` SUCCESS;
+- job `116801249742`;
+- exact head `fb516aea9e8af21563af71a6f1506edd154d29af`;
+- artifact `12024335417`;
+- digest `sha256:1a22efad89da4593124d366d21176d8c70d0d5f2cc0e7498a6216fab57353186`;
+- result `docs/research/PLAYER_ROLE_ELASTICITY_TEAMMATE_AVAILABILITY_V1_SOURCE_RESULT.md`.
+
+Disposition:
+`PLAYER_ROLE_ELASTICITY_SOURCE_BLOCKED`.
+
+Every frozen identity/event/snap/multi-room-state/chronology gate passed.
+The only blocker was the frozen >=90% strictly-prior same-team opportunity-history gate:
+- RB 88.68% / 88.36%;
+- WR 88.67% / 89.26%;
+- TE 85.59% / 84.88%
+for 2024 / 2025.
+
+Do not lower the gate. Do not run the predictive role-elasticity mechanism from this exact V1.
+
+### Current production ATD gap reconciled
+
+Current production is sportsbook-independent upstream but dedicated ATD science is explicitly uncertified.
+
+Current generic logic:
+- player historical offensive TD/game rate, position fallback if needed;
+- blended `rz_tgt_share`;
+- blended `rz_carry_share`;
+- `rz_share = max(rz_tgt_share, rz_carry_share)`;
+- generic `0.75 + rz_share` multiplier;
+- small team-win-probability script modifier;
+- joint-MC Bernoulli draw.
+
+Canonical validator:
+`scripts/validate_anytime_td_model_status_v1.py`
+
+Scientific status:
+`DEDICATED_ATD_WALK_FORWARD_CERTIFICATION_REQUIRED`.
+
+The validator's own required frontier is:
+`football-only team TD opportunity -> red-zone/end-zone pool -> player entitlement -> probability calibration`.
+
+### Canonical high-value opportunity frontier
+
+Frozen plan:
+`docs/research/PLAYER_HIGH_VALUE_SCORING_OPPORTUNITY_IDENTITY_V1_PLAN.md`.
+
+Primary question:
+does the named player's strictly-prior high-value opportunity identity forecast which player receives the team's next scoring-area rushing/receiving opportunity?
+
+Channels remain separate:
+- RB rushing;
+- RB receiving;
+- WR receiving;
+- TE receiving.
+
+The first mechanism predicts high-value **opportunity entitlement**, not touchdown probability.
+
+No TD outcome selects the player-entitlement mechanism.
+
+Source audit:
+- historical 2022-2025 regular-season PBP;
+- weekly-roster / GSIS player identity;
+- no sportsbook;
+- no OddsAPI;
+- no 2026 outcomes;
+- no predictive model in source stage;
+- no production mutation.
+
+Canonical workflow:
+`.github/workflows/research-player-high-value-opportunity-source-audit-v1.yml`.
+
+Current trigger head:
+`6d32ffe994559decc09066f293ec6ae7965bc87f`.
+
+Current disposition:
+`PLAYER_HIGH_VALUE_SCORING_OPPORTUNITY_SOURCE_AUDIT_PENDING`.
+
+A separately created RB-only high-value topology audit was explicitly superseded **before scientific adjudication** by this broader canonical contract. Do not compare results and choose the favorable one.
+
+### Protected state
+
+- Player Projection First Principle remains non-negotiable.
+- Position MAE/RMSE remains downstream QA, not the primary scientific unit.
+- RB-PD2 Weeks 4/5/6 remain permanent prospective non-observations.
+- WR dual reliability prospective confirmation begins Week 7 with the frozen 50/50 formula.
+- Week-6 WR/TE/QB locks remain immutable; do not use target-week outcomes to retune them.
+- no additional Week-6 OddsAPI pull.
+
+Canonical model status:
+`PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-15 — PLAYER ROLE-ELASTICITY SOURCE AUDIT FROZEN / IMPLEMENTED / RESULT PENDING
 
 Player-first continuation after the canonical first-principle update.
