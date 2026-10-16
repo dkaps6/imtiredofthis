@@ -1,5 +1,56 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-15 — PLAYER-FIRST HIGH-VALUE OPPORTUNITY RESEARCH ADVANCED
+
+The named-player first principle remains non-negotiable.
+
+New canonical research milestones on the live research branch / PR #672:
+
+1. **Player role elasticity from teammate availability — source blocked, not scientifically disproven**
+   - run `38847501580` SUCCESS
+   - artifact `12024335417`
+   - result `docs/research/PLAYER_ROLE_ELASTICITY_TEAMMATE_AVAILABILITY_V1_SOURCE_RESULT.md`
+   - exact frozen blocker: strictly-prior same-team opportunity-history coverage was
+     below 90% for RB/WR/TE.
+   - do not lower the gate or infer missing opportunity from target-game outcomes.
+
+2. **Named-player high-value scoring-opportunity source — READY**
+   - run `38848080453` SUCCESS
+   - artifact `12023852453`
+   - digest `sha256:1d8a22bf6240b4d4443ab7432d3224b63eaef97439639e7b47f536aed174adda`
+   - 2022-2025 PBP supports RB inside-20/10/5 rushing opportunity and
+     RB/WR/TE red-zone target topology at player identity grain.
+
+3. **Simple high-value opportunity persistence V1 — CLOSED**
+   - run `38848538570` SUCCESS
+   - exact scored head `89b92b56d9b9786a3cc8802a3d2b645caeca9ba5`
+   - artifact `12024037594`
+   - digest `sha256:2b02f5a6c7a8a05962517f72a9d62ba287d06ffe5ced37abfd70b623a5120afe`
+   - result `docs/research/PLAYER_HIGH_VALUE_OPPORTUNITY_PERSISTENCE_V1_RESULT.md`
+   - RB rush: closed; tiny/unstable gain, 2022 worsened.
+   - RB receiving: favorable all four seasons and pooled-supported, but 2025
+     player/game clustered CIs crossed zero; frozen V1 closed.
+   - WR receiving: worse all four seasons; closed.
+   - TE receiving: worse all four seasons; closed.
+
+Interpretation:
+recent scoring-area share **alone** is not a robust replacement for ordinary
+named-player usage. The Dobbins-style football thesis remains richer:
+current workload + role trajectory + lead-back/current role + teammate
+competition + scoring-area role + team ability to create scoring situations.
+
+Do not rescue V1 with alternate yardline bands, windows, role subsets or TD outcomes.
+
+Existing validated science remains preserved.
+Current generic ATD remains uncertified.
+No paid OddsAPI.
+No production mutation.
+Canonical status remains `PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+**For execution, reconcile the live research branch / PR #672 and Issue #535 after reading this checkpoint.**
+
+---
+
 ## TOP CHECKPOINT — 2026-10-15 — PLAYER PROJECTION FIRST PRINCIPLE CANONICAL
 
 Repository-wide modeling objective:
