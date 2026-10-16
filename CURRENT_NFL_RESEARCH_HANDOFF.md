@@ -1,5 +1,81 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-16 — ACTIVE-ROLE MECHANISM QUALIFIED ALL / STAGE 2 NEXT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-16_PLAYER_FIRST_ACTIVE_ROLE_MECHANISM_QUALIFIED_CURRENT.md`
+
+Player Projection First Principle remains canonical:
+
+`PLAYER IDENTITY -> CURRENT ROLE/STATE -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+Position MAE/RMSE remains downstream QA.
+
+### New canonical scientific milestone
+
+`PLAYER_ACTIVE_ROLE_PARTICIPATION_MECHANISM_QUALIFIED_ALL`
+
+Frozen-before-scoring authority:
+- freeze commit `16df6e95388a5dd7d682a619ea0b6f49d50f37b4`;
+- contract `docs/research/PLAYER_ACTIVE_ROLE_PARTICIPATION_V1_MECHANISM_FREEZE.md`.
+
+Canonical scored authority:
+- run `38907459996` — SUCCESS;
+- job `116994537005`;
+- exact scored head `1c2c92ca498e8dce1eee19d39b2f276dfd37d8f7`;
+- artifact `12049120604`;
+- digest `sha256:41b1acd3f1b8d77abb53980db160ece32f8fc40351939d4827248b9caad0c64b`;
+- result `docs/research/PLAYER_ACTIVE_ROLE_PARTICIPATION_V1_MECHANISM_RESULT.md`.
+
+Per-position:
+- `QB_ACTIVE_ROLE_PARTICIPATION_MECHANISM_QUALIFIED`
+- `RB_ACTIVE_ROLE_PARTICIPATION_MECHANISM_QUALIFIED`
+- `WR_ACTIVE_ROLE_PARTICIPATION_MECHANISM_QUALIFIED`
+- `TE_ACTIVE_ROLE_PARTICIPATION_MECHANISM_QUALIFIED`
+
+2025 independent-confirmation Brier improvements:
+- QB +0.092720;
+- RB +0.038602;
+- WR +0.015566;
+- TE +0.006296.
+
+Every frozen 2025 player-cluster, game-cluster and equal-player confirmation gate passed.
+
+Named-player 2025 share improved:
+- QB 88.41%;
+- RB 89.47%;
+- WR 82.22%;
+- TE 88.89%.
+
+Stage 1 is qualified:
+`P(any offensive snap | named player's strictly-prior same-team participation state)`.
+
+This does NOT authorize automatic player removal/zeroing or production mutation.
+
+### Exact next action
+
+Keep the player model two-stage.
+
+1. Stage 1 active-role / zero-state participation — **QUALIFIED**.
+2. Stage 2 conditional opportunity allocation given participation — **freeze next before scoring**.
+
+Before freezing Stage 2, reconcile the existing individual-opportunity roadmap and terminal allocation lanes so the new mechanism does not reopen closed science.
+
+No sportsbook.
+No OddsAPI.
+No 2026 outcomes.
+No production mutation.
+
+Preserve WR/TE trust qualifications and frozen Week-6 locks, all validated production science and all terminal anti-retest lanes in Issue #535.
+
+Week-6 guardrail remains: exactly one paid acquisition has already been used.
+
+Canonical model status remains:
+`PLAYER_INDIVIDUALIZATION_PARTIAL`.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-16 — ACTIVE-ROLE SOURCE READY ALL / NEXT MECHANISM MUST BE FROZEN
 
 **Read this detailed handoff next:**
