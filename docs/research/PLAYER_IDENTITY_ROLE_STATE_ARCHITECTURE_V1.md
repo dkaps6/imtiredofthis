@@ -23,6 +23,37 @@ will happen today.
 
 Current-week football state decides which parts of that playbook are relevant.
 
+## Player / allocation / obstacle model
+
+A useful conceptual frame is:
+
+- **Player identity** = the athlete's own football ability, tendencies, role history and reliability.
+- **Opportunity allocation** = how much of the team's available work reaches that player instead of teammates.
+- **Obstacle environment** = the defense, matchup, game state, protection/blocking context and other weekly conditions the player must move through.
+- **Outcome** = what the named player actually produces in the market being projected.
+
+The opponent is an obstacle, not an identity. A difficult defense can suppress an elite player; a weak defense can make a modest player's path easier. Neither case changes who the player is.
+
+Teammates matter because opportunity is shared. If five players can receive the same class of opportunity, the model must determine which player is most likely to get it and in which situations. If one player owns the role, that concentration itself is part of the projection.
+
+These are conceptual components, not authorization for an unvalidated multiplicative formula.
+
+## Aggregate metric rule
+
+Position-level MAE/RMSE is produced by individual player outcomes.
+
+Therefore:
+- lower positional MAE is a desirable consequence of better named-player projections;
+- positional MAE is a QA / calibration summary;
+- it is not sufficient to optimize a position average while failing to explain which players and situations drive the misses;
+- player-specific mechanisms must be evaluated at player-game grain with per-player heterogeneity whenever support allows.
+
+The scientific question is not merely:
+> "How do we make RB/WR/TE/QB average error smaller?"
+
+It is:
+> "Why did this named player's projection miss or hit in this football situation, and what strictly-prior information could have told us that before the game?"
+
 ## Preserve the existing stack
 
 This is additive.
