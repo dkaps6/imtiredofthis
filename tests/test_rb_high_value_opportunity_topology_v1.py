@@ -1,3 +1,4 @@
+# Frozen RB topology source-audit safeguards.
 import pandas as pd
 
 from scripts.research.audit_rb_high_value_opportunity_topology_v1 import (
