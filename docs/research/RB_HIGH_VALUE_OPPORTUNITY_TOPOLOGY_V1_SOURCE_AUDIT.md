@@ -2,10 +2,30 @@
 
 Date: 2026-10-15
 
-Status: **FROZEN SOURCE AUDIT / NO PREDICTIVE SCORING YET / RESEARCH ONLY**
+Status: **SUPERSEDED BEFORE SOURCE ADJUDICATION / DUPLICATE LANE / DO NOT USE FOR SCIENTIFIC DECISION**
 
 Version:
 `RB_HIGH_VALUE_OPPORTUNITY_TOPOLOGY_V1_SOURCE_AUDIT`
+
+
+## Supersession note
+
+Before any source result from this RB-only contract was used for a scientific decision, a broader frozen player-first contract was reconciled:
+
+`docs/research/PLAYER_HIGH_VALUE_SCORING_OPPORTUNITY_IDENTITY_V1_PLAN.md`
+
+That contract is canonical because it preserves separate channels for:
+- RB rushing;
+- RB receiving;
+- WR receiving;
+- TE receiving;
+- team scoring-opportunity state;
+- named-player high-value entitlement;
+- room competition.
+
+This RB-only contract is therefore superseded **before adjudication**. Any workflow artifact produced from it is mechanical/source diagnostic only and may not be used to rescue, contradict, or override the canonical broader V1.
+
+Do not compare the two audits and choose the more favorable result.
 
 ## Player-first question
 
