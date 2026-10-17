@@ -32,7 +32,7 @@ jobs:
 
       - name: Announce frozen score
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh issue comment 535 --repo "$GITHUB_REPOSITORY" --body "PRISM Team High-Value Creation Conditional Parent V1 started: run $GITHUB_RUN_ID, exact head $GITHUB_SHA, freeze $FREEZE_COMMIT. Frozen 2024-development / 2025-confirmation score only: no opponent/environment, no player recent high-value-share candidate, no sportsbook, no OddsAPI, no 2026 outcomes, no production mutation."
 
@@ -62,7 +62,7 @@ jobs:
 
       - name: Verify immutable parents and download artifacts
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           check_artifact () {
@@ -114,14 +114,14 @@ jobs:
 
       - name: Run frozen mechanics tests
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python -m py_compile scripts/research/evaluate_prism_team_high_value_creation_conditional_parent_v1.py
           pytest -q tests/test_prism_team_high_value_creation_conditional_parent_v1.py
 
       - name: Score frozen mechanism
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           rm -rf /tmp/prism-team-hv-creation
           mkdir -p /tmp/prism-team-hv-creation
@@ -165,7 +165,7 @@ jobs:
 
       - name: Record Issue 535 result
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
           import json, os
@@ -204,14 +204,14 @@ jobs:
 
       - name: Strict repository audit
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: python scripts/utils/audit_repo.py --strict
 
       - name: Upload frozen score artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: prism-team-high-value-creation-conditional-parent-v1-\${{ github.run_id }}
+          name: prism-team-high-value-creation-conditional-parent-v1-${{ github.run_id }}
           retention-days: 90
           if-no-files-found: warn
           path: /tmp/prism-team-hv-creation/**
