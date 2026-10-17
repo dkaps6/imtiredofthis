@@ -1,0 +1,149 @@
+name: Research PRISM RB TE Depth Role Transition Source V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_RB_TE_DEPTH_ROLE_TRANSITION_V1_SOURCE_PLAN.md'
+      - 'scripts/research/audit_prism_rb_te_depth_role_transition_source_v1.py'
+      - '.github/workflows/research-prism-rb-te-depth-role-transition-source-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused source dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy nflreadpy 'pyarrow==18.1.0'
+
+      - name: Compile source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_rb_te_depth_role_transition_source_v1.py
+
+      - name: Run frozen source and lineage audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/prism-depth-role
+          mkdir -p /tmp/prism-depth-role
+          python scripts/research/audit_prism_rb_te_depth_role_transition_source_v1.py             --out-dir /tmp/prism-depth-role
+
+      - name: Certify source-only boundary
+        env:
+          HEAD_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p='/tmp/prism-depth-role/depth_role_transition_source_result.json'
+          r=json.load(open(p))
+          assert r['version']=='PRISM_RB_TE_DEPTH_ROLE_TRANSITION_V1_SOURCE_AUDIT',r
+          assert r['status']=='SOURCE_AUDIT_COMPLETE',r
+          assert r['disposition'] in {
+              'PRISM_RB_TE_DEPTH_ROLE_TRANSITION_SOURCE_READY_ALL',
+              'PRISM_RB_TE_DEPTH_ROLE_TRANSITION_SOURCE_READY_PARTIAL',
+              'PRISM_RB_TE_DEPTH_ROLE_TRANSITION_SOURCE_BLOCKED',
+          },r
+          i=r['integrity']
+          assert i['target_game_outcomes_used']==0,r
+          assert i['target_game_snaps_used_as_source_state']==0,r
+          assert i['sportsbook_inputs_used']==0,r
+          assert i['oddsapi_calls']==0,r
+          assert i['predictive_models_fit']==0,r
+          assert i['thresholds_searched']==0,r
+          assert i['production_changed'] is False,r
+          assert i['raw_recent_share_used'] is False,r
+          assert i['vacancy_transfer_used'] is False,r
+          cert={
+              'version':'PRISM_RB_TE_DEPTH_ROLE_TRANSITION_V1_SOURCE_CERT',
+              'exact_head':os.environ['HEAD_SHA'],
+              'run_id':int(os.environ['RUN_ID']),
+              'source_result':r,
+          }
+          open('/tmp/prism-depth-role/source_certificate.json','w').write(
+              json.dumps(cert,indent=2,sort_keys=True)+'\n'
+          )
+          print(json.dumps(cert,indent=2,sort_keys=True))
+          PY
+
+      - name: Prepare Issue 535 checkpoint
+        env:
+          HEAD_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import json, os
+          r=json.load(open('/tmp/prism-depth-role/depth_role_transition_source_result.json'))
+          lines=[
+              '## PRISM RB/TE Discrete Depth-Role Transition V1 — source audit',
+              '',
+              f"Exact head: `{os.environ['HEAD_SHA']}`",
+              f"Run: `{os.environ['RUN_ID']}`",
+              f"Disposition: `{r['disposition']}`",
+              '',
+              'This is source/lineage only. It asks whether week-tagged pregame RB/TE depth-role transitions can be reconstructed without target-game outcomes, target-game snaps, recent opportunity share or vacancy transfer.',
+              '',
+          ]
+          for fr in r['family_results']:
+              failed=[k for k,v in fr['gates'].items() if not v]
+              lines.append(
+                  f"- {fr['family']} {fr['season']}: role coverage {fr['depth_role_coverage']:.2%}; "
+                  f"rank coverage {fr['numeric_depth_rank_coverage']:.2%}; "
+                  f"prior-state W3+ {fr['prior_role_coverage_week3plus']:.2%}; "
+                  f"transitions {fr['role_transition_player_games']}; "
+                  f"ready={fr['ready']}; failed gates={failed or ['NONE']}"
+              )
+          p=r['prospective_probe']
+          lines += [
+              '',
+              f"2026 prospective source probe: week_tagged={p.get('week_tagged')}; "
+              f"latest_week={p.get('depth_latest_week')}; probe_week={p.get('probe_week')}; "
+              f"parity_ready={p.get('prospective_parity_ready')}; reason={p.get('reason')}.",
+              '',
+              'Integrity: outcomes 0; target-game snap source-state 0; sportsbook 0; OddsAPI 0; fits 0; threshold searches 0; production false.',
+              '',
+              'Protected science remains protected: raw recent-share replacement CLOSED; active-role QUALIFIED; Stage-2 qualified cells unchanged; RB carry/snap unchanged; role-elasticity source block unchanged; no vacancy transfer.'
+          ]
+          open('/tmp/prism-depth-role/issue_comment.md','w').write('\n'.join(lines)+'\n')
+          PY
+
+      - name: Record Issue 535 checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/prism-depth-role/issue_comment.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-rb-te-depth-role-transition-source-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-depth-role/**
