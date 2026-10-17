@@ -1,0 +1,118 @@
+name: Research PRISM Stage2 Market Translation Independent History Source V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_STAGE2_MARKET_TRANSLATION_INDEPENDENT_HISTORY_SOURCE_SCREEN_V1.md'
+      - 'scripts/research/audit_prism_stage2_market_translation_independent_history_source_v1.py'
+      - '.github/workflows/research-prism-stage2-market-translation-independent-history-source-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  source-screen:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas
+
+      - name: Execute frozen independent-history source screen
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/prism-stage2-independent
+          mkdir -p /tmp/prism-stage2-independent
+          python -m py_compile scripts/research/audit_prism_stage2_market_translation_independent_history_source_v1.py
+          python scripts/research/audit_prism_stage2_market_translation_independent_history_source_v1.py \
+            --inactives data/backtests/qb_m78_official_inactives_corrected/m78_corrected_candidate_teamweek.csv \
+            --out-dir /tmp/prism-stage2-independent
+
+      - name: Certify no-score boundary
+        env:
+          HEAD_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p='/tmp/prism-stage2-independent/stage2_market_translation_independent_history_source_result.json'
+          r=json.load(open(p))
+          assert r['version']=='PRISM_STAGE2_MARKET_TRANSLATION_INDEPENDENT_HISTORY_SOURCE_SCREEN_V1',r
+          assert r['status']=='SOURCE_SCREEN_COMPLETE',r
+          assert r['inactive_authority_sha256']=='d39aaf0feea101f3e0d2721ebd4118ef33fb1a4d3c76670e2a4f17734e37b609',r
+          assert r['inactive_authority_rows']==1088,r
+          assert r['inactive_authority_season_counts'].get('2024',r['inactive_authority_season_counts'].get(2024))==544,r
+          assert r['inactive_authority_season_counts'].get('2025',r['inactive_authority_season_counts'].get(2025))==544,r
+          assert r['target_game_outcomes_scored']==0,r
+          assert r['target_game_snaps_used_to_define_active_state']==0,r
+          assert r['new_model_fits']==0 and r['threshold_searches']==0,r
+          assert r['sportsbook_inputs_used']==0 and r['oddsapi_calls']==0,r
+          assert r['week6_outcomes_used']==0 and r['week6_locks_changed'] is False,r
+          assert r['production_changed'] is False,r
+          cert={
+              'version':'PRISM_STAGE2_MARKET_TRANSLATION_INDEPENDENT_HISTORY_SOURCE_V1_CERT',
+              'exact_head':os.environ['HEAD_SHA'],
+              'run_id':int(os.environ['RUN_ID']),
+              'result':r,
+          }
+          open('/tmp/prism-stage2-independent/source_certificate.json','w').write(
+              json.dumps(cert,indent=2,sort_keys=True)+'\n'
+          )
+          print(json.dumps(cert,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          r=json.load(open('/tmp/prism-stage2-independent/stage2_market_translation_independent_history_source_result.json'))
+          body=f"""## PRISM Stage-2 -> market translation independent-history source screen
+
+Run: `${{ github.run_id }}`
+Exact head: `${{ github.sha }}`
+Disposition: `{r['disposition']}`
+
+Frozen Stage-1 pregame universe requires exact official inactive exclusion. The exact authority SHA is preserved and contains {r['inactive_authority_rows']} team-weeks: {r['inactive_authority_season_counts']}. 2023 rows: {r['target_2023_rows']}.
+
+Terminal reason: `{r['terminal_reason']}`.
+
+No 2023 outcomes were scored. No target-game snaps were used to infer active state. No fit, threshold search, sportsbook, OddsAPI, Week-6 outcomes/lock changes or production mutation.
+
+If blocked, the legal next move is prospective Stage-2 -> market-translation mechanics for future weeks, without modifying the immutable Week-6 locks.
+"""
+          open('/tmp/prism-stage2-independent/issue_comment.md','w').write(body)
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/prism-stage2-independent/issue_comment.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload source-screen evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-stage2-market-translation-independent-history-source-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-stage2-independent/**
