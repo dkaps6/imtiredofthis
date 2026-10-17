@@ -1,0 +1,201 @@
+name: Research PRISM Week5 Stage12 Retrospective Replay V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/replay_prism_week5_stage12_v1.py'
+      - 'docs/research/PRISM_2026_WEEK5_STAGE12_RETROSPECTIVE_REPLAY_V1_PLAN.md'
+      - '.github/workflows/research-prism-week5-stage12-retrospective-replay-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pyyaml
+
+      - name: Verify exact frozen artifact authorities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, subprocess
+          expected={
+            38991032116:(12084848700,'prism-week6-sunmon-stage2-shadow-v1-38991032116','sha256:ec1376dfa90fff3b5fc31e199588f7fe5f570017946adfd0b85be847af901e6e'),
+            37717016519:(11524296325,'player-landscape-transmission-audit-v1-37717016519','sha256:e043133d4b9a48ce472dde8810d4d77d636f4ce2fbcee14708b23fe0ea35f6a0'),
+            37560824479:(11456916566,'rb-player-state-allocation-shadow-v1-week5-37560824479','sha256:edf51bbd93920ef0af580a0396422af3288cf511785be59deeea95c117062af4'),
+            37654382316:(11497153776,'player-target-share-trajectory-shadow-v1-week5-37654382316','sha256:c12878ed97a4543a907ac54f4cbadadda7178db068491373091d2c048f176e88'),
+            38396065511:(11812261490,'week5-prospective-opportunity-locks-postmortem-v1-38396065511','sha256:56a589505cb17cdf71b90a13b2817ca7fd776a5f9a43e7a757a655128075f071'),
+            38397361891:(11812403368,'week5-player-failure-casebook-v1-38397361891','sha256:4cdef29912f35368473d57e15b38efdc3dd0f75e897bbbdc3b97fe1ff8f67670'),
+          }
+          repo=os.environ['GITHUB_REPOSITORY']
+          for run,(aid,name,digest) in expected.items():
+              raw=subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts'])
+              payload=json.loads(raw)
+              arts={int(a['id']):a for a in payload.get('artifacts',[])}
+              if aid not in arts: raise SystemExit(f'missing artifact {aid}')
+              a=arts[aid]
+              if a.get('expired'): raise SystemExit(f'expired artifact {aid}')
+              if a.get('name')!=name: raise SystemExit(f'name drift {aid}')
+              if a.get('digest')!=digest: raise SystemExit(f'digest drift {aid}')
+              print('SOURCE_VERIFIED',run,aid,name,digest)
+          PY
+
+      - name: Download pregame authorities only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-w5-stage12
+          mkdir -p /tmp/prism-w5-stage12/{stage1,state,rbid,wrteid,out}
+          gh run download 38991032116 --repo "${{ github.repository }}" --name prism-week6-sunmon-stage2-shadow-v1-38991032116 --dir /tmp/prism-w5-stage12/stage1
+          gh run download 37717016519 --repo "${{ github.repository }}" --name player-landscape-transmission-audit-v1-37717016519 --dir /tmp/prism-w5-stage12/state
+          gh run download 37560824479 --repo "${{ github.repository }}" --name rb-player-state-allocation-shadow-v1-week5-37560824479 --dir /tmp/prism-w5-stage12/rbid
+          gh run download 37654382316 --repo "${{ github.repository }}" --name player-target-share-trajectory-shadow-v1-week5-37654382316 --dir /tmp/prism-w5-stage12/wrteid
+          test ! -e /tmp/prism-w5-stage12/outcomes
+          test ! -e /tmp/prism-w5-stage12/casebook
+
+      - name: Build and freeze candidate before outcomes
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/research/replay_prism_week5_stage12_v1.py
+          python scripts/research/replay_prism_week5_stage12_v1.py build \
+            --player-state /tmp/prism-w5-stage12/state/player_landscape_week5_player_state.csv \
+            --stage1-prior-universe /tmp/prism-w5-stage12/stage1/prism_week6_stage1_prior_universe.csv \
+            --official-inactives /tmp/prism-w5-stage12/stage1/prism_week6_prior_official_inactives.csv \
+            --rb-identity-lock /tmp/prism-w5-stage12/rbid/rb_player_state_allocation_week5_lock.csv \
+            --wrte-identity-lock /tmp/prism-w5-stage12/wrteid/player_target_share_trajectory_shadow_week5_lock.csv \
+            --out-dir /tmp/prism-w5-stage12/out
+
+      - name: Certify candidate freeze before outcome download
+        run: |
+          python - <<'PY'
+          import json
+          p='/tmp/prism-w5-stage12/out/prism_week5_stage12_build_certificate.json'
+          r=json.load(open(p))
+          assert r['status']=='WEEK5_STAGE12_CANDIDATE_FROZEN_BEFORE_OUTCOMES'
+          assert r['prior_history_max_week']==4
+          assert r['target_week_participation_columns_consumed']==0
+          assert r['target_week_outcomes_read_by_builder']==0
+          assert r['rb_target_identity_rate']>=0.99
+          assert r['te_target_identity_rate']>=0.99
+          assert r['max_candidate_mass_gap']<=1e-12
+          assert r['sportsbook_inputs']==0 and r['oddsapi_calls']==0
+          assert r['models_fit']==0 and r['thresholds_fit']==0
+          assert r['production_changed'] is False
+          print(json.dumps(r,indent=2,sort_keys=True))
+          PY
+
+      - name: Download frozen Week5 outcomes only after candidate freeze
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/prism-w5-stage12/{outcomes,casebook}
+          gh run download 38396065511 --repo "${{ github.repository }}" --name week5-prospective-opportunity-locks-postmortem-v1-38396065511 --dir /tmp/prism-w5-stage12/outcomes
+          gh run download 38397361891 --repo "${{ github.repository }}" --name week5-player-failure-casebook-v1-38397361891 --dir /tmp/prism-w5-stage12/casebook
+
+      - name: Score exact frozen candidate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python scripts/research/replay_prism_week5_stage12_v1.py score \
+            --candidate-rows /tmp/prism-w5-stage12/out/prism_week5_stage12_candidate_rows.csv \
+            --build-certificate /tmp/prism-w5-stage12/out/prism_week5_stage12_build_certificate.json \
+            --rb-rush-outcomes /tmp/prism-w5-stage12/outcomes/week5_rb_carry_snap_graded_rows.csv \
+            --rb-rec-outcomes /tmp/prism-w5-stage12/outcomes/week5_rb_receiving_candidate_graded_rows.csv \
+            --wrte-outcomes /tmp/prism-w5-stage12/outcomes/week5_wrte_trajectory_graded_rows.csv \
+            --casebook /tmp/prism-w5-stage12/casebook/week5_player_failure_casebook_v1_rows.csv \
+            --out-dir /tmp/prism-w5-stage12/out
+
+      - name: Certify replay integrity
+        env:
+          HEAD_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import json, os
+          root='/tmp/prism-w5-stage12/out/'
+          b=json.load(open(root+'prism_week5_stage12_build_certificate.json'))
+          r=json.load(open(root+'prism_week5_stage12_metrics.json'))
+          assert r['candidate_row_digest_verified']==b['candidate_row_digest']
+          assert r['target_week_outcomes_used_only_after_candidate_freeze'] is True
+          assert r['week6_outcomes_read']==0
+          assert r['sportsbook_predictors']==0 and r['oddsapi_calls']==0
+          assert r['models_fit']==0 and r['thresholds_fit']==0
+          assert r['production_changed'] is False
+          cert={
+            'version':'PRISM_WEEK5_STAGE12_RETROSPECTIVE_REPLAY_V1_CERT',
+            'status':r['status'],
+            'exact_head':os.environ['HEAD_SHA'],
+            'run_id':int(os.environ['RUN_ID']),
+            'candidate_row_digest':b['candidate_row_digest'],
+            'build':b,'score':r,
+            'week6_outcomes_read':0,'sportsbook_predictors':0,
+            'oddsapi_calls':0,'production_changed':False,
+          }
+          open(root+'prism_week5_stage12_replay_certificate.json','w').write(
+              json.dumps(cert,indent=2,sort_keys=True)+'\n'
+          )
+          print(json.dumps(cert,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY' >/tmp/prism-w5-stage12/comment.md
+          import json
+          b=json.load(open('/tmp/prism-w5-stage12/out/prism_week5_stage12_build_certificate.json'))
+          r=json.load(open('/tmp/prism-w5-stage12/out/prism_week5_stage12_metrics.json'))
+          print('PRISM Week-5 Stage-1/Stage-2 retrospective replay completed.')
+          print('Exact head: ${{ github.sha }}  Run: ${{ github.run_id }}')
+          print('Candidate frozen before outcomes: YES')
+          print('Candidate rows:',b['candidate_rows'])
+          print('RB target identity:',b['rb_target_identity_rate'])
+          print('TE target identity:',b['te_target_identity_rate'])
+          print('Candidate digest:',b['candidate_row_digest'])
+          print('Disposition:',r['status'])
+          print('Metrics:',json.dumps(r['metrics'],sort_keys=True))
+          print('Support:',json.dumps(r['support'],sort_keys=True))
+          print('Integrity: Week-6 outcomes 0; sportsbook 0; OddsAPI 0; fit 0; production unchanged.')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/prism-w5-stage12/comment.md
+
+      - name: Upload certified replay
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-week5-stage12-retrospective-replay-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-w5-stage12/out/**
