@@ -1,0 +1,212 @@
+name: Research PRISM Team High-Value Creation Rate V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_TEAM_HIGH_VALUE_CREATION_RATE_V1_FREEZE.md'
+      - 'scripts/research/evaluate_prism_team_high_value_creation_rate_v1.py'
+      - 'tests/test_prism_team_high_value_creation_rate_v1.py'
+      - '.github/workflows/research-prism-team-high-value-creation-rate-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "02e25a29e26c0562f298fdd71a517f7602f424cf"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Announce frozen PRISM scoring run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM Team High-Value Creation Rate V1 scoring started: run `${{ github.run_id }}`, exact head `${{ github.sha }}`. Frozen at `$FREEZE_COMMIT`. No sportsbook, no OddsAPI, no 2026 outcomes, no opponent/environment predictor, no player high-value-share rescue, no production mutation."
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install scipy pytest pyarrow pyyaml
+
+      - name: Verify mechanism was frozen before implementation
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_TEAM_HIGH_VALUE_CREATION_RATE_V1_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/evaluate_prism_team_high_value_creation_rate_v1.py" 2>/dev/null; then
+            echo "ERROR: evaluator existed at freeze commit"
+            exit 1
+          fi
+          grep -q 'predictive candidates scored: \*\*0\*\*' docs/research/PRISM_TEAM_HIGH_VALUE_CREATION_RATE_V1_FREEZE.md
+          grep -q 'No alternative Poisson' docs/research/PRISM_TEAM_HIGH_VALUE_CREATION_RATE_V1_FREEZE.md
+
+      - name: Verify immutable parent artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12085367606 --jq '.workflow_run.id')" = "38991605252"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12085367606 --jq '.digest')" = "sha256:68b680c745ae8b8479b3dbaf8f41dcc4f6cb728a0f39b0ac10b77dc3ac8e4b90"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12085194208 --jq '.workflow_run.id')" = "38991915503"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12085194208 --jq '.digest')" = "sha256:c2be00311f9cf2149ebef36d419851214add08cae83bbc3b947990ce60a5e569"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12085278127 --jq '.workflow_run.id')" = "38991737241"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12085278127 --jq '.digest')" = "sha256:0be3d571129876ce0a8df755762215e147faec2ff1ac1822e05cbd84508a12bb"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-opportunity-quality-team-volume-v1-38991605252
+          path: /tmp/prism-team-volume-parent
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38991605252
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-conditional-allocation-source-v1-38991915503
+          path: /tmp/prism-stage2-parent
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38991915503
+
+      - name: Resolve immutable parent files
+        run: |
+          set -euo pipefail
+          TEAMGAMES="$(find /tmp/prism-team-volume-parent -type f -name 'prism_opportunity_quality_teamgames.csv' -print -quit)"
+          PLAYER_TOPOLOGY="$(find /tmp/prism-team-volume-parent -type f -name 'prism_opportunity_quality_player_topology.csv' -print -quit)"
+          TEAM_SOURCE_RESULT="$(find /tmp/prism-team-volume-parent -type f -name 'prism_opportunity_quality_source_result.json' -print -quit)"
+          STAGE2_DETAIL="$(find /tmp/prism-stage2-parent -type f -name 'active_role_conditional_allocation_source_join_detail.csv' -print -quit)"
+          STAGE2_RESULT="$(find /tmp/prism-stage2-parent -type f -name 'active_role_conditional_allocation_source_result.json' -print -quit)"
+          for f in "$TEAMGAMES" "$PLAYER_TOPOLOGY" "$TEAM_SOURCE_RESULT" "$STAGE2_DETAIL" "$STAGE2_RESULT"; do
+            test -n "$f" && test -s "$f"
+          done
+          echo "TEAMGAMES=$TEAMGAMES" >> "$GITHUB_ENV"
+          echo "PLAYER_TOPOLOGY=$PLAYER_TOPOLOGY" >> "$GITHUB_ENV"
+          echo "TEAM_SOURCE_RESULT=$TEAM_SOURCE_RESULT" >> "$GITHUB_ENV"
+          echo "STAGE2_DETAIL=$STAGE2_DETAIL" >> "$GITHUB_ENV"
+          echo "STAGE2_RESULT=$STAGE2_RESULT" >> "$GITHUB_ENV"
+
+      - name: Run frozen mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_prism_team_high_value_creation_rate_v1.py
+          pytest -q tests/test_prism_team_high_value_creation_rate_v1.py
+
+      - name: Score frozen 2024-development 2025-confirmation mechanism
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/prism-team-high-value-creation-v1
+          mkdir -p /tmp/prism-team-high-value-creation-v1
+          python scripts/research/evaluate_prism_team_high_value_creation_rate_v1.py             --teamgames "$TEAMGAMES"             --player-topology "$PLAYER_TOPOLOGY"             --team-source-result "$TEAM_SOURCE_RESULT"             --stage2-detail "$STAGE2_DETAIL"             --stage2-result "$STAGE2_RESULT"             --out-dir /tmp/prism-team-high-value-creation-v1
+
+      - name: Certify frozen scoring contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/prism-team-high-value-creation-v1/prism_team_high_value_creation_result.json'))
+          assert p['version']=='PRISM_TEAM_HIGH_VALUE_CREATION_RATE_V1',p
+          assert p['freeze_commit']=='02e25a29e26c0562f298fdd71a517f7602f424cf',p
+          assert p['target_seasons']==[2024,2025],p
+          assert p['target_weeks']==[5,18],p
+          assert p['history_window']==4 and p['history_min']==3,p
+          assert p['bootstrap_reps']==5000,p
+          assert set(p['cells'])=={
+              'RB_RUSH_INSIDE10','RB_RECEIVING_REDZONE','TE_RECEIVING_REDZONE'
+          },p
+          i=p['integrity']
+          assert i['player_recent_high_value_share_used'] is False,p
+          assert i['opponent_environment_predictor_used'] is False,p
+          assert i['td_outcomes_used']==0,p
+          assert i['sportsbook_inputs_used']==0,p
+          assert i['oddsapi_calls']==0,p
+          assert i['outcomes_2026_used']==0,p
+          assert i['fitted_predictive_coefficients']==0,p
+          assert i['threshold_searches']==0,p
+          assert i['production_changed'] is False,p
+          assert i['parent_denominator_formula_changed'] is False,p
+          assert i['player_entitlement_formula_changed'] is False,p
+          assert p['disposition'] in {
+              'PRISM_TEAM_HIGH_VALUE_CREATION_QUALIFIED_ALL',
+              'PRISM_TEAM_HIGH_VALUE_CREATION_QUALIFIED_PARTIAL',
+              'PRISM_TEAM_HIGH_VALUE_CREATION_CLOSED',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/prism-team-high-value-creation-v1/prism_team_high_value_creation_result.json'))
+          lines=[
+              '### PRISM Team High-Value Opportunity Creation Rate V1 — scored result',
+              '',
+              f"- Run: `{os.environ['RUN_ID']}`",
+              f"- Exact head: `{os.environ['HEAD_SHA']}`",
+              f"- Frozen mechanism commit: `{p['freeze_commit']}`",
+              f"- Overall disposition: `{p['disposition']}`",
+              '- 2024 = development; 2025 = independent confirmation',
+              '- Parent opportunity quantity = persisted canonical `authority_denominator_mean`',
+              '- Player allocation = unchanged canonical Stage-2 `q_i`',
+              '',
+          ]
+          for name,c in p['cells'].items():
+              d24=c['by_season']['2024']
+              d25=c['by_season']['2025']
+              inf=c['confirmation_2025_inference']
+              het=c['confirmation_2025_player_heterogeneity']
+              lines += [
+                  f"**{name}** — `{c['disposition']}`",
+                  f"- 2024 team CRPS gain: {d24['team']['crps_gain']:+.6f}; player CRPS gain: {d24['player']['crps_gain']:+.6f}",
+                  f"- 2025 team CRPS gain: {d25['team']['crps_gain']:+.6f}; player CRPS gain: {d25['player']['crps_gain']:+.6f}",
+                  f"- 2025 team-cluster CI low: {inf['team_cluster']['ci_low']:+.6f}; game-cluster CI low: {inf['game_cluster']['ci_low']:+.6f}",
+                  f"- 2025 player-cluster CI low: {inf['player_cluster']['ci_low']:+.6f}; team-game CI low: {inf['player_teamgame_cluster']['ci_low']:+.6f}; equal-player CI low: {inf['equal_player']['ci_low']:+.6f}",
+                  f"- 2025 median supported-player CRPS gain: {het['median_player_crps_gain']:+.6f}; positive-player share: {het['positive_player_share']:.4f}",
+                  f"- Failed gates: {', '.join(c['failed_gates']) if c['failed_gates'] else 'none'}",
+                  '',
+              ]
+          lines += [
+              'Integrity: no player recent scoring-area share, no opponent/environment predictor, no TD outcomes, no sportsbook, no OddsAPI, no 2026 outcomes, no fitted coefficient/threshold search, and no production mutation.',
+              '',
+              'Anti-rescue remains binding. Failed cells are closed as frozen; no band/window/subgroup/gate tuning is authorized from this result.',
+          ]
+          open('/tmp/prism_team_high_value_creation_issue.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/prism_team_high_value_creation_issue.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload scored artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-team-high-value-creation-rate-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/prism-team-high-value-creation-v1/**
