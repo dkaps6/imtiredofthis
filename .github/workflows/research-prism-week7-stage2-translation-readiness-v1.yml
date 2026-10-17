@@ -1,0 +1,108 @@
+name: Research PRISM Week7 Stage2 Translation Readiness V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/audit_prism_future_stage2_translation_readiness_v1.py'
+      - '.github/workflows/research-prism-week7-stage2-translation-readiness-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  readiness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install source-probe dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pandas numpy pyyaml 'pyarrow==18.1.0'
+
+      - name: Execute readiness-only Week7 probe
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-stage2-readiness
+          python -m py_compile scripts/research/audit_prism_future_stage2_translation_readiness_v1.py
+          python scripts/research/audit_prism_future_stage2_translation_readiness_v1.py             --season 2026             --target-week 7             --out-dir /tmp/prism-stage2-readiness
+
+      - name: Certify no scientific lock was created
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/prism-stage2-readiness/prism_future_stage2_translation_readiness_result.json'))
+          assert p['version']=='PRISM_FUTURE_STAGE2_TRANSLATION_READINESS_V1',p
+          assert p['target_week']==7,p
+          assert p['scientific_lock_created'] is False,p
+          assert p['stage2_lock_rows_created']==0,p
+          assert p['market_translation_rows_created']==0,p
+          assert p['target_outcomes_read']==0,p
+          assert p['week6_outcomes_read_by_probe']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['models_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['production_changed'] is False,p
+          assert p['status'] in {
+            'PRISM_FUTURE_STAGE2_TRANSLATION_SOURCE_READY__NO_SCIENTIFIC_LOCK_CREATED',
+            'PRISM_FUTURE_STAGE2_TRANSLATION_NOT_READY__FAIL_CLOSED',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+          p=json.load(open('/tmp/prism-stage2-readiness/prism_future_stage2_translation_readiness_result.json'))
+          print("## PRISM future Stage-2 market-translation readiness probe")
+          print()
+          print(f"Run: {os.environ['GITHUB_RUN_ID']}")
+          print(f"Exact head: {os.environ['GITHUB_SHA']}")
+          print(f"Disposition: {p['status']}")
+          print(f"Target: 2026 Week {p['target_week']}")
+          print(f"Source ready: {p['source_ready']}")
+          if p.get('source_blocker'):
+              print(f"Blocker: {p['source_blocker']}")
+          parent=p.get('player_state_result')
+          if parent:
+              print(f"Roster source week: {parent.get('roster_source_week')}")
+              print(f"Exact target-week roster ready: {parent.get('target_week_roster_source_ready')}")
+              print(f"Prior-week source complete: {parent.get('prior_week_source_completion',{}).get('complete')}")
+          print()
+          print("Readiness only: no scientific lock, no Stage-2 rows, no market-translation rows, no Week-6 outcomes, no target outcomes, no sportsbook/OddsAPI, no fit, no production mutation.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload readiness artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-week7-stage2-translation-readiness-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-stage2-readiness/**
