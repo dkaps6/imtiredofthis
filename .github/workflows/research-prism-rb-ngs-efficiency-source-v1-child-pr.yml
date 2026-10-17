@@ -1,4 +1,5 @@
 name: Research PRISM RB NGS Efficiency Source V1 Child PR
+
 on:
   pull_request:
     branches:
@@ -20,19 +21,42 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nflreadpy pandas numpy pyyaml 'pyarrow==18.1.0'
+
+      - name: Download certified pregame active-role universe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/rb-ngs-parent
+          mkdir -p /tmp/rb-ngs-parent
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12044155086 --jq '.id')" = "12044155086"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12044155086 --jq '.workflow_run.id')" = "38895205962"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12044155086 --jq '.digest')" = "sha256:a42322579aee682497223c7f53bce0b14a96dc6f466558e811770e681a035dad"
+          gh run download 38895205962 --repo "${{ github.repository }}" \
+            --name player-active-role-participation-source-v1-38895205962 \
+            --dir /tmp/rb-ngs-parent
+          U="$(find /tmp/rb-ngs-parent -type f -name player_active_role_pregame_universe.csv -print -quit)"
+          test -s "$U"
+          echo "PREGAME_UNIVERSE=$U" >> "$GITHUB_ENV"
+
       - name: Execute frozen source audit
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
+          set -euo pipefail
           python -m py_compile scripts/research/audit_prism_rb_ngs_rushing_efficiency_identity_v1_source.py
           rm -rf /tmp/rb-ngs-source
           mkdir -p /tmp/rb-ngs-source
-          python scripts/research/audit_prism_rb_ngs_rushing_efficiency_identity_v1_source.py             --out-dir /tmp/rb-ngs-source
+          python scripts/research/audit_prism_rb_ngs_rushing_efficiency_identity_v1_source.py \
+            --pregame-universe "$PREGAME_UNIVERSE" \
+            --out-dir /tmp/rb-ngs-source
+
       - name: Certify source-only boundary
         run: |
           python - <<'PY'
@@ -55,10 +79,12 @@ jobs:
           },p
           print(json.dumps(p,indent=2,sort_keys=True))
           PY
+
       - name: Strict repository audit
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: python scripts/utils/audit_repo.py --strict
+
       - name: Upload
         if: always()
         uses: actions/upload-artifact@v4
