@@ -1,0 +1,178 @@
+name: Research PRISM Week6 SunMon Stage2 Shadow V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_WEEK6_SUNMON_STAGE2_SHADOW_V1_FREEZE.md'
+      - 'scripts/research/lock_prism_week6_sunmon_stage2_shadow_v1.py'
+      - 'tests/test_prism_week6_sunmon_stage2_shadow_v1.py'
+      - '.github/workflows/research-prism-week6-sunmon-stage2-shadow-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "f954bf392c133c2507ff1b4bfa4d8325030abcc5"
+
+jobs:
+  lock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Announce outcome-blind PRISM shadow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body 'PRISM Week-6 Sunday/Monday Stage-2 prospective shadow source/lock started: run ${{ github.run_id }}, exact head ${{ github.sha }}. SEA-DEN is excluded because it already played before the Stage-2 freeze. Eligible cells only: RB rushing, RB receiving, TE receiving. No Week-6 outcomes, no sportsbook input upstream, no OddsAPI call, no production mutation.'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyarrow beautifulsoup4 requests
+
+      - name: Verify immutable pre-shadow freeze
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_WEEK6_SUNMON_STAGE2_SHADOW_V1_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/lock_prism_week6_sunmon_stage2_shadow_v1.py" 2>/dev/null; then
+            echo "ERROR: shadow implementation existed at freeze commit"
+            exit 1
+          fi
+          grep -q 'Thursday game.*EXCLUDED' docs/research/PRISM_WEEK6_SUNMON_STAGE2_SHADOW_V1_FREEZE.md
+          grep -q 'official-inactive team-game coverage >= 99%' docs/research/PRISM_WEEK6_SUNMON_STAGE2_SHADOW_V1_FREEZE.md
+
+      - name: Verify preserved Week-6 origin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11999923880 --jq '.workflow_run.id')" = "38791377571"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11999923880 --jq '.digest')" = "sha256:0916cd1cbec93f9a2529190b3df7c39172eee011a31eb9df429a35cdb9b41f61"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: run_38791377571
+          path: /tmp/week6-origin
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38791377571
+
+      - name: Resolve permitted football inputs only
+        run: |
+          set -euo pipefail
+          U="/tmp/week6-origin/data/football_simulation_universe.csv"
+          A="/tmp/week6-origin/data/current_player_availability.csv"
+          T="/tmp/week6-origin/data/target_entitlement_v1_trace.csv"
+          S="/tmp/week6-origin/data/schedules/schedule_2026.csv"
+          for f in "$U" "$A" "$T" "$S"; do test -s "$f"; done
+          echo "W6_UNIVERSE=$U" >> "$GITHUB_ENV"
+          echo "W6_AVAILABILITY=$A" >> "$GITHUB_ENV"
+          echo "W6_ENTITLEMENT=$T" >> "$GITHUB_ENV"
+          echo "W6_SCHEDULE=$S" >> "$GITHUB_ENV"
+
+      - name: Run frozen mechanical safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/lock_prism_week6_sunmon_stage2_shadow_v1.py
+          pytest -q tests/test_prism_week6_sunmon_stage2_shadow_v1.py
+          pytest -q tests/test_player_active_role_conditional_allocation_bridge_v1.py
+
+      - name: Build and lock PRISM Sunday/Monday shadow
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/prism-week6-shadow
+          mkdir -p /tmp/prism-week6-shadow
+          python scripts/research/lock_prism_week6_sunmon_stage2_shadow_v1.py             --universe "$W6_UNIVERSE"             --availability "$W6_AVAILABILITY"             --target-entitlement "$W6_ENTITLEMENT"             --schedule "$W6_SCHEDULE"             --out-dir /tmp/prism-week6-shadow
+
+      - name: Certify source/lock contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/prism-week6-shadow/prism_week6_sunmon_stage2_shadow_result.json'))
+          assert p['version']=='PRISM_WEEK6_SUNMON_STAGE2_SHADOW_V1',p
+          assert p['freeze_commit']=='f954bf392c133c2507ff1b4bfa4d8325030abcc5',p
+          assert p['origin_run']==38791377571,p
+          assert p['origin_artifact']==11999923880,p
+          assert p['excluded_game']=='SEA-DEN',p
+          assert p['eligible_cells']==['RB_RUSHING','RB_RECEIVING','TE_RECEIVING'],p
+          assert p['week6_target_outcomes_read']==0,p
+          assert p['sea_den_outcome_read']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['new_share_models_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'PRISM_WEEK6_SUNMON_STAGE2_SHADOW_LOCKED',
+              'PRISM_WEEK6_SUNMON_STAGE2_SHADOW_SOURCE_BLOCKED',
+          },p
+          if p['disposition'].endswith('_LOCKED'):
+              assert p['included_game_count']==13,p
+              assert all(p['source_gates'].values()),p
+              assert all(p['target_gates'].values()),p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/prism-week6-shadow/prism_week6_sunmon_stage2_shadow_result.json'))
+          lines=[
+              '### PRISM Week-6 Sunday/Monday Stage-2 shadow',
+              '',
+              f"- Run: `{os.environ['RUN_ID']}`",
+              f"- Exact head: `{os.environ['HEAD_SHA']}`",
+              f"- Freeze commit: `{p['freeze_commit']}`",
+              f"- Disposition: `{p['disposition']}`",
+              '- SEA-DEN: excluded (already played before Stage-2 freeze)',
+              '- Cells: RB rushing, RB receiving, TE receiving',
+              '',
+              f"- Prior roster coverage: {p.get('source_metrics',{}).get('roster_teamgame_coverage','n/a')}",
+              f"- Prior inactive coverage: {p.get('source_metrics',{}).get('official_inactive_teamgame_coverage','n/a')}",
+              f"- Prior snap coverage: {p.get('source_metrics',{}).get('snap_teamgame_coverage','n/a')}",
+              f"- Shadow rows: {p.get('shadow_rows','n/a')}",
+              '',
+              'Integrity: zero Week-6 target outcomes read; zero sportsbook input upstream; zero OddsAPI calls; zero fitted share models; zero production mutation.',
+          ]
+          open('/tmp/prism_week6_issue.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/prism_week6_issue.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload immutable PRISM Week-6 shadow
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-week6-sunmon-stage2-shadow-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/prism-week6-shadow/**
