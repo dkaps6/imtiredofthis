@@ -6,7 +6,7 @@ docs/research/PRISM_RB_TE_RECEIVING_JOINT_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_V1_
 
 Candidate construction uses only preserved pregame q_i and qualified Stage-1
 p_active. Target-game counts are read only after the complete candidate state
-has been materialized.
+has been materialized. RB and TE are never allowed to rescue one another.
 """
 from __future__ import annotations
 
