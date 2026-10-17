@@ -1,0 +1,104 @@
+name: Research WR Dual Reliability Prospective Mechanics V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/lock_wr_dual_reliability_prospective_v1.py'
+      - 'tests/test_wr_dual_reliability_prospective_v1.py'
+      - '.github/workflows/research-wr-dual-reliability-prospective-mechanics-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  mechanics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest
+
+      - name: Verify frozen prospective parent plan
+        run: |
+          set -euo pipefail
+          test -s docs/research/WR_DUAL_RELIABILITY_TRUST_PROSPECTIVE_CONFIRMATION_V1_PLAN.md
+          grep -q '2026 Weeks \*\*7, 8, 9, 10\*\*' docs/research/WR_DUAL_RELIABILITY_TRUST_PROSPECTIVE_CONFIRMATION_V1_PLAN.md
+          grep -q 'Week 6 is \*\*not\*\* part of this composite prospective confirmation' docs/research/WR_DUAL_RELIABILITY_TRUST_PROSPECTIVE_CONFIRMATION_V1_PLAN.md
+          grep -q 'dual_fragility_score = (opportunity + efficiency) / 2' docs/research/WR_DUAL_RELIABILITY_TRUST_PROSPECTIVE_CONFIRMATION_V1_PLAN.md
+
+      - name: Run prospective mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/lock_wr_dual_reliability_prospective_v1.py
+          pytest -q tests/test_wr_dual_reliability_prospective_v1.py
+
+      - name: Certify no Week-7 scientific lock was created
+        env:
+          HEAD_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          mkdir -p /tmp/wr-dual-mechanics
+          python - <<'PY'
+          import json, os
+          p={
+            "version":"WR_DUAL_RELIABILITY_TRUST_PROSPECTIVE_MECHANICS_V1",
+            "status":"WR_DUAL_RELIABILITY_PROSPECTIVE_MECHANICS_READY__NO_WEEK7_LOCK",
+            "exact_head":os.environ["HEAD_SHA"],
+            "run_id":int(os.environ["RUN_ID"]),
+            "fixed_target_weeks":[7,8,9,10],
+            "week6_composite_backfilled":False,
+            "week7_scientific_rows_frozen":0,
+            "week6_outcomes_read":0,
+            "week7_outcomes_read":0,
+            "sportsbook_inputs_used":0,
+            "oddsapi_calls":0,
+            "models_fit":0,
+            "projection_distribution_values_changed":0,
+            "production_changed":False,
+            "week7_lock_boundary":"FAIL_CLOSED_UNLESS_STRICT_PRIOR_HISTORY_MAX_WEEK_EQUALS_6",
+          }
+          open('/tmp/wr-dual-mechanics/mechanics_result.json','w').write(
+              json.dumps(p,indent=2,sort_keys=True)+'\n'
+          )
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 mechanics checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "WR dual-reliability prospective mechanics are prepared at exact head ${{ github.sha }} (run ${{ github.run_id }}). This is mechanics only: Week-7 scientific rows frozen = 0; Week-6 outcomes read = 0; Week-7 outcomes read = 0; no sportsbook/OddsAPI; no model fit; no production mutation. The builder fails closed unless strict-prior 2026 history is complete through Week 6, so no Week-7 lock can be created early. Fixed confirmation horizon remains Weeks 7-10; no Week-6 dual backfill."
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload mechanics certificate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-dual-reliability-prospective-mechanics-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/wr-dual-mechanics/**
