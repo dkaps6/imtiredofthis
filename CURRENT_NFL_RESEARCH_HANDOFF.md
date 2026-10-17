@@ -1,5 +1,119 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-16 — PRISM DENOMINATOR PERSISTENCE PASS / OPPORTUNITY-QUALITY MECHANISM NEXT
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-16_PRISM_DENOMINATOR_PERSISTENCE_PASS_OPPORTUNITY_QUALITY_MECHANISM_NEXT.md`
+
+Reusable next-chat prompt:
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-16_PRISM_DENOMINATOR_PERSISTENCE_PASS.md`
+
+Canonical player-first order:
+
+`PLAYER IDENTITY -> CURRENT ROLE/STATE -> TEAMMATE COMPETITION -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+### Newest canonical milestone
+
+`PRISM_PARENT_DENOMINATOR_PERSISTENCE_PARITY_PASS`
+
+Canonical execution:
+- run `38991915503` — SUCCESS;
+- job `117275946409`;
+- exact head `02e96ad9faabee62c1ecb31303b48746e4945a8c`;
+- artifact `12085194208`;
+- digest `sha256:c2be00311f9cf2149ebef36d419851214add08cae83bbc3b947990ce60a5e569`;
+- result `docs/research/PRISM_OPPORTUNITY_QUALITY_PARENT_DENOMINATOR_PERSISTENCE_V1_RESULT.md`.
+
+Exact parity:
+- 14,284 rows;
+- key sets exact;
+- denominator finite flags exact;
+- ready cells exact;
+- scientific source disposition exact;
+- max absolute canonical entitlement-q drift `2.0816681711721685e-16`.
+
+Persisted output lineage:
+`authority_denominator_mean`.
+
+No denominator formula changed.
+No entitlement formula changed.
+No predictive candidate scored.
+No sportsbook.
+No OddsAPI.
+No 2026 outcomes.
+No production mutation.
+
+### Protected prior milestones
+
+Stage 1 active-role:
+`PLAYER_ACTIVE_ROLE_PARTICIPATION_MECHANISM_QUALIFIED_ALL`.
+
+Stage 2 historical bridge:
+`PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_QUALIFIED_PARTIAL`.
+
+Qualified Stage-2 cells:
+- RB rushing;
+- RB receiving;
+- TE receiving.
+
+QB exact Stage-2 V1 is CLOSED.
+WR Stage-2 remains source-blocked/not scored.
+
+Week-6 Sunday/Monday forward shadow remains immutable:
+- run `38991032116` SUCCESS;
+- artifact `12084848700`;
+- 13 games;
+- 248 player-cell rows;
+- SEA-DEN excluded;
+- zero target outcomes read at lock.
+
+Do not grade it until all included games are final.
+
+Opportunity-quality source is reconciled ready:
+- Stage-2 compatibility run `38991429245`;
+- raw finite-pool run `38991605252`;
+- exact reconciliation run `38991737241`;
+- 832/832 2024-2025 W5-18 team-games;
+- zero key/count mismatch.
+
+### Exact next action
+
+Freeze ONE **team high-value-opportunity creation** mechanism before scoring.
+
+Question:
+
+> Conditional on PRISM's existing canonical pregame parent opportunity quantity, does the team's own strictly-prior high-value opportunity creation state improve next-game high-value opportunity count?
+
+Allowed source-ready quality pools:
+- RB rushing: team inside-10 rushing opportunities;
+- RB receiving: team red-zone targets;
+- TE receiving: team red-zone targets.
+
+Use:
+- 2024 development;
+- 2025 independent confirmation.
+
+Player-side allocation must remain current canonical entitlement / qualified Stage-2 logic.
+
+Do NOT:
+- use recent player scoring-area share as the candidate;
+- reopen `PLAYER_HIGH_VALUE_OPPORTUNITY_PERSISTENCE_CLOSED`;
+- add opponent/environment transmission yet;
+- use TD outcomes to rescue;
+- tune windows/bands/subgroups after scoring;
+- use sportsbook upstream;
+- call OddsAPI;
+- use 2026 outcomes;
+- mutate production.
+
+Freeze formula, support, score, clustered inference and anti-rescue contract before scoring.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-16 — PRISM DENOMINATOR PERSISTED / OPPORTUNITY-QUALITY MECHANISM NEXT
 
 **Model:** PRISM — Player Role & Individual Situation Model
