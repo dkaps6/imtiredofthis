@@ -1,5 +1,85 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-16 — PRISM TEAM DRIVE CREATION CLOSED / OPPONENT-ENVIRONMENT BOUNDARY
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-16_PRISM_TEAM_DRIVE_CREATION_CLOSED_OPPONENT_BOUNDARY_NEXT.md`
+
+Reusable next-chat prompt:
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-16_PRISM_TEAM_DRIVE_CREATION_CLOSED.md`
+
+Canonical player-first order:
+
+`PLAYER IDENTITY -> CURRENT ROLE/STATE -> TEAMMATE COMPETITION -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+### Newest canonical milestone
+
+`PRISM_TEAM_DRIVE_CREATION_CLOSED`
+
+Frozen mechanism:
+- freeze `82f74487e68729efdbcc0868968fd6ddccd4eef1`.
+
+Canonical execution:
+- run `39000352640` — SUCCESS;
+- exact head `2baba745aa0fe50a9bcb88600051f28a783a197d`;
+- artifact `12088459232`;
+- digest `sha256:4816dbb88dd85911999171bad60700ab4eccbd62266396af302d689f661be881`;
+- result `docs/research/PRISM_TEAM_SCORING_TERRITORY_DRIVE_CREATION_V1_RESULT.md`;
+- strict repository audit: PASS.
+
+All three frozen cells CLOSED:
+- RB rushing inside-10;
+- RB receiving red-zone targets;
+- TE receiving red-zone targets.
+
+The drive-entry mechanism was a genuinely different team-side opportunity-quality
+state from the already-closed direct recent high-value-event-rate persistence
+formula. It still failed the frozen proper-score/inference gates.
+
+Small positive TE player-level point estimates do not qualify because the team
+finite red-zone pool worsened and dependence-aware player intervals crossed zero.
+
+### Protected state
+
+- Stage 1 active-role: QUALIFIED ALL.
+- Stage 2 allocation: QUALIFIED for RB rushing / RB receiving / TE receiving.
+- QB Stage-2 V1: CLOSED.
+- WR Stage-2: source-blocked/not scored.
+- Player recent high-value-share persistence: CLOSED.
+- Direct team recent high-value-event-rate persistence: CLOSED.
+- Team scoring-territory drive creation V1: CLOSED.
+- Parent denominator persistence: PASS.
+- Week-6 Sunday/Monday shadow remains LOCKED: 13 games / 248 player-cell rows /
+  SEA-DEN excluded. Do not grade until all included games are final.
+- No paid OddsAPI credit authorized.
+
+### Exact boundary / next action
+
+Do **not** reopen either closed team-side opportunity-quality persistence family.
+
+The next conceptual architecture layer is `OPPONENT/ENVIRONMENT`, but the
+governing instruction for this phase explicitly said **do not add
+opponent/environment transmission yet**.
+
+Therefore do not score an opponent/environment candidate until that boundary is
+deliberately crossed in a subsequent continuation.
+
+Also do not:
+- swap drive state for plays-inside-territory as a rescue;
+- tune windows/shrinkage/thresholds after results;
+- use TD outcomes to rescue;
+- use sportsbook inputs upstream;
+- call OddsAPI without explicit authorization;
+- use 2026 outcomes for retrospective mechanism discovery;
+- mutate production;
+- grade Week 6 early.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-16 — PRISM TEAM HIGH-VALUE CREATION CLOSED / DRIVE TOPOLOGY NEXT
 
 **Model:** PRISM — Player Role & Individual Situation Model
