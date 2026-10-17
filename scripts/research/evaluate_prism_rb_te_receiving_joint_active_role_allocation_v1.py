@@ -221,6 +221,7 @@ def candidate_source(
                 "candidate_expected_q": float(exp_map.get(i, qi)),
                 "candidate_expected_shift": float(exp_map.get(i, qi) - qi),
                 "room_state_count": int(len(weights)),
+                "room_local_index": int(i),
                 "candidate_construction_outcomes_read": 0,
             })
 
@@ -236,13 +237,15 @@ def candidate_source(
 
 
 def mixture_binom_cdf(N: int, probs: np.ndarray, weights: np.ndarray) -> np.ndarray:
-    ks = np.arange(int(N) + 1)
-    out = np.zeros(len(ks), float)
-    for pr, wt in zip(np.asarray(probs, float), np.asarray(weights, float)):
-        out += float(wt) * binom(int(N), float(pr)).cdf(ks)
+    """Exact parent mixture, vectorized across states for joint-room runtime only."""
+    ks = np.arange(int(N) + 1, dtype=float)
+    pr = np.asarray(probs, float)
+    wt = np.asarray(weights, float)
+    cdfs = binom.cdf(ks[None, :], int(N), pr[:, None])
+    out = wt @ cdfs
     if not np.isfinite(out).all():
         raise RuntimeError("non-finite joint mixture CDF")
-    return out
+    return np.asarray(out, float)
 
 
 def equal_player_frame(rows: pd.DataFrame) -> pd.DataFrame:
@@ -327,18 +330,7 @@ def score(
         base_cdf = binom(N, min(max(qi, 0.0), 1.0)).cdf(ks)
         baseline_crps.append(discrete_crps(base_cdf, yi))
         # Candidate is unchanged for canonical-zero rows.
-        room_rows = candidate.loc[
-            candidate["season"].eq(r.season)
-            & candidate["week"].eq(r.week)
-            & candidate["team"].eq(r.team)
-        ].sort_values(["family", "player_id"]).reset_index(drop=True)
-        idx = room_rows.index[
-            room_rows["family"].eq(r.family)
-            & room_rows["player_id"].astype(str).eq(str(r.player_id))
-        ]
-        if len(idx) != 1:
-            raise RuntimeError("joint candidate room row identity drift")
-        local_idx = int(idx[0])
+        local_idx = int(r.room_local_index)
         if local_idx in st["positive_position"]:
             j = st["positive_position"][local_idx]
             cdf = mixture_binom_cdf(
