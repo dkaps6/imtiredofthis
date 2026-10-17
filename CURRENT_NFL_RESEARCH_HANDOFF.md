@@ -1,5 +1,135 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-17 — PRISM WEEK-4/5 REPLAY COMPLETE / FINITE ALLOCATION COHERENCE GAP CONFIRMED
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-17_PRISM_WEEK4_5_REPLAY_COMPLETE_FINITE_ALLOCATION_GAP.md`
+
+### Non-negotiable scientific object
+
+PRISM remains an **individual-player projection model**:
+
+`PLAYER IDENTITY/HISTORY -> CURRENT ROLE/STATE/TRAJECTORY -> TEAMMATE COMPETITION -> FINITE OPPORTUNITY ALLOCATION -> OPPORTUNITY TYPE/QUALITY -> TEAM/GAME ENVIRONMENT -> PLAYER-CONDITIONED OPPONENT MATCHUP -> INDIVIDUAL EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+Position-average MAE/RMSE is downstream QA only.
+
+### Week-4/5 all-row replay — COMPLETE
+
+Canonical execution:
+- run `39043393975` — SUCCESS;
+- exact head `c77a31900c8f99692201453114685cd15796e568`;
+- artifact `12105086305`;
+- digest `sha256:653e58cd37511dc2ddae499c0b123a564a5317b9912d556a2c427cb05148a363`;
+- disposition `PRISM_WEEK4_5_ALL_ROW_PLAYER_FIRST_REPLAY_COMPLETE__DIAGNOSTIC_ONLY__NO_PROMOTION`.
+
+Preserved:
+- 836 named player-game-market rows;
+- W4 440 / W5 396;
+- 819 settled;
+- 236 unique players;
+- 100 informative cases;
+- 100 matched correct controls;
+- 20 repeat same-player+market rows / 10 identities;
+- 405 exact/preserved opportunity-efficiency component rows.
+
+Informative casebook:
+- opportunity quantity misread 40;
+- source blocked/unavailable 28;
+- efficiency misread 20;
+- mixed 12.
+
+No fit, no threshold search, no sportsbook upstream/refetch, no OddsAPI, no Week-6 outcomes, no Week-6 lock changes, no production mutation.
+
+### RB/TE depth-role state source audit — BLOCKED
+
+Canonical:
+- run `39043968618`;
+- exact head `a57b6160a7fea6c31f88a9ea4be3eb198d0349d8`;
+- artifact `12105236525`;
+- digest `sha256:016ef7db56cd9aa077d39613b9d52062927c122e8c5b6d01df36acc35a4eb492`;
+- disposition `PRISM_RB_TE_DEPTH_ROLE_TRANSITION_SOURCE_BLOCKED`.
+
+2025 and the 2026 prospective probe do not provide eligible explicit week-tagged depth semantics. Do not lower gates or infer role from target-game outcomes/snaps.
+
+### Finite-allocation transmission — ARCHITECTURE GAP CONFIRMED
+
+Canonical latest execution:
+- run `39044043517`;
+- exact head `189c23a063c58c74473de27f9033b7a4b411a9cc`;
+- artifact `12105037700`;
+- digest `sha256:fcdbe6732df9aa1803aa235680ee151dd23c3067221ebfb5dd74bc8a78801da8`;
+- disposition `PRISM_WEEK5_FINITE_ALLOCATION_TRANSMISSION_AUDIT_COMPLETE__ARCHITECTURE_GAP_CONFIRMED__NO_MODEL_CHANGE`.
+
+Week-5 preserved player-state:
+- 30/30 target rooms exceeded modeled-player mass 0.95 before conservation;
+- raw target mass mean 1.5052;
+- mean target scale factor 0.6352;
+- 30/30 top-five rushing rooms exceeded 0.95;
+- top-five rush mass mean 1.2682;
+- mean rush scale factor 0.7614.
+
+Brock Bowers exact frozen path:
+- upstream rules target share 0.277666;
+- final target probability 0.206265;
+- clean scale factor ~0.742851;
+- ~25.7% attenuation.
+
+Interpretation:
+independently constructed player shares can overbook the finite team pool and force the valid conservation layer to attenuate a strong named-player role read.
+
+**Do not remove conservation.** The scientific target is a jointly coherent named-player entitlement/allocation state before conservation.
+
+### Existing Stage-2 science
+
+`PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_QUALIFIED_PARTIAL`.
+
+Qualified:
+- RB rushing;
+- RB receiving;
+- TE receiving.
+
+Closed/not scored:
+- QB exact Stage-2 CLOSED;
+- WR Stage-2 source-blocked/not scored.
+
+The exact Week-4/5 Stage-2 counterfactual is source-blocked because original pregame q/availability authorities expired. Do not approximate it.
+
+### Exact next action
+
+Perform a **source/lineage audit first** for independent validation of the already-qualified Stage-2 allocation architecture into market-specific PRISM outcomes.
+
+Preferred first source question:
+can exact frozen Stage-1 + canonical q_i + Stage-2 semantics be reconstructed on an untouched/pre-authority season, preferably 2023, with legitimate OOS entitlement provenance for RB rushing, RB receiving and TE receiving?
+
+If source-valid:
+- freeze a separate market-specific translation test before scoring;
+- preserve Stage-2 mechanics and existing efficiency authority unchanged;
+- no threshold/window/weight tuning.
+
+If source-blocked:
+- fail closed;
+- do not invent a historical proxy;
+- prepare future prospective mechanics without touching immutable Week-6 locks.
+
+### Protected
+
+- raw recent-share replacement CLOSED;
+- Room Competition State SOURCE_BLOCKED;
+- RB/TE depth-role transition SOURCE_BLOCKED;
+- generic DvP closed;
+- old broad conservation/group-mass rescues closed;
+- Week-6 locks/shadows immutable and ungraded;
+- no Week-6 WR dual backfill;
+- Weeks 7-10 WR dual prospective protocol protected;
+- no paid OddsAPI without explicit authorization;
+- no sportsbook upstream;
+- no production mutation from forensic work.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-17 — PRISM PLAYER-FIRST WEEK-4/5 FORENSIC REPLAY ACTIVE
 
 **Model:** PRISM — Player Role & Individual Situation Model
