@@ -107,3 +107,45 @@ def test_strict_prior_state_never_consumes_target_or_future_game():
     # The target-week 100/200/300/400 values must not enter any prior state.
     assert a5["prior_inside10_rush_mean"] < 10
     assert a5["prior_opp_inside10_rush_allowed_mean"] < 100
+
+
+def test_missing_rush_source_is_not_relabelled_zero():
+    schedule = pd.DataFrame([
+        {"season": 2025, "week": 5, "game_id": "g", "team": "AAA", "opponent": "BBB"},
+        {"season": 2025, "week": 5, "game_id": "g", "team": "BBB", "opponent": "AAA"},
+    ])
+    # Only AAA has a rush event source row. Both teams have target/play source.
+    rush = pd.DataFrame([
+        {
+            "season": 2025, "week": 5, "game_id": "g", "team": "AAA",
+            "play_id": "r1", "inside20": False, "inside10": False,
+            "inside5": False, "family": "RB",
+        },
+    ])
+    target = pd.DataFrame([
+        {
+            "season": 2025, "week": 5, "game_id": "g", "team": "AAA",
+            "play_id": "t1", "red_zone": False, "end_zone_target": False,
+            "family": "TE",
+        },
+        {
+            "season": 2025, "week": 5, "game_id": "g", "team": "BBB",
+            "play_id": "t2", "red_zone": False, "end_zone_target": False,
+            "family": "TE",
+        },
+    ])
+    plays = pd.DataFrame([
+        {"season": 2025, "week": 5, "game_id": "g", "team": "AAA", "opponent": "BBB", "yardline_100": 50, "drive_id": "1"},
+        {"season": 2025, "week": 5, "game_id": "g", "team": "BBB", "opponent": "AAA", "yardline_100": 50, "drive_id": "2"},
+    ])
+
+    out = aggregate_teamgames(schedule, rush, target, plays, 2025)
+    a = out.loc[out["team"].eq("AAA")].iloc[0]
+    b = out.loc[out["team"].eq("BBB")].iloc[0]
+
+    assert bool(a["rush_source_present"])
+    assert float(a["inside10_rush"]) == 0.0
+    assert not bool(b["rush_source_present"])
+    assert np.isnan(float(b["inside10_rush"]))
+    assert bool(b["target_source_present"])
+    assert float(b["red_zone_targets"]) == 0.0
