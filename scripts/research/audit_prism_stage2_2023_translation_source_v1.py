@@ -70,35 +70,48 @@ def main() -> int:
 
     # Actual 2023 roster source probe. This is identity/source characterization
     # only; target-game outcome columns are never loaded.
-    raw_roster = m78.load_weekly_rosters(TARGET_SEASON, source_meta)
-    roster = normalize_roster(raw_roster, TARGET_SEASON)
-    roster_target = roster.loc[roster["week"].isin(TARGET_WEEKS)].copy()
-    roster_weeks = sorted(roster_target["week"].unique().tolist())
-    roster_stable_id = (
-        float(roster_target["player_id"].astype(str).str.strip().ne("").mean())
-        if len(roster_target) else 0.0
-    )
+    roster_error = ""
+    try:
+        raw_roster = m78.load_weekly_rosters(TARGET_SEASON, source_meta)
+        roster = normalize_roster(raw_roster, TARGET_SEASON)
+        roster_target = roster.loc[roster["week"].isin(TARGET_WEEKS)].copy()
+        roster_weeks = sorted(roster_target["week"].unique().tolist())
+        roster_stable_id = (
+            float(roster_target["player_id"].astype(str).str.strip().ne("").mean())
+            if len(roster_target) else 0.0
+        )
+    except Exception as exc:
+        roster_target = pd.DataFrame()
+        roster_weeks = []
+        roster_stable_id = 0.0
+        roster_error = f"{type(exc).__name__}:{exc}"
 
     # Actual historical offensive-snap source probe. No target value is scored.
-    as_of = datetime.now(timezone.utc).isoformat()
-    raw_snaps = m76.download_table(
-        "pfr_snap_counts",
-        TARGET_SEASON,
-        m76.release_urls("snaps", TARGET_SEASON),
-        source_meta,
-        as_of,
-    )
-    if raw_snaps.empty:
-        snap_rows = 0
-        snap_weeks: list[int] = []
-    else:
-        snap = raw_snaps.copy()
-        snap.columns = [str(c).strip().lower() for c in snap.columns]
-        snap_rows = int(len(snap))
-        snap_weeks = (
-            sorted(num(snap["week"]).dropna().astype(int).unique().tolist())
-            if "week" in snap.columns else []
+    snap_error = ""
+    try:
+        as_of = datetime.now(timezone.utc).isoformat()
+        raw_snaps = m76.download_table(
+            "pfr_snap_counts",
+            TARGET_SEASON,
+            m76.release_urls("snaps", TARGET_SEASON),
+            source_meta,
+            as_of,
         )
+        if raw_snaps.empty:
+            snap_rows = 0
+            snap_weeks = []
+        else:
+            snap = raw_snaps.copy()
+            snap.columns = [str(col).strip().lower() for col in snap.columns]
+            snap_rows = int(len(snap))
+            snap_weeks = (
+                sorted(num(snap["week"]).dropna().astype(int).unique().tolist())
+                if "week" in snap.columns else []
+            )
+    except Exception as exc:
+        snap_rows = 0
+        snap_weeks = []
+        snap_error = f"{type(exc).__name__}:{exc}"
 
     # TE-R5P OOS source lineage.
     coeff = read_csv(args.te_coefficients, "TE-R5P coefficients")
@@ -209,10 +222,12 @@ def main() -> int:
             "rows_weeks_5_18": int(len(roster_target)),
             "weeks": roster_weeks,
             "stable_identity_rate": roster_stable_id,
+            "source_error": roster_error,
         },
         "snap_probe": {
             "raw_rows": snap_rows,
             "weeks": snap_weeks,
+            "source_error": snap_error,
         },
         "entitlement_lineage": entitlement_lineage,
         "per_cell": per_cell,
