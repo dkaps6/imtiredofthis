@@ -1,0 +1,136 @@
+name: Research PRISM Future Stage2 Market Translation Trace V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_FUTURE_STAGE2_MARKET_TRANSLATION_TRACE_V1_FREEZE.md'
+      - 'scripts/research/build_prism_future_stage2_market_translation_trace_v1.py'
+      - 'tests/test_prism_future_stage2_market_translation_trace_v1.py'
+      - '.github/workflows/research-prism-future-stage2-market-translation-trace-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "4ad5ab802f68b67c2358f8e8bc6942ebfedb5eaa"
+
+jobs:
+  mechanics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Record mechanics start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM future Stage-2 market-translation mechanics validation started: run ${{ github.run_id }}, exact head ${{ github.sha }}. Mechanics only: no scientific target lock, no Week-6 backfill/outcomes, no sportsbook/OddsAPI, no fit, no production mutation."
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest pyyaml
+
+      - name: Verify mechanics were frozen before implementation
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_FUTURE_STAGE2_MARKET_TRANSLATION_TRACE_V1_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/build_prism_future_stage2_market_translation_trace_v1.py" 2>/dev/null; then
+            echo "ERROR: translation implementation existed at mechanics freeze"
+            exit 1
+          fi
+          grep -q 'NO FUTURE-WEEK SCIENTIFIC LOCK YET' docs/research/PRISM_FUTURE_STAGE2_MARKET_TRANSLATION_TRACE_V1_FREEZE.md
+          grep -q 'Do not backfill the immutable Week-6 Stage-2 shadow' docs/research/PRISM_FUTURE_STAGE2_MARKET_TRANSLATION_TRACE_V1_FREEZE.md
+
+      - name: Compile and test frozen mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/research/build_prism_future_stage2_market_translation_trace_v1.py
+          pytest -q tests/test_prism_future_stage2_market_translation_trace_v1.py
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Build mechanics certificate
+        env:
+          HEAD_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/prism-future-stage2-translation
+          python - <<'PY'
+          import json, os
+          cert={
+            "version":"PRISM_FUTURE_STAGE2_MARKET_TRANSLATION_TRACE_V1_CERT",
+            "status":"PRISM_FUTURE_STAGE2_MARKET_TRANSLATION_TRACE_V1_MECHANICS_READY__NO_TARGET_LOCK",
+            "freeze_commit":"4ad5ab802f68b67c2358f8e8bc6942ebfedb5eaa",
+            "exact_head":os.environ["HEAD_SHA"],
+            "run_id":int(os.environ["RUN_ID"]),
+            "focused_tests_passed":True,
+            "strict_repo_audit_passed":True,
+            "eligible_cells":["RB_RUSHING","RB_RECEIVING","TE_RECEIVING"],
+            "translations":{
+              "RB_RUSHING":["rush_attempts","rush_yards"],
+              "RB_RECEIVING":["targets","receptions","rec_yards"],
+              "TE_RECEIVING":["targets","receptions","rec_yards"],
+            },
+            "efficiency_authority_held_fixed":["rules_ypc","rules_catch_rate","rules_ypt"],
+            "scientific_target_lock":False,
+            "target_lock_rows":0,
+            "week6_backfill":False,
+            "week6_rows_created":0,
+            "week6_outcomes_read":0,
+            "future_target_outcomes_read":0,
+            "sportsbook_inputs_used":0,
+            "oddsapi_calls":0,
+            "models_fit":0,
+            "threshold_searches":0,
+            "production_changed":False,
+          }
+          open("/tmp/prism-future-stage2-translation/mechanics_certificate.json","w").write(
+              json.dumps(cert,indent=2,sort_keys=True)+"\n"
+          )
+          print(json.dumps(cert,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM future Stage-2 market-translation mechanics READY: run ${RUN_ID}, exact head ${HEAD_SHA}. Frozen before implementation. Eligible cells RB rushing/RB receiving/TE receiving. Exact translation only: coherent carries/targets -> existing rules_ypc/rules_catch_rate/rules_ypt held fixed. No scientific target lock, no Week-6 backfill/outcomes, no sportsbook/OddsAPI, no fit/threshold search, no production mutation."
+
+      - name: Upload mechanics certificate
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-future-stage2-market-translation-trace-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-future-stage2-translation/**
+
+      - name: Record failure checkpoint
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM future Stage-2 market-translation mechanics FAILED: run ${{ github.run_id }}, exact head ${{ github.sha }}. Inspect exact-head logs. Do not create a target lock or change the frozen translation formulas."
