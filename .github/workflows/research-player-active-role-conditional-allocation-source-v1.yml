@@ -8,6 +8,7 @@ on:
       - 'scripts/research/audit_player_active_role_conditional_allocation_source_v1.py'
       - '.github/workflows/research-player-active-role-conditional-allocation-source-v1.yml'
       - 'docs/research/PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_V1_SOURCE_PLAN.md'
+      - 'docs/research/PRISM_OPPORTUNITY_QUALITY_PARENT_DENOMINATOR_PERSISTENCE_V1_ADDENDUM.md'
   workflow_dispatch:
 
 permissions:
@@ -18,6 +19,7 @@ permissions:
 env:
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  DENOMINATOR_PERSIST_FREEZE: "3a980c9ba821c5e0a3b41231314db5c21bb0adef"
 
 jobs:
   audit:
@@ -25,6 +27,8 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Announce source-audit run
         env:
@@ -42,6 +46,13 @@ jobs:
           pip install -r requirements.txt
           pip install nflreadpy scipy pytest pyyaml 'pyarrow==18.1.0'
 
+      - name: Verify frozen denominator-persistence addendum
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$DENOMINATOR_PERSIST_FREEZE" HEAD
+          git cat-file -e "$DENOMINATOR_PERSIST_FREEZE:docs/research/PRISM_OPPORTUNITY_QUALITY_PARENT_DENOMINATOR_PERSISTENCE_V1_ADDENDUM.md"
+          test "$(git show "$DENOMINATOR_PERSIST_FREEZE:scripts/research/audit_player_active_role_conditional_allocation_source_v1.py" | grep -c 'authority_denominator_mean' || true)" = "0"
+
       - name: Compile frozen source audit
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -58,6 +69,8 @@ jobs:
           test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.digest')" = "sha256:41b1acd3f1b8d77abb53980db160ece32f8fc40351939d4827248b9caad0c64b"
           test "$(gh api repos/${{ github.repository }}/actions/artifacts/11552447166 --jq '.workflow_run.id')" = "37782189538"
           test "$(gh api repos/${{ github.repository }}/actions/artifacts/11552447166 --jq '.digest')" = "sha256:94a4bee7011877b1d7a24708d5ba3e86ccc5d29b427bea650af574fc1f09fa24"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070806828 --jq '.workflow_run.id')" = "38955368643"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070806828 --jq '.digest')" = "sha256:e91a108495d7a2b6eb289e0618ab6af09e3d6cdf6895e534742a07340e4a2a83"
 
       - uses: actions/download-artifact@v4
         with:
@@ -83,17 +96,31 @@ jobs:
           repository: ${{ github.repository }}
           run-id: 37782189538
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-conditional-allocation-source-v1-38955368643
+          path: /tmp/prior-stage2-source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38955368643
+
       - name: Resolve immutable source files
         run: |
           STAGE1_UNIVERSE="$(find /tmp/stage1-source -type f -name 'player_active_role_pregame_universe.csv' -print -quit)"
           STAGE1_MECHANISM="$(find /tmp/stage1-mechanism -type f -name 'player_active_role_mechanism_scored_rows.csv' -print -quit)"
           FOLD_ROOT="$(find /tmp/fold-authority -type f -name 'recovery_manifest.json' -printf '%h\n' -quit)"
+          PRIOR_SOURCE_DETAIL="$(find /tmp/prior-stage2-source -type f -name 'active_role_conditional_allocation_source_join_detail.csv' -print -quit)"
+          PRIOR_SOURCE_RESULT="$(find /tmp/prior-stage2-source -type f -name 'active_role_conditional_allocation_source_result.json' -print -quit)"
           test -n "$STAGE1_UNIVERSE" && test -s "$STAGE1_UNIVERSE"
           test -n "$STAGE1_MECHANISM" && test -s "$STAGE1_MECHANISM"
           test -n "$FOLD_ROOT" && test -d "$FOLD_ROOT"
+          test -n "$PRIOR_SOURCE_DETAIL" && test -s "$PRIOR_SOURCE_DETAIL"
+          test -n "$PRIOR_SOURCE_RESULT" && test -s "$PRIOR_SOURCE_RESULT"
           echo "STAGE1_UNIVERSE=$STAGE1_UNIVERSE" >> "$GITHUB_ENV"
           echo "STAGE1_MECHANISM=$STAGE1_MECHANISM" >> "$GITHUB_ENV"
           echo "FOLD_ROOT=$FOLD_ROOT" >> "$GITHUB_ENV"
+          echo "PRIOR_SOURCE_DETAIL=$PRIOR_SOURCE_DETAIL" >> "$GITHUB_ENV"
+          echo "PRIOR_SOURCE_RESULT=$PRIOR_SOURCE_RESULT" >> "$GITHUB_ENV"
 
       - name: Build leakage-safe 2024-2025 historical inputs
         env:
@@ -144,6 +171,80 @@ jobs:
             --fold-root "$FOLD_ROOT" \
             --out-dir /tmp/bridge-source/result
 
+      - name: Prove denominator persistence is output-only
+        run: |
+          python - <<'PY'
+          import json
+          import numpy as np
+          import pandas as pd
+          import os
+
+          old=pd.read_csv(os.environ['PRIOR_SOURCE_DETAIL'],low_memory=False)
+          new=pd.read_csv('/tmp/bridge-source/result/active_role_conditional_allocation_source_join_detail.csv',low_memory=False)
+          keys=['season','week','team','player_id','cell']
+          for name,df in [('old',old),('new',new)]:
+              if df.duplicated(keys).any():
+                  raise RuntimeError(f'{name} duplicate keyed source detail')
+          ok=set(map(tuple,old[keys].itertuples(index=False,name=None)))
+          nk=set(map(tuple,new[keys].itertuples(index=False,name=None)))
+          if ok != nk:
+              raise RuntimeError(f'source key drift old={len(ok)} new={len(nk)} only_old={len(ok-nk)} only_new={len(nk-ok)}')
+
+          m=old[keys+['authority_q','authority_covered','denominator_finite']].merge(
+              new[keys+['authority_q','authority_denominator_mean','authority_covered','denominator_finite']],
+              on=keys,how='inner',validate='one_to_one',suffixes=('_old','_new')
+          )
+          qo=pd.to_numeric(m.authority_q_old,errors='coerce')
+          qn=pd.to_numeric(m.authority_q_new,errors='coerce')
+          if not qo.isna().equals(qn.isna()):
+              raise RuntimeError('authority_q null-mask drift')
+          gap=(qo-qn).abs()
+          max_gap=float(gap.dropna().max()) if gap.notna().any() else 0.0
+          if max_gap > 1e-12:
+              raise RuntimeError(f'authority_q drift {max_gap}')
+
+          cov=m.authority_covered_new.astype(str).str.lower().eq('true')
+          old_fin=m.denominator_finite_old.astype(str).str.lower().eq('true')
+          new_fin=m.denominator_finite_new.astype(str).str.lower().eq('true')
+          if not old_fin.equals(new_fin):
+              raise RuntimeError('denominator_finite flag drift')
+          d=pd.to_numeric(m.authority_denominator_mean,errors='coerce')
+          derived=np.isfinite(d) & d.gt(0)
+          if not np.array_equal(derived[cov].to_numpy(bool), new_fin[cov].to_numpy(bool)):
+              raise RuntimeError('numeric denominator does not reproduce finite flag on covered rows')
+
+          old_result=json.load(open(os.environ['PRIOR_SOURCE_RESULT']))
+          new_result=json.load(open('/tmp/bridge-source/result/active_role_conditional_allocation_source_result.json'))
+          if old_result['disposition'] != new_result['disposition']:
+              raise RuntimeError('scientific disposition drift')
+          if old_result['ready_cells'] != new_result['ready_cells']:
+              raise RuntimeError('ready-cell drift')
+          if new_result['disposition'] != 'PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_SOURCE_READY_PARTIAL':
+              raise RuntimeError('unexpected refreshed source disposition')
+
+          parity={
+              'version':'PRISM_OPPORTUNITY_QUALITY_PARENT_DENOMINATOR_PERSISTENCE_V1',
+              'prior_run':38955368643,
+              'prior_artifact':12070806828,
+              'rows':int(len(m)),
+              'key_sets_exact':True,
+              'max_abs_authority_q_drift':max_gap,
+              'denominator_finite_flags_exact':True,
+              'scientific_disposition_exact':True,
+              'ready_cells_exact':True,
+              'target_game_outcomes_used_as_predictors':0,
+              'sportsbook_inputs_used':0,
+              'oddsapi_calls':0,
+              'outcomes_2026_used':0,
+              'production_changed':False,
+              'disposition':'PRISM_PARENT_DENOMINATOR_PERSISTENCE_PARITY_PASS',
+          }
+          open('/tmp/bridge-source/result/prism_parent_denominator_persistence_parity.json','w').write(
+              json.dumps(parity,indent=2,sort_keys=True)+'\n'
+          )
+          print(json.dumps(parity,indent=2,sort_keys=True))
+          PY
+
       - name: Certify frozen contract
         run: |
           python - <<'PY'
@@ -159,6 +260,13 @@ jobs:
           assert p['integrity']['outcomes_2026_used']==0,p
           assert p['integrity']['new_share_models_fit']==0,p
           assert p['integrity']['production_changed'] is False,p
+          import pandas as pd, numpy as np
+          d=pd.read_csv('/tmp/bridge-source/result/active_role_conditional_allocation_source_join_detail.csv',low_memory=False)
+          assert 'authority_denominator_mean' in d.columns,d.columns
+          covered=d['authority_covered'].astype(str).str.lower().eq('true')
+          denom=pd.to_numeric(d['authority_denominator_mean'],errors='coerce')
+          finite=d['denominator_finite'].astype(str).str.lower().eq('true')
+          assert np.array_equal((np.isfinite(denom)&denom.gt(0))[covered].to_numpy(bool), finite[covered].to_numpy(bool)),p
           assert p['integrity']['wr_2025_oos_authority_used'] is False,p
           assert p['integrity']['qb_share_model_invented'] is False,p
           assert p['disposition'] in {
