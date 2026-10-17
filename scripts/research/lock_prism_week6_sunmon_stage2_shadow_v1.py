@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from bs4 import BeautifulSoup
 
 import numpy as np
 import pandas as pd
@@ -38,6 +41,7 @@ FREEZE_COMMIT = "f954bf392c133c2507ff1b4bfa4d8325030abcc5"
 ORIGIN_RUN = 38791377571
 ORIGIN_ARTIFACT = 11999923880
 ORIGIN_DIGEST = "sha256:0916cd1cbec93f9a2529190b3df7c39172eee011a31eb9df429a35cdb9b41f61"
+SOURCE_RECONCILIATION_COMMIT = "566ca4e5b90317d8751a20d9c7cd0a0f348ab05f"
 TARGET_SEASON = 2026
 TARGET_WEEK = 6
 PRIOR_WEEKS = (1, 2, 3, 4, 5)
@@ -50,6 +54,40 @@ FORBIDDEN_COL_TOKENS = (
     "sportsbook", "bookmaker", "prop_line", "market_line", "over_odds",
     "under_odds", "moneyline", "closing_line", "no_vig", "implied_prob",
 )
+
+EXPLICIT_INACTIVE_URLS = {
+    1: [
+        "https://www.nfl.com/news/nfl-kickoff-game-inactives-new-england-patriots-at-seattle-seahawks",
+        "https://www.nfl.com/news/australia-game-inactives-san-francisco-49ers-at-los-angeles-rams",
+        "https://www.nfl.com/news/inactive-reports-sunday-week-1-2026-nfl-season",
+        "https://www.nfl.com/news/week-1-monday-night-inactives-denver-broncos-at-kansas-city-chiefs",
+    ],
+    2: [
+        "https://www.nfl.com/news/week-2-thursday-night-inactives-detroit-lions-at-buffalo-bills",
+        "https://www.nfl.com/news/nfl-week-2-inactives-players-ruled-out-sunday-14-games-2026",
+        "https://www.nfl.com/news/week-2-monday-night-inactives-new-york-giants-at-los-angeles-rams",
+    ],
+    3: [
+        "https://www.nfl.com/news/week-3-thursday-night-inactives-atlanta-falcons-at-green-bay-packers",
+        "https://www.nfl.com/news/nfl-week-3-inactives-players-ruled-out-sunday-14-games-2026",
+        "https://www.nfl.com/news/week-3-monday-night-inactives-philadelphia-eagles-at-chicago-bears",
+    ],
+    4: [
+        "https://www.nfl.com/news/week-4-thursday-night-inactives-pittsburgh-steelers-at-cleveland-browns",
+        "https://www.nfl.com/news/nfl-week-4-inactives-players-ruled-out-sunday-14-games-2026",
+        "https://www.nfl.com/news/week-4-monday-night-inactives-atlanta-falcons-at-new-orleans-saints",
+    ],
+    5: [
+        "https://www.nfl.com/news/week-5-thursday-night-inactives-tampa-bay-buccaneers-at-dallas-cowboys",
+        "https://www.nfl.com/news/nfl-week-5-inactives-players-ruled-out-sunday-2026-season",
+        "https://www.nfl.com/news/week-5-monday-night-inactives-buffalo-bills-at-los-angeles-rams",
+    ],
+}
+
+TARGET_IDENTITY_BASE_KEY_ALIASES = {
+    ("CLE", "audricestim"): "audricestime",
+    ("IND", "drewogletree"): "andrewogletree",
+}
 
 
 def num(s: Any) -> pd.Series:
@@ -82,23 +120,127 @@ def target_schedule_teamweeks(schedule: pd.DataFrame, weeks: tuple[int, ...]) ->
     return out.drop_duplicates(["season", "week", "team"]).reset_index(drop=True)
 
 
+def _teams_from_text(value: object) -> list[str]:
+    text = m78.norm_heading(value)
+    text = re.sub(r"\\b\\d{1,2}-\\d{1,2}(?:-\\d)?\\b", " ", text)
+    text = re.sub(r"\\b2026\\b", " ", text)
+    hits: list[str] = []
+    for team, aliases in m78.TEAM_ALIASES.items():
+        for alias in aliases:
+            a = m78.norm_heading(alias)
+            if a and re.search(rf"(?<![A-Z0-9]){re.escape(a)}(?![A-Z0-9])", text):
+                hits.append(team)
+                break
+    return sorted(set(hits))
+
+
+def _parse_explicit_inactive_url(
+    url: str,
+    week: int,
+    snapshots: list[dict],
+) -> tuple[list[dict], dict]:
+    r = m78.request(url)
+    snapshots.append({
+        "kind": "inactive_article_explicit",
+        "season": TARGET_SEASON,
+        "week": int(week),
+        "url": r.url,
+        "status": r.status_code,
+        "sha256": m78.sha256_bytes(r.content),
+        "error": "",
+    })
+    soup = BeautifulSoup(r.text, "html.parser")
+    h1 = soup.find("h1")
+    title = m78.norm_space(
+        h1.get_text(" ", strip=True)
+        if h1
+        else soup.title.get_text(" ", strip=True)
+        if soup.title
+        else ""
+    )
+
+    records: list[dict] = []
+    # First preserve the already-qualified M78 parser wherever it succeeds.
+    standard, _ = m78.parse_inactive_article(url, TARGET_SEASON, snapshots)
+    for rec in standard:
+        q = dict(rec)
+        q["week"] = int(week)
+        records.append(q)
+
+    # Robust fixed-page fallback: associate every parseable player bullet with
+    # the nearest preceding DOM label that identifies exactly one NFL team.
+    for li in soup.find_all("li"):
+        parsed = m78.parse_player_bullet(li.get_text(" ", strip=True))
+        if not parsed:
+            continue
+        team = None
+        for prev in li.find_all_previous(
+            ["h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "p", "div"],
+            limit=80,
+        ):
+            hits = _teams_from_text(prev.get_text(" ", strip=True))
+            if len(hits) == 1:
+                team = hits[0]
+                break
+        if not team:
+            continue
+        pos, name = parsed
+        records.append({
+            "season": TARGET_SEASON,
+            "week": int(week),
+            "team": team,
+            "inactive_name": name,
+            "inactive_name_key": m78.norm_name(name),
+            "listed_position": pos,
+            "article_title": title,
+            "article_url": r.url,
+        })
+
+    d = pd.DataFrame(records)
+    if len(d):
+        d["team"] = d["team"].map(canon_team)
+        d = d.drop_duplicates(
+            ["season", "week", "team", "inactive_name_key"], keep="first"
+        )
+        recs = d.to_dict("records")
+        teams = int(d["team"].nunique())
+    else:
+        recs = []
+        teams = 0
+    meta = {
+        "season": TARGET_SEASON,
+        "week": int(week),
+        "title": title,
+        "url": r.url,
+        "team_sections": teams,
+        "players": len(recs),
+        "parser": "EXPLICIT_FIXED_URL_M78_PLUS_NEAREST_TEAM_FALLBACK",
+    }
+    return recs, meta
+
+
 def discover_2026_prior_inactives(
     scheduled: pd.DataFrame,
     snapshots: list[dict],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    # M78's parser semantics are already qualified historically.  Extend only
-    # the month inventory; target weeks remain fixed at completed Weeks 1-5.
-    m78.SEASON_MONTHS[TARGET_SEASON] = [(2026, 9), (2026, 10)]
-    urls = m78.discover_article_urls(TARGET_SEASON, snapshots)
     records: list[dict] = []
     article_meta: list[dict] = []
-    for url in urls:
-        recs, meta = m78.parse_inactive_article(url, TARGET_SEASON, snapshots)
-        if meta:
-            article_meta.append(meta)
-        for rec in recs:
-            if int(rec.get("week", 0) or 0) in PRIOR_WEEKS:
-                records.append(rec)
+    for week in PRIOR_WEEKS:
+        for url in EXPLICIT_INACTIVE_URLS[int(week)]:
+            try:
+                recs, meta = _parse_explicit_inactive_url(url, int(week), snapshots)
+                records.extend(recs)
+                article_meta.append(meta)
+            except Exception as exc:
+                snapshots.append({
+                    "kind": "inactive_article_explicit",
+                    "season": TARGET_SEASON,
+                    "week": int(week),
+                    "url": url,
+                    "status": 0,
+                    "sha256": "",
+                    "error": f"{type(exc).__name__}:{exc}",
+                })
 
     cols = [
         "season", "week", "team", "inactive_name", "inactive_name_key",
@@ -108,33 +250,30 @@ def discover_2026_prior_inactives(
     if len(inactive):
         inactive["team"] = inactive["team"].map(canon_team)
         inactive["week"] = num(inactive["week"]).astype(int)
+        inactive = inactive.loc[
+            inactive[["season", "week", "team"]]
+            .merge(
+                scheduled.assign(_scheduled=1),
+                on=["season", "week", "team"],
+                how="left",
+            )["_scheduled"]
+            .fillna(0)
+            .astype(bool)
+            .to_numpy()
+        ].copy()
         inactive = inactive.drop_duplicates(
             ["season", "week", "team", "inactive_name_key"]
         ).reset_index(drop=True)
     else:
         inactive = pd.DataFrame(columns=cols)
 
-    found = (
-        inactive[["season", "week", "team"]].drop_duplicates()
-        if len(inactive)
-        else pd.DataFrame(columns=["season", "week", "team"])
-    )
-    coverage = scheduled.merge(
-        found.assign(inactive_teamweek_found=1),
-        on=["season", "week", "team"],
-        how="left",
-    )
-    coverage["inactive_teamweek_found"] = (
-        num(coverage["inactive_teamweek_found"]).fillna(0).astype(int)
-    )
     return inactive, pd.DataFrame(article_meta)
-
 
 def load_prior_roster(
     scheduled: pd.DataFrame,
     inactive: pd.DataFrame,
     snapshots: list[dict],
-) -> tuple[pd.DataFrame, pd.DataFrame, float]:
+) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     raw = m78.load_weekly_rosters(TARGET_SEASON, snapshots)
     if raw.empty:
         raise RuntimeError("2026 weekly roster authority empty")
@@ -148,10 +287,21 @@ def load_prior_roster(
             in roster_index.get((int(r.week), str(r.team)), set())
             for r in inactive.itertuples(index=False)
         ]
-        bridge = float(inactive["roster_identity_match"].mean())
+        inactive["family"] = inactive["listed_position"].map(stage1_source.family)
+        skill = inactive.loc[inactive["family"].isin(["QB", "RB", "WR", "TE"])].copy()
+        bridges = {
+            "all_positions": float(inactive["roster_identity_match"].mean()),
+            "stage1_skill_families": float(skill["roster_identity_match"].mean()) if len(skill) else 0.0,
+            "stage1_skill_rows": int(len(skill)),
+        }
     else:
         inactive["roster_identity_match"] = pd.Series(dtype=bool)
-        bridge = 0.0
+        inactive["family"] = pd.Series(dtype=str)
+        bridges = {
+            "all_positions": 0.0,
+            "stage1_skill_families": 0.0,
+            "stage1_skill_rows": 0,
+        }
 
     roster_all = stage1_source.normalize_roster(raw, TARGET_SEASON)
     roster = roster_all.loc[roster_all["week"].isin(PRIOR_WEEKS)].copy()
@@ -177,14 +327,15 @@ def load_prior_roster(
         roster["player_id"].astype(str).str.strip().ne("").astype(int)
     )
     roster = roster.loc[roster["known_official_inactive"].eq(0)].copy()
-    return roster.reset_index(drop=True), roster_all.reset_index(drop=True), bridge
+    return roster.reset_index(drop=True), roster_all.reset_index(drop=True), bridges
 
 
 def repair_target_player_ids(
     target: pd.DataFrame,
     roster_all: pd.DataFrame,
+    identity_history: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Resolve preserved temporary target identities only from Week-6 roster authority."""
+    """Resolve target identity from immutable football identity metadata only."""
     x = target.copy()
     x["player_id"] = x["player_id"].astype("string")
     x["identity_resolution_source"] = np.where(
@@ -193,6 +344,7 @@ def repair_target_player_ids(
         "UNRESOLVED",
     )
 
+    # 1. Exact current Week-6 weekly-roster identity.
     r = roster_all.loc[
         roster_all["week"].eq(TARGET_WEEK)
         & roster_all["player_id"].astype(str).str.strip().ne("")
@@ -218,13 +370,53 @@ def repair_target_player_ids(
         validate="one_to_one",
     )
     missing = x["player_id"].fillna("").str.strip().eq("")
-    rescued = missing & x["roster_week6_player_id"].astype("string").fillna("").str.strip().ne("")
-    x.loc[rescued, "player_id"] = x.loc[rescued, "roster_week6_player_id"].astype("string")
+    rescued = (
+        missing
+        & x["roster_week6_player_id"].astype("string").fillna("").str.strip().ne("")
+    )
+    x.loc[rescued, "player_id"] = x.loc[
+        rescued, "roster_week6_player_id"
+    ].astype("string")
     x.loc[rescued, "identity_resolution_source"] = "WEEK6_WEEKLY_ROSTER_STABLE_ID"
     x = x.drop(columns=["roster_week6_player_id"])
+
+    # 2. Exact frozen alias/base-key lookup against the already-preserved
+    # immutable identity-history artifact. No opportunity fields are consumed.
+    h = identity_history.copy()
+    required = {
+        "player_id", "position", "identity_base_name_key", "identity_full_name_key"
+    }
+    if required - set(h.columns):
+        raise RuntimeError(
+            f"identity history missing {sorted(required-set(h.columns))}"
+        )
+    h["family"] = h["position"].map(stage1_source.family)
+    h["player_id"] = h["player_id"].astype("string").fillna("").str.strip()
+    h = h.loc[h["player_id"].ne("") & h["family"].isin(["RB", "TE"])].copy()
+
+    for idx in x.index[x["player_id"].fillna("").str.strip().eq("")]:
+        team = str(x.at[idx, "team"])
+        raw_key = str(x.at[idx, "player_clean_key"])
+        fam = str(x.at[idx, "family"])
+        lookup = TARGET_IDENTITY_BASE_KEY_ALIASES.get((team, raw_key), raw_key)
+        cand = h.loc[
+            h["family"].eq(fam)
+            & (
+                h["identity_base_name_key"].astype(str).eq(lookup)
+                | h["identity_full_name_key"].astype(str).eq(lookup)
+            )
+        ]
+        ids = sorted(set(cand["player_id"].astype(str)) - {""})
+        if len(ids) == 1:
+            x.at[idx, "player_id"] = ids[0]
+            x.at[idx, "identity_resolution_source"] = (
+                "PRESERVED_IDENTITY_HISTORY_EXACT_ALIAS"
+                if lookup != raw_key
+                else "PRESERVED_IDENTITY_HISTORY_EXACT_KEY"
+            )
+
     x["player_id"] = x["player_id"].astype("string").fillna("").str.strip()
     return x
-
 
 def load_prior_snaps(
     roster: pd.DataFrame,
@@ -367,9 +559,10 @@ def apply_shadow(
     target: pd.DataFrame,
     pactive: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    pcols = [col for col in pactive.columns if col != "player_id"]
     base = target.merge(
-        pactive,
-        on=["event_id", "team", "player_clean_key", "player_id", "family"],
+        pactive[pcols],
+        on=["event_id", "team", "player_clean_key", "family"],
         how="left",
         validate="one_to_one",
     )
@@ -478,6 +671,7 @@ def main() -> int:
     ap.add_argument("--availability", type=Path, required=True)
     ap.add_argument("--target-entitlement", type=Path, required=True)
     ap.add_argument("--schedule", type=Path, required=True)
+    ap.add_argument("--identity-history", type=Path, required=True)
     ap.add_argument("--out-dir", type=Path, required=True)
     args = ap.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -488,7 +682,7 @@ def main() -> int:
         prior_teamweeks = target_schedule_teamweeks(schedule, PRIOR_WEEKS)
         inactive, article_meta = discover_2026_prior_inactives(prior_teamweeks, snapshots)
 
-        prior_roster, roster_all, inactive_bridge = load_prior_roster(
+        prior_roster, roster_all, inactive_bridges = load_prior_roster(
             prior_teamweeks, inactive, snapshots
         )
         prior, mapped_positive = load_prior_snaps(prior_roster, snapshots)
@@ -499,9 +693,17 @@ def main() -> int:
             prior["teamweek_snap_source_valid"].eq(1), ["season", "week", "team"]
         ].drop_duplicates()
         stable = float(prior["stable_roster_identity"].mean()) if len(prior) else 0.0
-        pos_bridge = (
+        mapped_stage1 = mapped_positive.loc[
+            mapped_positive["family"].isin(["QB", "RB", "WR", "TE"])
+        ].copy()
+        pos_bridge_all = (
             float(mapped_positive["team"].notna().mean())
             if len(mapped_positive)
+            else 0.0
+        )
+        pos_bridge_stage1 = (
+            float(mapped_stage1["team"].notna().mean())
+            if len(mapped_stage1)
             else 0.0
         )
         scheduled_n = int(len(prior_teamweeks))
@@ -515,11 +717,21 @@ def main() -> int:
                 len(inactive_tw) / max(scheduled_n, 1)
             ),
             "official_inactive_rows": int(len(inactive)),
-            "official_inactive_roster_identity_bridge": float(inactive_bridge),
+            "official_inactive_roster_identity_bridge": float(
+                inactive_bridges["stage1_skill_families"]
+            ),
+            "official_inactive_roster_identity_bridge_all_positions_diagnostic": float(
+                inactive_bridges["all_positions"]
+            ),
+            "official_inactive_stage1_skill_rows": int(
+                inactive_bridges["stage1_skill_rows"]
+            ),
             "stable_identity_coverage": stable,
             "snap_teamgames": int(len(snap_tw)),
             "snap_teamgame_coverage": float(len(snap_tw) / max(scheduled_n, 1)),
-            "positive_snap_roster_bridge": pos_bridge,
+            "positive_snap_roster_bridge": pos_bridge_stage1,
+            "positive_snap_roster_bridge_all_positions_diagnostic": pos_bridge_all,
+            "positive_snap_bridge_semantics": "QUALIFIED_STAGE1_PARENT_SKILL_FAMILY_POPULATION",
             "prior_player_rows": int(len(prior)),
             "prior_rb_rows": int(prior["family"].eq("RB").sum()),
             "prior_te_rows": int(prior["family"].eq("TE").sum()),
@@ -538,6 +750,9 @@ def main() -> int:
         universe = read_football_csv(args.universe, "Week-6 football universe")
         availability = read_football_csv(args.availability, "Week-6 availability")
         entitlement = read_football_csv(args.target_entitlement, "Week-6 target entitlement")
+        identity_history = read_football_csv(
+            args.identity_history, "preserved Week-6 identity history"
+        )
 
         for x in (universe, availability, entitlement):
             if "team" in x:
@@ -578,7 +793,7 @@ def main() -> int:
             & num(target["definitive_unavailable"]).fillna(0).eq(0)
             & target["family"].isin(["RB", "TE"])
         ].copy()
-        target = repair_target_player_ids(target, roster_all)
+        target = repair_target_player_ids(target, roster_all, identity_history)
 
         ent = entitlement[
             ["event_id", "team", "player_clean_key", "entitlement_tgt_share"]
@@ -638,6 +853,7 @@ def main() -> int:
             "origin_run": ORIGIN_RUN,
             "origin_artifact": ORIGIN_ARTIFACT,
             "origin_digest": ORIGIN_DIGEST,
+            "source_reconciliation_commit": SOURCE_RECONCILIATION_COMMIT,
             "disposition": disposition,
             "target_season": TARGET_SEASON,
             "target_week": TARGET_WEEK,
