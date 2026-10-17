@@ -23,6 +23,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - name: Record replay start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM Week-5 frozen Stage-1/Stage-2 retrospective replay started: run ${{ github.run_id }}, exact head ${{ github.sha }}. Candidate is built and hash-frozen before Week-5 outcomes are downloaded. No Week-6 outcomes, sportsbook, OddsAPI, fit, threshold search, or production mutation."
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -190,6 +196,13 @@ jobs:
           print('Integrity: Week-6 outcomes 0; sportsbook 0; OddsAPI 0; fit 0; production unchanged.')
           PY
           gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/prism-w5-stage12/comment.md
+
+      - name: Record failure checkpoint
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM Week-5 frozen Stage-1/Stage-2 retrospective replay FAILED: run ${{ github.run_id }}, exact head ${{ github.sha }}. Inspect exact-head logs; do not retune or rescue the frozen mechanism."
 
       - name: Upload certified replay
         if: always()
