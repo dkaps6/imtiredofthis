@@ -40,7 +40,7 @@ jobs:
 
       - name: Verify immutable replay authorities
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -66,16 +66,16 @@ jobs:
 
       - name: Download exact preserved authorities
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           rm -rf /tmp/prism-w45
           mkdir -p /tmp/prism-w45/{w4,w5,history,state,casebook,out}
-          gh run download 37485600879 --repo "\${{ github.repository }}" --name week4-postmortem-backtest-v1-37485600879 --dir /tmp/prism-w45/w4
-          gh run download 38395384228 --repo "\${{ github.repository }}" --name week5-full-model-postmortem-v1-38395384228 --dir /tmp/prism-w45/w5
-          gh run download 37777319154 --repo "\${{ github.repository }}" --name player-output-component-decomposition-v1-37777319154 --dir /tmp/prism-w45/history
-          gh run download 37717016519 --repo "\${{ github.repository }}" --name player-landscape-transmission-audit-v1-37717016519 --dir /tmp/prism-w45/state
-          gh run download 38397361891 --repo "\${{ github.repository }}" --name week5-player-failure-casebook-v1-38397361891 --dir /tmp/prism-w45/casebook
+          gh run download 37485600879 --repo "${{ github.repository }}" --name week4-postmortem-backtest-v1-37485600879 --dir /tmp/prism-w45/w4
+          gh run download 38395384228 --repo "${{ github.repository }}" --name week5-full-model-postmortem-v1-38395384228 --dir /tmp/prism-w45/w5
+          gh run download 37777319154 --repo "${{ github.repository }}" --name player-output-component-decomposition-v1-37777319154 --dir /tmp/prism-w45/history
+          gh run download 37717016519 --repo "${{ github.repository }}" --name player-landscape-transmission-audit-v1-37717016519 --dir /tmp/prism-w45/state
+          gh run download 38397361891 --repo "${{ github.repository }}" --name week5-player-failure-casebook-v1-38397361891 --dir /tmp/prism-w45/casebook
 
           test -s /tmp/prism-w45/w4/research/week4_postmortem/week4_selected_full_graded.csv
           test -s /tmp/prism-w45/w5/week5_full_board_graded_detail.csv
@@ -86,7 +86,7 @@ jobs:
 
       - name: Execute frozen all-row player-first replay
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           set -euo pipefail
           python -m py_compile scripts/research/audit_prism_week4_5_all_row_player_first_replay_v1.py
@@ -101,8 +101,8 @@ jobs:
 
       - name: Certify replay contract
         env:
-          HEAD_SHA: \${{ github.sha }}
-          RUN_ID: \${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -154,20 +154,20 @@ jobs:
 
       - name: Record Issue 535 checkpoint
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          gh issue comment 535 --repo "\${{ github.repository }}" --body "PRISM Week-4/5 all-row player-first forensic replay completed at exact head \${{ github.sha }} (run \${{ github.run_id }}). Preserved universe: 836 named player-game-market rows (W4 440, W5 396), 819 settled, 236 unique players. Detailed diagnostic casebook: 100 rows; matched correct-case controls: 100; repeat same-player+market informative cases: 20 rows / 10 identities. Preserved exact/preserved opportunity-efficiency component evidence: 405 rows (W4 365 + W5 frozen top-40 40). Week-5 parent artifact 11585973062 is no longer retrievable, so the replay fails closed outside the frozen top-40 rather than relabeling the W5 state trace as the lost final component path. No fit, no threshold search, no sportsbook upstream/refetch, no OddsAPI, no Week-6 outcomes, no Week-6 lock changes, no production change. Candidate mechanisms remain hypotheses requiring separate freeze + independent validation."
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM Week-4/5 all-row player-first forensic replay completed at exact head ${{ github.sha }} (run ${{ github.run_id }}). Preserved universe: 836 named player-game-market rows (W4 440, W5 396), 819 settled, 236 unique players. Detailed diagnostic casebook: 100 rows; matched correct-case controls: 100; repeat same-player+market informative cases: 20 rows / 10 identities. Preserved exact/preserved opportunity-efficiency component evidence: 405 rows (W4 365 + W5 frozen top-40 40). Week-5 parent artifact 11585973062 is no longer retrievable, so the replay fails closed outside the frozen top-40 rather than relabeling the W5 state trace as the lost final component path. No fit, no threshold search, no sportsbook upstream/refetch, no OddsAPI, no Week-6 outcomes, no Week-6 lock changes, no production change. Candidate mechanisms remain hypotheses requiring separate freeze + independent validation."
 
       - name: Strict repository audit
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: python scripts/utils/audit_repo.py --strict
 
       - name: Upload replay outputs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: prism-week4-5-all-row-player-first-replay-v1-\${{ github.run_id }}
+          name: prism-week4-5-all-row-player-first-replay-v1-${{ github.run_id }}
           retention-days: 90
           if-no-files-found: error
           path: /tmp/prism-w45/out/**
