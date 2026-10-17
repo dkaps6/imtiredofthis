@@ -376,7 +376,12 @@ def build_week5(settled: pd.DataFrame, state: pd.DataFrame, cases: pd.DataFrame,
         "pred_team_rush_att", "team_targets", "team_rushes", "final_target_probability", "final_rush_probability",
         "pred_carries", "pred_targets", "rules_ypc", "rules_ypt",
     ] if c0 in c.columns]
-    exact = c[exact_cols].copy().rename(columns={"actual_opportunity": "exact_actual_opportunity", "actual_efficiency": "exact_actual_efficiency"})
+    exact = c[exact_cols].copy().rename(columns={
+        "actual_opportunity": "exact_actual_opportunity",
+        "actual_efficiency": "exact_actual_efficiency",
+        "rules_ypc": "exact_rules_ypc",
+        "rules_ypt": "exact_rules_ypt",
+    })
     x = x.merge(exact, on=["team", "player_clean_key", "market"], how="left", validate="one_to_one")
 
     x["pred_opportunity"] = x["pred_opportunity"].where(x["component_label"].notna(), x["state_expected_opportunity"])
@@ -391,8 +396,8 @@ def build_week5(settled: pd.DataFrame, state: pd.DataFrame, cases: pd.DataFrame,
     )
     mixed_exact = x["component_label"].notna() & x["market"].eq("rush_rec_yards")
     x.loc[mixed_exact, "component_reconstructed_mean"] = (
-        num(x.loc[mixed_exact, "pred_carries"]) * num(x.loc[mixed_exact, "rules_ypc"])
-        + num(x.loc[mixed_exact, "pred_targets"]) * num(x.loc[mixed_exact, "rules_ypt"])
+        num(x.loc[mixed_exact, "pred_carries"]) * num(x.loc[mixed_exact, "exact_rules_ypc"])
+        + num(x.loc[mixed_exact, "pred_targets"]) * num(x.loc[mixed_exact, "exact_rules_ypt"])
     )
     x["downstream_contribution"] = x["component_reconstructed_mean"] - x["model_proj"]
     x["final_identity_gap"] = (
