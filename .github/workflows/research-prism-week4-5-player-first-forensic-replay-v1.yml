@@ -121,7 +121,10 @@ jobs:
           p=json.load(open('/tmp/prism-w45/out/prism_week4_5_player_first_forensic_replay_result.json'))
           assert p['status']=='PRISM_WEEK4_5_PLAYER_FIRST_FORENSIC_REPLAY_EXECUTED__NO_PROMOTION',p
           assert p['week4_all_rows'] >= 400,p
-          assert p['week5_all_rows'] == 396,p
+          assert p['week5_all_rows'] == 392,p
+          assert p['week5_source_scope_rows'] == 396,p
+          assert p['week5_nonsettled_rows_excluded'] == 4,p
+          assert p['week5_nonsettled_status_counts'] == {'DNP_INACTIVE':4},p
           assert p['week4_exact_component_rows'] >= 300,p
           assert p['week5_exact_component_rows'] == 40,p
           assert p['week5_direct_rows_with_actual_opportunity'] >= 350,p
