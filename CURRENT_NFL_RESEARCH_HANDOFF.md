@@ -1,5 +1,77 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-16 — PRISM OPPONENT BOUNDARY AUDITED / PLAYER RELIABILITY FORWARD
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-16_PRISM_OPPONENT_BOUNDARY_AUDITED_PLAYER_RELIABILITY_FORWARD.md`
+
+Reusable next-chat prompt:
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-16_PRISM_OPPONENT_BOUNDARY_AUDITED.md`
+
+Canonical player-first order:
+
+`PLAYER IDENTITY -> CURRENT ROLE/STATE -> TEAMMATE COMPETITION -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+### Newest canonical boundary audits
+
+Opponent/environment anti-retest:
+- audit `docs/research/PRISM_OPPONENT_ENVIRONMENT_BOUNDARY_V1_AUDIT.md`;
+- disposition `PRISM_OPPONENT_ENVIRONMENT_BOUNDARY_AUDIT_COMPLETE__NO_CLEAN_CANDIDATE_YET`;
+- no opponent candidate scored;
+- generic DvP / simple Football Matchup Transmission / role×defense rescue remains closed or blocked.
+
+Player reliability:
+- audit `docs/research/PRISM_PLAYER_RELIABILITY_FRONTIER_V1_AUDIT.md`;
+- disposition `PRISM_PLAYER_RELIABILITY_FRONTIER_RECONCILED__PROSPECTIVE_LOCKS_GOVERN_NEXT`.
+
+Protected named-player trust:
+- WR opportunity trust QUALIFIED;
+- WR efficiency trust QUALIFIED;
+- fixed 50/50 WR dual trust historically supported / prospective required;
+- TE allocation trust QUALIFIED;
+- TE efficiency trust CLOSED;
+- generic efficiency-tail stability CLOSED.
+
+Week-6 prospective locks remain immutable:
+- WR opportunity trust run `38823520954`;
+- WR efficiency trust run `38826804491`;
+- TE trust run `38822346088`;
+- zero Week-6 outcomes read at lock.
+
+Do not grade Week 6 early.
+Do not create a Week-6 WR dual composite.
+
+### Protected opportunity-quality closures
+
+- direct team high-value creation: `PRISM_TEAM_HIGH_VALUE_CREATION_CLOSED`, run `38999998874`;
+- scoring-territory drive creation: `PRISM_TEAM_DRIVE_CREATION_CLOSED`, run `39000352640`;
+- parent denominator persistence remains PASS;
+- Stage 1 remains QUALIFIED ALL;
+- Stage 2 remains QUALIFIED for RB rushing / RB receiving / TE receiving.
+
+### Exact forward action
+
+Do not score a generic opponent/environment mechanism.
+
+The predetermined prospective WR dual-reliability confirmation begins with
+**2026 Week 7** and runs through Week 10 under the already-frozen plan.
+
+Implementation mechanics may be prepared now, but no Week-7 scientific lock may
+be frozen until Week 6 is complete and strict-prior chronology can be satisfied.
+
+Parallel opponent work is source-only until a genuinely new player-conditioned
+matchup object with exact parity is identified.
+
+No paid OddsAPI credit authorized.
+No sportsbook upstream.
+No production mutation.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-16 — PRISM TEAM DRIVE CREATION CLOSED / OPPONENT-ENVIRONMENT BOUNDARY
 
 **Model:** PRISM — Player Role & Individual Situation Model
