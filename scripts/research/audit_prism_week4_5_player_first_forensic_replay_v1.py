@@ -547,8 +547,9 @@ def make_casebook(all_rows: pd.DataFrame) -> pd.DataFrame:
     w5["case_rank_week"] = num(w5["case_rank"]).astype("Int64")
     cases = pd.concat([w4, w5], ignore_index=True, sort=False)
     attrs = cases.apply(attribution, axis=1, result_type="expand")
-    attrs.columns = ["primary_attribution", "secondary_evidence"]
-    cases = pd.concat([cases.reset_index(drop=True), attrs.reset_index(drop=True)], axis=1)
+    cases = cases.reset_index(drop=True)
+    cases["primary_attribution"] = attrs.iloc[:, 0].to_numpy()
+    cases["secondary_evidence"] = attrs.iloc[:, 1].to_numpy()
     cases["role_signal"] = cases.apply(role_signal, axis=1)
     cases["final_component_state"] = cases.apply(final_component_state, axis=1)
     cases["strict_prior_wr_dual_rule_eligible"] = (
