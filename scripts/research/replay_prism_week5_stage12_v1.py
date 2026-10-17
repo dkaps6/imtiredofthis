@@ -515,7 +515,21 @@ def score(args: argparse.Namespace) -> int:
     out = args.out_dir
     out.mkdir(parents=True, exist_ok=True)
 
-    candidate = read_csv(args.candidate_rows, "frozen Stage-1/2 candidate")
+    candidate = pd.read_csv(args.candidate_rows, low_memory=False)
+    candidate.columns = [str(col).strip().lower() for col in candidate.columns]
+    allowed_integrity_cols = {"sportsbook_inputs_used"}
+    bad_candidate_cols = [
+        col for col in candidate.columns
+        if col not in allowed_integrity_cols and any(token in col for token in FORBIDDEN)
+    ]
+    if bad_candidate_cols:
+        raise RuntimeError(
+            f"forbidden market columns in frozen Stage-1/2 candidate: {bad_candidate_cols}"
+        )
+    if "sportsbook_inputs_used" not in candidate.columns:
+        raise RuntimeError("candidate missing sportsbook_inputs_used integrity field")
+    if not num(candidate["sportsbook_inputs_used"]).fillna(-1).eq(0).all():
+        raise RuntimeError("candidate sportsbook_inputs_used integrity field is nonzero")
     build_cert = json.loads(args.build_certificate.read_text())
     digest = sha256_file(args.candidate_rows)
     if digest != build_cert.get("candidate_row_digest"):
