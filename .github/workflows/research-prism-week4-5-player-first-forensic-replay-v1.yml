@@ -1,0 +1,173 @@
+name: Research PRISM Week4-5 Player First Forensic Replay V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/audit_prism_week4_5_player_first_forensic_replay_v1.py'
+      - '.github/workflows/research-prism-week4-5-player-first-forensic-replay-v1.yml'
+      - 'docs/research/PRISM_WEEK4_5_PLAYER_FIRST_FORENSIC_REPLAY_V1_PROTOCOL.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyyaml 'pyarrow==18.1.0'
+
+      - name: Verify immutable forensic authorities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, subprocess
+          expected={
+            37485600879:(11423535484,'week4-postmortem-backtest-v1-37485600879','sha256:59185d2aa4178971f6b0cc806eddd172ca0e7fbae559ad44da37a2b99656d791'),
+            37777319154:(11550446909,'player-output-component-decomposition-v1-37777319154','sha256:7acfc453258a49f3aadf0d0ea386b13827eb715f1dfb055b96505f733320d204'),
+            38395384228:(11812200405,'week5-full-model-postmortem-v1-38395384228','sha256:5888cab39506ae0bf70034dfb60f297defd28dd3219ea8118870738706f55ac3'),
+            37717016519:(11524296325,'player-landscape-transmission-audit-v1-37717016519','sha256:e043133d4b9a48ce472dde8810d4d77d636f4ce2fbcee14708b23fe0ea35f6a0'),
+            38397361891:(11812403368,'week5-player-failure-casebook-v1-38397361891','sha256:4cdef29912f35368473d57e15b38efdc3dd0f75e897bbbdc3b97fe1ff8f67670'),
+          }
+          repo=os.environ['GITHUB_REPOSITORY']
+          for run,(aid,name,digest) in expected.items():
+              raw=subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts'])
+              payload=json.loads(raw)
+              arts={int(a['id']):a for a in payload.get('artifacts',[])}
+              if aid not in arts:
+                  raise SystemExit(f'missing expected artifact {aid} for run {run}')
+              a=arts[aid]
+              if a.get('expired'):
+                  raise SystemExit(f'artifact expired: {aid}')
+              if a.get('name') != name:
+                  raise SystemExit(f'artifact name drift {aid}: {a.get("name")} != {name}')
+              if a.get('digest') != digest:
+                  raise SystemExit(f'artifact digest drift {aid}: {a.get("digest")} != {digest}')
+              print('SOURCE_VERIFIED',run,aid,name,digest)
+          PY
+
+      - name: Download exact frozen authorities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-w45
+          mkdir -p /tmp/prism-w45/{w4,w1w4,w5post,w5state,w5cases,out}
+          gh run download 37485600879 --repo "${{ github.repository }}" --name week4-postmortem-backtest-v1-37485600879 --dir /tmp/prism-w45/w4
+          gh run download 37777319154 --repo "${{ github.repository }}" --name player-output-component-decomposition-v1-37777319154 --dir /tmp/prism-w45/w1w4
+          gh run download 38395384228 --repo "${{ github.repository }}" --name week5-full-model-postmortem-v1-38395384228 --dir /tmp/prism-w45/w5post
+          gh run download 37717016519 --repo "${{ github.repository }}" --name player-landscape-transmission-audit-v1-37717016519 --dir /tmp/prism-w45/w5state
+          gh run download 38397361891 --repo "${{ github.repository }}" --name week5-player-failure-casebook-v1-38397361891 --dir /tmp/prism-w45/w5cases
+
+          W4_BOARD="$(find /tmp/prism-w45/w4 -type f -path '*/market_track_record/boards/2026_wk04.csv' -print -quit)"
+          W1W4="$(find /tmp/prism-w45/w1w4 -type f -name player_output_component_rows.csv -print -quit)"
+          W5_SETTLED="$(find /tmp/prism-w45/w5post -type f -name week5_full_board_graded_detail.csv -print -quit)"
+          W5_STATE="$(find /tmp/prism-w45/w5state -type f -name player_landscape_week5_player_state.csv -print -quit)"
+          W5_CASES="$(find /tmp/prism-w45/w5cases -type f -name week5_player_failure_casebook_v1_rows.csv -print -quit)"
+          test -s "$W4_BOARD"
+          test -s "$W1W4"
+          test -s "$W5_SETTLED"
+          test -s "$W5_STATE"
+          test -s "$W5_CASES"
+          echo "W4_BOARD=$W4_BOARD" >> "$GITHUB_ENV"
+          echo "W1W4=$W1W4" >> "$GITHUB_ENV"
+          echo "W5_SETTLED=$W5_SETTLED" >> "$GITHUB_ENV"
+          echo "W5_STATE=$W5_STATE" >> "$GITHUB_ENV"
+          echo "W5_CASES=$W5_CASES" >> "$GITHUB_ENV"
+
+      - name: Execute frozen player-first Week4-5 replay
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/research/audit_prism_week4_5_player_first_forensic_replay_v1.py
+          python scripts/research/audit_prism_week4_5_player_first_forensic_replay_v1.py             --w1w4-components "$W1W4"             --w4-board "$W4_BOARD"             --w5-settled "$W5_SETTLED"             --w5-state "$W5_STATE"             --w5-cases "$W5_CASES"             --out-dir /tmp/prism-w45/out
+
+      - name: Certify forensic replay contract
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/prism-w45/out/prism_week4_5_player_first_forensic_replay_result.json'))
+          assert p['status']=='PRISM_WEEK4_5_PLAYER_FIRST_FORENSIC_REPLAY_EXECUTED__NO_PROMOTION',p
+          assert p['week4_all_rows'] >= 400,p
+          assert p['week5_all_rows'] == 396,p
+          assert p['week4_exact_component_rows'] >= 300,p
+          assert p['week5_exact_component_rows'] == 40,p
+          assert p['week5_direct_rows_with_actual_opportunity'] >= 350,p
+          assert p['casebook_rows'] == 80,p
+          assert p['matched_control_rows'] >= 75,p
+          assert p['max_final_identity_gap'] <= 1e-8,p
+          assert p['week4_wr_dual_score_manufactured'] is False,p
+          assert p['week6_outcomes_used'] == 0,p
+          assert p['sportsbook_refetch'] is False,p
+          assert p['sportsbook_predictor_used'] is False,p
+          assert p['oddsapi_calls'] == 0,p
+          assert p['coefficients_fit'] == 0 and p['thresholds_fit'] == 0,p
+          assert p['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 checkpoint
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY' > /tmp/prism-w45-comment.md
+          import json, os
+          p=json.load(open('/tmp/prism-w45/out/prism_week4_5_player_first_forensic_replay_result.json'))
+          print("## PRISM Week-4/5 player-first all-row forensic replay")
+          print()
+          print(f"Run: {os.environ['GITHUB_RUN_ID']}")
+          print(f"Exact head: {os.environ['GITHUB_SHA']}")
+          print(f"Disposition: {p['status']}")
+          print()
+          print(f"- all-row player-market records: {p['all_row_total']} ({p['week4_all_rows']} Week 4 / {p['week5_all_rows']} Week 5)")
+          print(f"- exact final-error component identities: {p['week4_exact_component_rows']} Week 4 / {p['week5_exact_component_rows']} Week 5")
+          print(f"- detailed named-player cases: {p['casebook_rows']}")
+          print(f"- matched correct controls: {p['matched_control_rows']}")
+          print(f"- pregame role signals above projection/rules in reviewed cases: {p['pregame_role_signals_above_projection_or_rules']}")
+          print(f"- downstream-transmission-dominant reviewed cases: {p['casebook_downstream_dominant_rows']}")
+          print(f"- max final-error identity gap: {p['max_final_identity_gap']:.3e}")
+          print()
+          print("Diagnostic only: zero Week-6 outcomes, zero sportsbook refetch/upstream predictor, zero OddsAPI, zero fitted coefficients/thresholds, zero production mutation. Week-4 exact WR dual score was not manufactured.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/prism-w45-comment.md
+
+      - name: Upload forensic replay artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-week4-5-player-first-forensic-replay-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-w45/out/**
