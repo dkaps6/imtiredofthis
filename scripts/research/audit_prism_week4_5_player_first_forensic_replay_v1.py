@@ -82,7 +82,23 @@ def component_label(opp: Any, eff: Any) -> str:
     return "MIXED_OPPORTUNITY_EFFICIENCY"
 
 
-def load_week5_actuals() -> pd.DataFrame:
+def market_actual(row: pd.Series) -> float:
+    m = str(row.get("market", ""))
+    if m == "pass_yards":
+        return float(row["pass_yards"]) if np.isfinite(row.get("pass_yards", np.nan)) else np.nan
+    if m == "rush_yards":
+        return float(row["rush_yards"]) if np.isfinite(row.get("rush_yards", np.nan)) else np.nan
+    if m == "rec_yards":
+        return float(row["rec_yards"]) if np.isfinite(row.get("rec_yards", np.nan)) else np.nan
+    if m == "receptions":
+        return float(row["receptions"]) if np.isfinite(row.get("receptions", np.nan)) else np.nan
+    if m == "rush_rec_yards":
+        ry = row.get("rush_yards", np.nan); cy = row.get("rec_yards", np.nan)
+        return float(ry + cy) if np.isfinite(ry) and np.isfinite(cy) else np.nan
+    return np.nan
+
+
+def load_actuals(week: int) -> pd.DataFrame:
     import nflreadpy as nfl
 
     raw = nfl.load_player_stats(seasons=[SEASON], summary_level="week")
@@ -91,16 +107,16 @@ def load_week5_actuals() -> pd.DataFrame:
     elif hasattr(raw, "to_pandas"):
         raw = raw.to_pandas()
     x = _normalize_weekly(raw, SEASON)
-    x = x.loc[num(x["week"]).eq(5)].copy()
+    x = x.loc[num(x["week"]).eq(week)].copy()
     if x.empty:
-        raise RuntimeError("nflverse Week-5 player stats are empty")
+        raise RuntimeError(f"nflverse Week-{week} player stats are empty")
     keep = [
         "player_identity_key", "player_id", "player", "player_clean_key", "team", "position",
         "targets", "receptions", "rec_yards", "rushes", "rush_yards", "pass_att", "pass_yards",
         "team_targets", "team_rushes", "tgt_share_game", "rush_share_game", "ypt_game",
         "ypc_game", "catch_rate_game",
     ]
-    keep = [c for c in keep if c in x.columns]
+    keep = [cc for cc in keep if cc in x.columns]
     out = x[keep].copy()
     out["team"] = out["team"].map(canon_team)
     return out.drop_duplicates(["player_clean_key", "team"], keep="last")
@@ -214,23 +230,73 @@ def prior_context(history: pd.DataFrame, rep: pd.DataFrame, targets: pd.DataFram
     return pd.DataFrame(out)
 
 
-def build_week4(history: pd.DataFrame, rep: pd.DataFrame) -> pd.DataFrame:
-    x = history.loc[history["week"].eq(4)].copy()
-    x = x.loc[x["grading_identity_valid"].eq(True)].copy()
-    x["model_proj"] = x["baseline_projection"]
-    x["actual"] = x["actual_output"]
+def build_week4(board: pd.DataFrame, history: pd.DataFrame, rep: pd.DataFrame, actuals: pd.DataFrame) -> pd.DataFrame:
+    req = {"season", "week", "player", "player_clean_key", "team", "opponent", "market", "model_proj", "source_run_id"}
+    miss = req - set(board.columns)
+    if miss:
+        raise RuntimeError(f"Week-4 preserved board missing {sorted(miss)}")
+    b = board.copy()
+    b["season"] = num(b["season"]); b["week"] = num(b["week"])
+    b = b.loc[b["season"].eq(SEASON) & b["week"].eq(4) & b["market"].isin(ALL_W5)].copy()
+    b["team"] = b["team"].map(canon_team); b["opponent"] = b["opponent"].map(canon_team)
+    invariance = b.groupby(["team", "player_clean_key", "market"])["model_proj"].nunique(dropna=True)
+    if (invariance > 1).any():
+        raise RuntimeError("Week-4 frozen board model projection varies across sportsbook rows")
+    x = b.sort_values(["team", "player_clean_key", "market"]).drop_duplicates(["team", "player_clean_key", "market"], keep="last")
+    if not set(num(x["source_run_id"]).dropna().astype(int).unique()).issubset({36935917903}):
+        raise RuntimeError("Week-4 board source-run drift")
+    x["model_proj"] = num(x["model_proj"])
+
+    a = actuals.copy()
+    keep_actual = [cc for cc in [
+        "team", "player_clean_key", "position", "targets", "receptions", "rec_yards", "rushes", "rush_yards",
+        "pass_att", "pass_yards", "team_targets", "team_rushes", "tgt_share_game", "rush_share_game",
+        "ypt_game", "ypc_game", "catch_rate_game",
+    ] if cc in a.columns]
+    x = x.merge(a[keep_actual], on=["team", "player_clean_key"], how="left", validate="many_to_one")
+    x["actual"] = x.apply(market_actual, axis=1)
+    x = x.loc[x["actual"].notna()].copy()
+    x["position_family"] = x["position"].map(family)
     x["abs_error"] = (x["model_proj"] - x["actual"]).abs()
-    pn = x["predicted_opportunities"]; an = x["actual_opportunities"]
-    pe = x["model_effective_efficiency"]; ae = x["actual_efficiency"]
+
+    h4 = history.loc[history["week"].eq(4) & history["market"].isin(DIRECT)].copy()
+    h4 = h4[[
+        "team", "player_clean_key", "market", "baseline_projection", "baseline_reconstructed",
+        "predicted_opportunities", "actual_opportunities", "model_effective_efficiency",
+        "actual_efficiency", "component_decomposition_eligible", "actual_output",
+    ]].rename(columns={
+        "baseline_projection": "component_reference_projection",
+        "baseline_reconstructed": "component_reconstructed_mean",
+        "predicted_opportunities": "pred_opportunity",
+        "actual_opportunities": "component_actual_opportunity",
+        "model_effective_efficiency": "pred_efficiency",
+        "actual_efficiency": "component_actual_efficiency",
+        "actual_output": "component_actual_output",
+    })
+    x = x.merge(h4, on=["team", "player_clean_key", "market"], how="left", validate="one_to_one")
+    x["actual_opportunity"] = x["component_actual_opportunity"]
+    x["realized_efficiency"] = x["component_actual_efficiency"]
+
+    pn = num(x["pred_opportunity"]); an = num(x["actual_opportunity"])
+    pe = num(x["pred_efficiency"]); ae = num(x["realized_efficiency"])
     x["opportunity_contribution"] = (an - pn) * (pe + ae) / 2.0
     x["efficiency_contribution"] = (ae - pe) * (pn + an) / 2.0
+    x["downstream_contribution"] = num(x["component_reconstructed_mean"]) - x["model_proj"]
+    x["final_identity_gap"] = (
+        x["opportunity_contribution"] + x["efficiency_contribution"] + x["downstream_contribution"]
+        - (x["actual"] - x["model_proj"])
+    ).abs()
+    x["exact_component_authority"] = (
+        x["component_decomposition_eligible"].eq(True)
+        & x["component_reconstructed_mean"].notna()
+        & x["final_identity_gap"].le(1e-8)
+    )
+    x["component_scope"] = np.where(
+        x["exact_component_authority"],
+        "REFERENCE_OPPORTUNITY_EFFICIENCY_PLUS_EXACT_DOWNSTREAM_RESIDUAL",
+        "NO_EXACT_COMPONENT_IDENTITY",
+    )
     x["component_label"] = [component_label(o, e) for o, e in zip(x["opportunity_contribution"], x["efficiency_contribution"])]
-    x["actual_opportunity"] = an
-    x["pred_opportunity"] = pn
-    x["pred_efficiency"] = pe
-    x["realized_efficiency"] = ae
-    x["exact_component_authority"] = x["component_decomposition_eligible"].eq(True)
-    x["source_week"] = 4
 
     rr = rep.loc[rep["week"].eq(4), [
         "player_clean_key", "team", "market", "predicted_team_opportunity", "actual_team_opportunity",
@@ -242,6 +308,7 @@ def build_week4(history: pd.DataFrame, rep: pd.DataFrame) -> pd.DataFrame:
     x = x.merge(rr, on=["player_clean_key", "team", "market"], how="left", validate="one_to_one")
     x["parent_opportunity_gap"] = x["actual_team_opportunity"] - x["predicted_team_opportunity"]
     x["player_share_gap"] = x["actual_team_share"] - x["predicted_team_share"]
+    x["source_week"] = 4
     return x
 
 
@@ -307,14 +374,43 @@ def build_week5(settled: pd.DataFrame, state: pd.DataFrame, cases: pd.DataFrame,
         "opportunity_contribution", "efficiency_contribution", "rush_opportunity_contribution", "rush_efficiency_contribution",
         "rec_opportunity_contribution", "rec_efficiency_contribution", "component_label", "case_rank", "pred_team_pass_att",
         "pred_team_rush_att", "team_targets", "team_rushes", "final_target_probability", "final_rush_probability",
+        "pred_carries", "pred_targets", "rules_ypc", "rules_ypt",
     ] if c0 in c.columns]
     exact = c[exact_cols].copy().rename(columns={"actual_opportunity": "exact_actual_opportunity", "actual_efficiency": "exact_actual_efficiency"})
     x = x.merge(exact, on=["team", "player_clean_key", "market"], how="left", validate="one_to_one")
-    x["exact_component_authority"] = x["component_label"].notna()
-    x["pred_opportunity"] = x["pred_opportunity"].where(x["exact_component_authority"], x["state_expected_opportunity"])
-    x["actual_opportunity"] = x["exact_actual_opportunity"].where(x["exact_component_authority"], x["actual_opportunity"])
-    x["pred_efficiency"] = x["pred_efficiency"].where(x["exact_component_authority"], x["state_rules_efficiency"])
-    x["realized_efficiency"] = x["exact_actual_efficiency"].where(x["exact_component_authority"], x["realized_efficiency"])
+
+    x["pred_opportunity"] = x["pred_opportunity"].where(x["component_label"].notna(), x["state_expected_opportunity"])
+    x["actual_opportunity"] = x["exact_actual_opportunity"].where(x["component_label"].notna(), x["actual_opportunity"])
+    x["pred_efficiency"] = x["pred_efficiency"].where(x["component_label"].notna(), x["state_rules_efficiency"])
+    x["realized_efficiency"] = x["exact_actual_efficiency"].where(x["component_label"].notna(), x["realized_efficiency"])
+
+    x["component_reconstructed_mean"] = np.nan
+    direct_exact = x["component_label"].notna() & x["market"].isin(DIRECT)
+    x.loc[direct_exact, "component_reconstructed_mean"] = (
+        num(x.loc[direct_exact, "pred_opportunity"]) * num(x.loc[direct_exact, "pred_efficiency"])
+    )
+    mixed_exact = x["component_label"].notna() & x["market"].eq("rush_rec_yards")
+    x.loc[mixed_exact, "component_reconstructed_mean"] = (
+        num(x.loc[mixed_exact, "pred_carries"]) * num(x.loc[mixed_exact, "rules_ypc"])
+        + num(x.loc[mixed_exact, "pred_targets"]) * num(x.loc[mixed_exact, "rules_ypt"])
+    )
+    x["downstream_contribution"] = x["component_reconstructed_mean"] - x["model_proj"]
+    x["final_identity_gap"] = (
+        num(x["opportunity_contribution"]).fillna(0)
+        + num(x["efficiency_contribution"]).fillna(0)
+        + num(x["downstream_contribution"])
+        - (x["actual"] - x["model_proj"])
+    ).abs()
+    x["exact_component_authority"] = (
+        x["component_label"].notna()
+        & x["component_reconstructed_mean"].notna()
+        & x["final_identity_gap"].le(1e-8)
+    )
+    x["component_scope"] = np.where(
+        x["exact_component_authority"],
+        "FROZEN_PRODUCTION_COMPONENTS_PLUS_EXACT_DOWNSTREAM_RESIDUAL",
+        "ALL_ROW_STATE_CONTEXT_ONLY",
+    )
     x["source_week"] = 5
     return x
 
@@ -348,21 +444,36 @@ def role_signal(row: pd.Series) -> str:
     return "SOURCE_UNAVAILABLE"
 
 
-def attribution(row: pd.Series) -> tuple[str, str]:
-    label = str(row.get("component_label", ""))
+def final_component_state(row: pd.Series) -> str:
     if not bool(row.get("exact_component_authority", False)):
-        return "SOURCE_BLOCKED_OR_UNAVAILABLE", "ALL_ROW_CONTEXT_ONLY__NO_EXACT_PRODUCTION_COMPONENT_DECOMPOSITION"
-    if label == "OPPORTUNITY_DOMINANT":
-        return "OPPORTUNITY_QUANTITY_MISREAD", role_signal(row)
-    if label == "EFFICIENCY_DOMINANT":
-        return "EFFICIENCY_MISREAD", "EFFICIENCY_DOMINATES_EXACT_DECOMPOSITION"
-    if label == "MIXED_OPPORTUNITY_EFFICIENCY":
-        return "MIXED", role_signal(row)
-    return "SOURCE_BLOCKED_OR_UNAVAILABLE", "INSUFFICIENT_COMPONENT_EVIDENCE"
+        return "INSUFFICIENT_COMPONENT_EVIDENCE"
+    vals = {
+        "OPPORTUNITY_DOMINANT_FINAL": abs(float(row.get("opportunity_contribution", 0.0))),
+        "EFFICIENCY_DOMINANT_FINAL": abs(float(row.get("efficiency_contribution", 0.0))),
+        "DOWNSTREAM_TRANSMISSION_DOMINANT_FINAL": abs(float(row.get("downstream_contribution", 0.0))),
+    }
+    ordered = sorted(vals.items(), key=lambda kv: kv[1], reverse=True)
+    if ordered[0][1] >= 1.5 * max(ordered[1][1], 1e-12):
+        return ordered[0][0]
+    return "MIXED_FINAL"
+
+
+def attribution(row: pd.Series) -> tuple[str, str]:
+    state = final_component_state(row)
+    rs = role_signal(row)
+    if state == "OPPORTUNITY_DOMINANT_FINAL":
+        return "OPPORTUNITY_QUANTITY_MISREAD", rs
+    if state == "EFFICIENCY_DOMINANT_FINAL":
+        return "EFFICIENCY_MISREAD", "EFFICIENCY_DOMINATES_FINAL_ERROR_IDENTITY"
+    if state == "DOWNSTREAM_TRANSMISSION_DOMINANT_FINAL":
+        return "MIXED", f"DOWNSTREAM_TRANSMISSION_DOMINANT__{rs}"
+    if state == "MIXED_FINAL":
+        return "MIXED", rs
+    return "SOURCE_BLOCKED_OR_UNAVAILABLE", "NO_EXACT_FINAL_ERROR_COMPONENT_IDENTITY"
 
 
 def make_casebook(all_rows: pd.DataFrame) -> pd.DataFrame:
-    w4 = all_rows.loc[all_rows["source_week"].eq(4) & all_rows["exact_component_authority"].eq(True)].copy()
+    w4 = all_rows.loc[all_rows["source_week"].eq(4)].copy()
     w4 = w4.sort_values(["abs_error", "player_clean_key", "market"], ascending=[False, True, True]).head(40)
     w4["case_rank_week"] = np.arange(1, len(w4) + 1)
     w5 = all_rows.loc[all_rows["source_week"].eq(5) & all_rows["case_rank"].notna()].copy()
@@ -372,6 +483,7 @@ def make_casebook(all_rows: pd.DataFrame) -> pd.DataFrame:
     attrs.columns = ["primary_attribution", "secondary_evidence"]
     cases = pd.concat([cases.reset_index(drop=True), attrs.reset_index(drop=True)], axis=1)
     cases["role_signal"] = cases.apply(role_signal, axis=1)
+    cases["final_component_state"] = cases.apply(final_component_state, axis=1)
     cases["strict_prior_wr_dual_rule_eligible"] = (
         cases["source_week"].eq(5) & cases["position_family"].eq("WR") & num(cases["prior_same_market_games"]).ge(4)
     )
@@ -417,6 +529,7 @@ def make_controls(all_rows: pd.DataFrame, cases: pd.DataFrame) -> pd.DataFrame:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--w1w4-components", type=Path, required=True)
+    ap.add_argument("--w4-board", type=Path, required=True)
     ap.add_argument("--w5-settled", type=Path, required=True)
     ap.add_argument("--w5-state", type=Path, required=True)
     ap.add_argument("--w5-cases", type=Path, required=True)
@@ -424,24 +537,37 @@ def main() -> int:
     a = ap.parse_args(); a.out_dir.mkdir(parents=True, exist_ok=True)
 
     history, rep = prepare_history(read_csv(a.w1w4_components, "W1-W4 components"))
-    w4 = build_week4(history, rep)
-    actuals = load_week5_actuals()
+    week4_actuals = load_actuals(4)
+    week5_actuals = load_actuals(5)
+    w4 = build_week4(
+        read_csv(a.w4_board, "Week-4 preserved board"),
+        history,
+        rep,
+        week4_actuals,
+    )
     w5 = build_week5(
         read_csv(a.w5_settled, "Week-5 settled board"),
         read_csv(a.w5_state, "Week-5 player state"),
         read_csv(a.w5_cases, "Week-5 frozen casebook"),
-        actuals,
+        week5_actuals,
     )
     common = sorted(set(w4.columns) | set(w5.columns))
     all_rows = pd.concat([w4.reindex(columns=common), w5.reindex(columns=common)], ignore_index=True, sort=False)
     all_rows = attach_prior(history, rep, all_rows)
     all_rows["role_signal"] = all_rows.apply(role_signal, axis=1)
+    all_rows["final_component_state"] = all_rows.apply(final_component_state, axis=1)
+    all_rows["signed_error"] = all_rows["model_proj"] - all_rows["actual"]
     all_rows["market_error_median"] = all_rows.groupby(["source_week", "market"])["abs_error"].transform("median")
     all_rows["error_to_market_median"] = all_rows["abs_error"] / all_rows["market_error_median"].replace(0, np.nan)
 
     cases = make_casebook(all_rows)
     controls = make_controls(all_rows, cases)
     mech = cases.groupby(["primary_attribution", "secondary_evidence"], dropna=False).size().reset_index(name="case_rows").sort_values("case_rows", ascending=False)
+    qa = all_rows.groupby(["source_week", "market", "position_family"], dropna=False).agg(
+        rows=("player_clean_key", "size"),
+        mae=("abs_error", "mean"),
+        rmse=("signed_error", lambda z: float(np.sqrt(np.mean(np.square(num(z).dropna())))) if len(num(z).dropna()) else np.nan),
+    ).reset_index()
 
     signals = cases.loc[
         cases["role_signal"].isin({"PRIOR_ROLE_ABOVE_PROJECTED", "CURRENT_ROLE_ABOVE_RULES"}),
@@ -463,6 +589,8 @@ def main() -> int:
         "week5_all_rows": int(all_rows["source_week"].eq(5).sum()),
         "week4_exact_component_rows": int((all_rows["source_week"].eq(4) & all_rows["exact_component_authority"].eq(True)).sum()),
         "week5_exact_component_rows": int((all_rows["source_week"].eq(5) & all_rows["exact_component_authority"].eq(True)).sum()),
+        "max_final_identity_gap": float(num(all_rows.loc[all_rows["exact_component_authority"].eq(True), "final_identity_gap"]).max()),
+        "casebook_downstream_dominant_rows": int(cases["final_component_state"].eq("DOWNSTREAM_TRANSMISSION_DOMINANT_FINAL").sum()),
         "week5_direct_rows_with_actual_opportunity": int((all_rows["source_week"].eq(5) & all_rows["market"].isin(DIRECT) & all_rows["actual_opportunity"].notna()).sum()),
         "casebook_rows": int(len(cases)),
         "matched_control_rows": int(len(controls)),
@@ -486,6 +614,7 @@ def main() -> int:
     mech.to_csv(a.out_dir / "prism_week4_5_repeated_mechanism_summary.csv", index=False)
     signals.to_csv(a.out_dir / "prism_week4_5_pregame_signals_not_transmitted.csv", index=False, float_format="%.12f")
     blocked.to_csv(a.out_dir / "prism_week4_5_source_blocked_signals.csv", index=False)
+    qa.to_csv(a.out_dir / "prism_week4_5_aggregate_qa.csv", index=False, float_format="%.12f")
     (a.out_dir / "prism_week4_5_player_first_forensic_replay_result.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
