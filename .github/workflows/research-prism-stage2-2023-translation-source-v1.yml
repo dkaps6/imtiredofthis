@@ -1,0 +1,169 @@
+name: Research PRISM Stage2 2023 Translation Source Audit V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_STAGE2_2023_TRANSLATION_SOURCE_AUDIT_V1_PLAN.md'
+      - 'scripts/research/audit_prism_stage2_2023_translation_source_v1.py'
+      - '.github/workflows/research-prism-stage2-2023-translation-source-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Record source audit start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM Stage-2 2023 independent translation source audit started: run ${{ github.run_id }}, exact head ${{ github.sha }}. Source/lineage only: zero target-outcome scoring, zero sportsbook/OddsAPI, zero fit, zero production mutation."
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install source-audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy beautifulsoup4 requests pandas numpy 'pyarrow==18.1.0'
+
+      - name: Verify recovered TE OOS fold authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, subprocess
+          run=37782189538
+          aid=11552447166
+          name='wr-te-fold-authorities-recovered-v1'
+          digest='sha256:94a4bee7011877b1d7a24708d5ba3e86ccc5d29b427bea650af574fc1f09fa24'
+          repo=os.environ['GITHUB_REPOSITORY']
+          raw=subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts'])
+          arts={int(a['id']):a for a in json.loads(raw).get('artifacts',[])}
+          if aid not in arts:
+              raise SystemExit('missing recovered WR/TE fold authority')
+          a=arts[aid]
+          assert not a.get('expired'),a
+          assert a.get('name')==name,a
+          assert a.get('digest')==digest,a
+          print('SOURCE_VERIFIED',run,aid,name,digest)
+          PY
+
+      - name: Download exact recovered TE fold authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-stage2-2023
+          mkdir -p /tmp/prism-stage2-2023/{folds,out}
+          gh run download 37782189538             --repo "${{ github.repository }}"             --name wr-te-fold-authorities-recovered-v1             --dir /tmp/prism-stage2-2023/folds
+          TE_COEFF="$(find /tmp/prism-stage2-2023/folds -type f -name te_r5p_coefficients.csv -print -quit)"
+          TE_FOLDS="$(find /tmp/prism-stage2-2023/folds -type f -name te_r5p_folds.csv -print -quit)"
+          test -s "$TE_COEFF"
+          test -s "$TE_FOLDS"
+          echo "TE_COEFF=$TE_COEFF" >> "$GITHUB_ENV"
+          echo "TE_FOLDS=$TE_FOLDS" >> "$GITHUB_ENV"
+
+      - name: Execute frozen 2023 source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/research/audit_prism_stage2_2023_translation_source_v1.py
+          python scripts/research/audit_prism_stage2_2023_translation_source_v1.py             --inactives data/backtests/qb_m78_official_inactives_corrected/m78_corrected_candidate_teamweek.csv             --te-coefficients "$TE_COEFF"             --te-folds "$TE_FOLDS"             --out-dir /tmp/prism-stage2-2023/out
+
+      - name: Certify fail-closed source disposition
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/prism-stage2-2023/out/prism_stage2_2023_translation_source_result.json'))
+          assert p['version']=='PRISM_STAGE2_2023_TRANSLATION_SOURCE_AUDIT_V1',p
+          assert p['disposition']=='PRISM_STAGE2_2023_TRANSLATION_SOURCE_BLOCKED',p
+          assert p['stage1_common_source_ready'] is False,p
+          assert p['frozen_inactive_seasons']==[2024,2025],p
+          assert p['frozen_inactive_2023_teamweeks']==0,p
+          assert p['stage1_gates']['exact_official_inactive_2023_source_exists'] is False,p
+          te=p['entitlement_lineage']['TE_RECEIVING']
+          assert te['test_season_2023_fold_present'] is True,p
+          assert te['training_precedes_target'] is True,p
+          assert te['train_seasons']==['2022'],p
+          assert p['ready_cells']==[],p
+          assert all(not x['source_ready'] for x in p['per_cell']),p
+          i=p['integrity']
+          assert i['target_game_outcomes_scored']==0,p
+          assert i['target_game_outcomes_used_as_predictors']==0,p
+          assert i['outcomes_2026_used']==0,p
+          assert i['sportsbook_inputs']==0 and i['oddsapi_calls']==0,p
+          assert i['models_fit']==0 and i['threshold_searches']==0,p
+          assert i['projection_changes']==0 and i['production_changed'] is False,p
+          assert i['historical_proxy_substituted'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 source result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY' >/tmp/prism-stage2-2023/comment.md
+          import json,os
+          p=json.load(open('/tmp/prism-stage2-2023/out/prism_stage2_2023_translation_source_result.json'))
+          print('## PRISM Stage-2 2023 translation source audit')
+          print()
+          print('Run:',os.environ['GITHUB_RUN_ID'])
+          print('Exact head:',os.environ['GITHUB_SHA'])
+          print('Disposition:',p['disposition'])
+          print()
+          print('- frozen official-inactive seasons:',p['frozen_inactive_seasons'])
+          print('- 2023 exact official-inactive team-weeks:',p['frozen_inactive_2023_teamweeks'])
+          print('- 2023 roster probe rows W5-18:',p['roster_probe']['rows_weeks_5_18'])
+          print('- 2023 roster stable-ID rate:',p['roster_probe']['stable_identity_rate'])
+          print('- 2023 snap probe rows:',p['snap_probe']['raw_rows'])
+          print('- TE-R5P 2023 OOS fold present:',p['entitlement_lineage']['TE_RECEIVING']['test_season_2023_fold_present'])
+          print('- TE-R5P 2023 train seasons:',p['entitlement_lineage']['TE_RECEIVING']['train_seasons'])
+          print()
+          print('Hard blocker:',p['hard_blocker'])
+          print('No proxy substituted. No target outcomes scored. No sportsbook/OddsAPI, fit, threshold search, projection change or production mutation.')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/prism-stage2-2023/comment.md
+
+      - name: Record failure checkpoint
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM Stage-2 2023 translation source audit mechanics FAILED: run ${{ github.run_id }}, exact head ${{ github.sha }}. Inspect exact-head logs; do not score a reconstructed proxy."
+
+      - name: Upload source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-stage2-2023-translation-source-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/prism-stage2-2023/out/**
