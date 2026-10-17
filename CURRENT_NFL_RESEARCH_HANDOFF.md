@@ -1,5 +1,97 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-16 — PRISM TEAM HIGH-VALUE CREATION CLOSED / DRIVE TOPOLOGY NEXT
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-16_PRISM_TEAM_HIGH_VALUE_CREATION_CLOSED_DRIVE_TOPOLOGY_NEXT.md`
+
+Reusable next-chat prompt:
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-16_PRISM_TEAM_HIGH_VALUE_CREATION_CLOSED.md`
+
+Canonical player-first order:
+
+`PLAYER IDENTITY -> CURRENT ROLE/STATE -> TEAMMATE COMPETITION -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+### Newest canonical milestone
+
+`PRISM_TEAM_HIGH_VALUE_CREATION_CLOSED`
+
+Canonical first/binding freeze:
+- `b15573fb7e5e0662a2d6b4a894cc2a13814c3df5`.
+
+Canonical execution:
+- run `38999998874` — SUCCESS;
+- job `117300709440`;
+- exact head `2f5ff029f017bfd7b25d667be9d56b3905f87c73`;
+- artifact `12087739890`;
+- digest `sha256:ebee1d07e0edf5ed92335818aa8bb5c2995ccdaa6bdb40be15c267987b0d2b20`;
+- result `docs/research/PRISM_TEAM_HIGH_VALUE_CREATION_CONDITIONAL_PARENT_V1_RESULT.md`.
+
+All three frozen cells CLOSED:
+- RB rushing inside-10;
+- RB receiving red-zone targets;
+- TE receiving red-zone targets.
+
+The team's own last-4/min-3 same-season high-value event rate worsened the
+next-game high-value pool relative to the strictly-prior league rate while the
+canonical parent opportunity mean and qualified Stage-1 + Stage-2 named-player
+allocation were held fixed.
+
+This is a player-first stopping result:
+do not insert a noisy recent team scoring-area rate upstream of named-player
+projections.
+
+A later overlapping freeze `02e25a...` / run `38999926446` is
+**NONCANONICAL CONCURRENCY SENSITIVITY ONLY**. It is not an independent second
+trial.
+
+### Protected state
+
+- Stage 1 active-role: QUALIFIED ALL.
+- Stage 2 allocation: QUALIFIED for RB rushing / RB receiving / TE receiving.
+- QB Stage-2 V1: CLOSED.
+- WR Stage-2: source-blocked/not scored.
+- Player recent high-value-share persistence: CLOSED.
+- Parent denominator persistence: PASS.
+- Week-6 Sunday/Monday shadow remains LOCKED: 13 games / 248 player-cell rows /
+  SEA-DEN excluded. Do not grade until all included games are final.
+- No paid OddsAPI credit authorized.
+
+### Exact next action
+
+Freeze one genuinely different **team scoring-territory drive creation**
+mechanism before scoring.
+
+Source-ready fields:
+- `offensive_drives`;
+- `drives_reached20`;
+- `drives_reached10`.
+
+It must remain conditional on the same canonical parent opportunity quantity
+and preserve the same qualified named-player allocation.
+
+Use 2024 development / 2025 independent confirmation.
+
+Do NOT:
+- retest recent team high-value event-rate persistence;
+- use player recent scoring-area share;
+- add opponent/environment transmission yet;
+- use TD outcomes;
+- use sportsbook upstream;
+- call OddsAPI;
+- use 2026 outcomes;
+- mutate production;
+- grade Week 6 early.
+
+Freeze the drive mechanism, support, scoring, dependence-aware inference and
+anti-rescue contract before target scoring.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-16 — PRISM DENOMINATOR PERSISTENCE PASS / OPPORTUNITY-QUALITY MECHANISM NEXT
 
 **Model:** PRISM — Player Role & Individual Situation Model
