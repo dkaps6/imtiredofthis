@@ -1,5 +1,65 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-17 — PRISM WR DUAL RELIABILITY MECHANICS READY / WEEK-7 LOCK PENDING
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-17_PRISM_WR_DUAL_RELIABILITY_MECHANICS_READY_WEEK7_PENDING.md`
+
+Canonical player-first order:
+
+`PLAYER IDENTITY -> CURRENT ROLE/STATE -> TEAMMATE COMPETITION -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+### Newest canonical milestone
+
+`WR_DUAL_RELIABILITY_PROSPECTIVE_MECHANICS_READY__NO_WEEK7_LOCK`
+
+Canonical mechanics execution:
+- run `39001244942` — SUCCESS;
+- job `117304434689`;
+- exact execution head `0fbfd104cbea803d8afbbcc9c56b23414b309c88`;
+- artifact `12088664427`;
+- digest `sha256:384850e42c28b53171a8f3062998cdf910dcc1714e36d1abea0a1e4acbee7418`;
+- focused mechanics tests 4/4 PASS;
+- strict repository audit PASS.
+
+Frozen prospective horizon remains 2026 Weeks 7-10.
+
+Mechanics now fail closed unless strict-prior current-season history is complete through exactly target_week - 1. Therefore a Week-7 lock cannot be created until Week 6 is legitimately complete.
+
+At this checkpoint:
+- Week-7 scientific rows frozen = 0;
+- Week-6 outcomes read by mechanics = 0;
+- Week-7 outcomes read = 0;
+- Week-6 dual composite backfilled = false;
+- sportsbook inputs = 0;
+- OddsAPI calls = 0;
+- model fits = 0;
+- production mutation = false.
+
+### Protected state
+
+- direct team high-value creation remains CLOSED;
+- scoring-territory drive creation remains CLOSED;
+- opponent/environment boundary is audited but unopened; no clean generic candidate is authorized;
+- WR opportunity trust QUALIFIED;
+- WR efficiency trust QUALIFIED;
+- WR dual trust historically supported / prospective required;
+- TE allocation trust QUALIFIED;
+- TE efficiency trust CLOSED;
+- Week-6 WR/TE trust locks remain immutable and ungraded;
+- Week-6 Sunday/Monday Stage-2 shadow remains locked/ungraded.
+
+### Exact next action
+
+Do NOT create the Week-7 lock yet.
+
+After Week 6 is final and strict-prior Week-6 history plus Week-7 roster/slate identity are ready, execute the frozen Week-7 WR dual-reliability pregame lock. Preserve the exact WR-R15 projection and fixed 50/50 opportunity/efficiency reliability formula. No Week-6 dual backfill, no sportsbook upstream, no OddsAPI, no production mutation.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-16 — PRISM OPPONENT BOUNDARY AUDITED / PLAYER RELIABILITY FORWARD
 
 **Model:** PRISM — Player Role & Individual Situation Model
