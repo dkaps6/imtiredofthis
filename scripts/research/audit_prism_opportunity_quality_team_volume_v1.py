@@ -219,6 +219,7 @@ def aggregate_teamgames(
         inside5_rush=("inside5", "sum"),
         rb_inside10_rush=("inside10", lambda x: 0),
     ).reset_index()
+    rush_agg["rush_source_present"] = True
     # pandas named aggregation cannot condition on family in the lambda cleanly.
     rb10 = (
         rush.loc[rush["inside10"] & rush["family"].eq("RB")]
@@ -238,6 +239,7 @@ def aggregate_teamgames(
         red_zone_targets=("red_zone", "sum"),
         end_zone_targets=("end_zone_target", "sum"),
     ).reset_index()
+    target_agg["target_source_present"] = True
     modeled_rz = (
         target.loc[target["red_zone"] & target["family"].isin(["RB", "WR", "TE"])]
         .groupby(["season", "week", "game_id", "team"])
@@ -257,6 +259,8 @@ def aggregate_teamgames(
         plays_inside10=("yardline_100", lambda x: int(num(x).le(10).sum())),
     ).reset_index()
 
+    play_agg["play_source_present"] = True
+
     q = plays.loc[plays["drive_id"].fillna("").ne("")].copy()
     drive = (
         q.groupby(["season", "week", "game_id", "team", "drive_id"], sort=False)
@@ -273,20 +277,41 @@ def aggregate_teamgames(
         drives_reached10=("reached10", "sum"),
     ).reset_index()
 
+    drive_agg["drive_source_present"] = True
+
     keys = ["season", "week", "game_id", "team"]
     out = base.merge(rush_agg, on=keys, how="left")
     out = out.merge(target_agg, on=keys, how="left")
     out = out.merge(play_agg, on=keys, how="left")
     out = out.merge(drive_agg, on=keys, how="left")
 
-    count_cols = [
-        "team_rush_attempts", "inside20_rush", "inside10_rush", "inside5_rush",
-        "rb_inside10_rush", "team_targets", "red_zone_targets", "end_zone_targets",
-        "modeled_rz_targets", "offensive_plays", "plays_inside20", "plays_inside10",
-        "offensive_drives", "drives_reached20", "drives_reached10",
-    ]
-    for c in count_cols:
-        out[c] = num(out[c]).fillna(0).astype(int)
+    for flag in (
+        "rush_source_present", "target_source_present",
+        "play_source_present", "drive_source_present",
+    ):
+        out[flag] = out[flag].fillna(False).astype(bool)
+
+    channel_counts = {
+        "rush_source_present": [
+            "team_rush_attempts", "inside20_rush", "inside10_rush",
+            "inside5_rush", "rb_inside10_rush",
+        ],
+        "target_source_present": [
+            "team_targets", "red_zone_targets", "end_zone_targets",
+            "modeled_rz_targets",
+        ],
+        "play_source_present": [
+            "offensive_plays", "plays_inside20", "plays_inside10",
+        ],
+        "drive_source_present": [
+            "offensive_drives", "drives_reached20", "drives_reached10",
+        ],
+    }
+    for flag, cols in channel_counts.items():
+        for col in cols:
+            out[col] = num(out[col])
+            out.loc[out[flag] & out[col].isna(), col] = 0.0
+            out.loc[~out[flag], col] = np.nan
 
     out["inside10_rush_complement"] = out["inside10_rush"] - out["rb_inside10_rush"]
     out["rz_target_complement"] = out["red_zone_targets"] - out["modeled_rz_targets"]
@@ -340,6 +365,17 @@ def attach_strict_prior_state(teamgames: pd.DataFrame) -> pd.DataFrame:
             & x["team"].eq(str(r["opponent"]))
             & x["week"].lt(int(r["week"]))
         ].copy()
+        # A prior game can enter the joint team high-value state only when both
+        # parent event channels were actually observed. Missing source is never
+        # converted into a zero-event game.
+        if {"rush_source_present", "target_source_present"}.issubset(same.columns):
+            same = same.loc[
+                same["rush_source_present"] & same["target_source_present"]
+            ].copy()
+        if {"rush_source_present", "target_source_present"}.issubset(opp.columns):
+            opp = opp.loc[
+                opp["rush_source_present"] & opp["target_source_present"]
+            ].copy()
         x.at[idx, "prior_off_games"] = int(len(same))
         x.at[idx, "prior_opp_def_games"] = int(len(opp))
         if len(same):
@@ -386,13 +422,29 @@ def season_metrics(
     tg = teamgames.loc[teamgames["season"].eq(season)]
     target_rows = tg.loc[tg["week"].isin(TARGET_WEEKS)].copy()
 
-    finite_cols = [
-        "inside10_rush", "red_zone_targets", "rb_inside10_rush",
-        "modeled_rz_targets", "inside10_rush_complement", "rz_target_complement",
+    rush_finite_cols = [
+        "inside10_rush", "rb_inside10_rush", "inside10_rush_complement",
     ]
-    finite_rate = float(
-        np.isfinite(tg[finite_cols].apply(pd.to_numeric, errors="coerce").to_numpy(float)).mean()
-    ) if len(tg) else 0.0
+    target_finite_cols = [
+        "red_zone_targets", "modeled_rz_targets", "rz_target_complement",
+    ]
+    rush_present = tg.loc[tg["rush_source_present"]]
+    target_present = tg.loc[tg["target_source_present"]]
+    rush_finite_rate = float(
+        np.isfinite(
+            rush_present[rush_finite_cols]
+            .apply(pd.to_numeric, errors="coerce")
+            .to_numpy(float)
+        ).mean()
+    ) if len(rush_present) else 0.0
+    target_finite_rate = float(
+        np.isfinite(
+            target_present[target_finite_cols]
+            .apply(pd.to_numeric, errors="coerce")
+            .to_numpy(float)
+        ).mean()
+    ) if len(target_present) else 0.0
+    finite_rate = min(rush_finite_rate, target_finite_rate)
 
     rush_conserve = (
         tg["rb_inside10_rush"] + tg["inside10_rush_complement"] - tg["inside10_rush"]
@@ -402,12 +454,16 @@ def season_metrics(
     ).abs()
 
     weeks = sorted(tg["week"].unique())
-    observed = num(tg["offensive_plays"]).gt(0)
+    observed = tg["play_source_present"].fillna(False)
+    rush_observed = tg["rush_source_present"].fillna(False)
+    target_observed = tg["target_source_present"].fillna(False)
     metrics = {
         "season": season,
         "scheduled_teamgames": int(len(s)),
         "pbp_teamgames": int(observed.sum()),
         "scheduled_teamgame_coverage": float(observed.mean()) if len(tg) else 0.0,
+        "rush_teamgame_coverage": float(rush_observed.mean()) if len(tg) else 0.0,
+        "target_teamgame_coverage": float(target_observed.mean()) if len(tg) else 0.0,
         "pbp_team_opponent_identity_coverage": float(
             (tg["team"].astype(str).ne("") & tg["opponent"].astype(str).ne("")).mean()
         ) if len(tg) else 0.0,
@@ -434,6 +490,8 @@ def season_metrics(
     }
     gates = {
         "scheduled_teamgame_coverage_ge_99": metrics["scheduled_teamgame_coverage"] >= .99,
+        "rush_teamgame_coverage_ge_99": metrics["rush_teamgame_coverage"] >= .99,
+        "target_teamgame_coverage_ge_99": metrics["target_teamgame_coverage"] >= .99,
         "team_opponent_identity_ge_99": metrics["pbp_team_opponent_identity_coverage"] >= .99,
         "yardline_coverage_ge_99": min(
             metrics["yardline_coverage_rush"], metrics["yardline_coverage_target"]
