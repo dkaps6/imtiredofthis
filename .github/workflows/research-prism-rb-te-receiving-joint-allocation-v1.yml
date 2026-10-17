@@ -1,0 +1,245 @@
+name: Research PRISM Joint RB TE Receiving Allocation V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_RB_TE_RECEIVING_JOINT_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_V1_FREEZE.md'
+      - 'scripts/research/evaluate_prism_rb_te_receiving_joint_active_role_allocation_v1.py'
+      - '.github/workflows/research-prism-rb-te-receiving-joint-allocation-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "73fc9e92aa3848f289a11fdc2276391e24d449be"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pyarrow pyyaml
+
+      - name: Verify immutable pre-score freeze
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_RB_TE_RECEIVING_JOINT_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_V1_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/evaluate_prism_rb_te_receiving_joint_active_role_allocation_v1.py" 2>/dev/null; then
+            echo "ERROR: scorer existed at freeze commit"
+            exit 1
+          fi
+          grep -q 'joint outcomes scored: \*\*0\*\*' docs/research/PRISM_RB_TE_RECEIVING_JOINT_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_V1_FREEZE.md
+          grep -q 'RB cannot rescue TE' docs/research/PRISM_RB_TE_RECEIVING_JOINT_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_V1_FREEZE.md
+
+      - name: Verify immutable scientific parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070806828 --jq '.workflow_run.id')" = "38955368643"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070806828 --jq '.digest')" = "sha256:e91a108495d7a2b6eb289e0618ab6af09e3d6cdf6895e534742a07340e4a2a83"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12044155086 --jq '.workflow_run.id')" = "38895205962"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12044155086 --jq '.digest')" = "sha256:a42322579aee682497223c7f53bce0b14a96dc6f466558e811770e681a035dad"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.workflow_run.id')" = "38907459996"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.digest')" = "sha256:41b1acd3f1b8d77abb53980db160ece32f8fc40351939d4827248b9caad0c64b"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070774378 --jq '.workflow_run.id')" = "38957575645"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070774378 --jq '.digest')" = "sha256:e07edbad1bf97a4917ba95c58156c8941448e7b2668bd0eae2e9bcad5d4945b0"
+
+      - name: Announce frozen joint scoring
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "Frozen PRISM joint RB+TE receiving active-role allocation V1 scoring started: run ${{ github.run_id }}, exact head ${{ github.sha }}, freeze commit $FREEZE_COMMIT. 2024 development / 2025 independent confirmation only. RB and TE must pass independently; WR stays in shared complement. No Week-4/5 fitting, no 2026 outcomes, no sportsbook/OddsAPI, no production or Week-6 lock change."
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-conditional-allocation-source-v1-38955368643
+          path: /tmp/joint/source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38955368643
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-participation-source-v1-38895205962
+          path: /tmp/joint/stage1-source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38895205962
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-participation-mechanism-v1-38907459996
+          path: /tmp/joint/stage1-mechanism
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38907459996
+
+      - name: Resolve immutable source files
+        run: |
+          set -euo pipefail
+          SOURCE_DETAIL="$(find /tmp/joint/source -type f -name 'active_role_conditional_allocation_source_join_detail.csv' -print -quit)"
+          STAGE1_UNIVERSE="$(find /tmp/joint/stage1-source -type f -name 'player_active_role_pregame_universe.csv' -print -quit)"
+          STAGE1_MECHANISM="$(find /tmp/joint/stage1-mechanism -type f -name 'player_active_role_mechanism_scored_rows.csv' -print -quit)"
+          for f in "$SOURCE_DETAIL" "$STAGE1_UNIVERSE" "$STAGE1_MECHANISM"; do
+            test -n "$f" && test -s "$f"
+          done
+          echo "SOURCE_DETAIL=$SOURCE_DETAIL" >> "$GITHUB_ENV"
+          echo "STAGE1_UNIVERSE=$STAGE1_UNIVERSE" >> "$GITHUB_ENV"
+          echo "STAGE1_MECHANISM=$STAGE1_MECHANISM" >> "$GITHUB_ENV"
+
+      - name: Build leakage-safe historical scoring labels
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/joint/hist-2024 /tmp/joint/hist-2025 /tmp/joint/score
+          mkdir -p /tmp/joint/hist-2024 /tmp/joint/hist-2025 /tmp/joint/score
+          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks 5-18 --out-dir /tmp/joint/hist-2024
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks 5-18 --out-dir /tmp/joint/hist-2025
+          python - <<'PY'
+          import pandas as pd
+          roots=['/tmp/joint/hist-2024','/tmp/joint/hist-2025']
+          out='/tmp/joint/score/schedule_history.csv'
+          x=pd.concat([pd.read_csv(f'{r}/schedule_history.csv') for r in roots],ignore_index=True)
+          keys=['season','week','team']
+          x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+          if x.duplicated(keys).any():
+              raise RuntimeError('duplicate combined schedule rows')
+          x.to_csv(out,index=False)
+          PY
+          python scripts/backtest/historical_player_logs.py             --seasons 2024,2025             --schedule /tmp/joint/score/schedule_history.csv             --out /tmp/joint/score/player_game_logs_history.csv
+
+      - name: Score frozen joint composition
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/research/evaluate_prism_rb_te_receiving_joint_active_role_allocation_v1.py
+          python scripts/research/evaluate_prism_rb_te_receiving_joint_active_role_allocation_v1.py             --source-detail "$SOURCE_DETAIL"             --stage1-universe "$STAGE1_UNIVERSE"             --stage1-mechanism "$STAGE1_MECHANISM"             --player-logs /tmp/joint/score/player_game_logs_history.csv             --schedule /tmp/joint/score/schedule_history.csv             --out-dir /tmp/joint/score/result
+
+      - name: Certify frozen contract
+        env:
+          HEAD_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          p='/tmp/joint/score/result/joint_rb_te_receiving_result.json'
+          r=json.load(open(p))
+          assert r['version']=='PRISM_RB_TE_RECEIVING_JOINT_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_V1',r
+          assert r['freeze_commit']=='73fc9e92aa3848f289a11fdc2276391e24d449be',r
+          assert r['source_run']==38955368643,r
+          assert r['source_artifact']==12070806828,r
+          assert r['stage1_run']==38907459996,r
+          assert r['separate_stage2_run']==38957575645,r
+          assert r['joint_source_rooms']==832,r
+          assert r['max_positive_q_players'] <= 9,r
+          assert r['max_state_count'] <= 512,r
+          assert r['pooled_family_rescue_allowed'] is False,r
+          assert r['wr_stage2_scored'] is False,r
+          assert r['wr_remained_in_shared_complement'] is True,r
+          assert r['canonical_q_refit']==0,r
+          assert r['p_active_retuned']==0,r
+          assert r['new_share_coefficients_fit']==0,r
+          assert r['threshold_searches']==0,r
+          assert r['target_game_outcomes_used_as_predictors']==0,r
+          assert r['week4_5_forensic_outcomes_used_to_define_law']==0,r
+          assert r['outcomes_2026_used']==0,r
+          assert r['sportsbook_inputs_used']==0,r
+          assert r['oddsapi_calls']==0,r
+          assert r['production_changed'] is False,r
+          assert r['week6_locks_changed'] is False,r
+          assert r['disposition'] in {
+            'PRISM_RB_TE_RECEIVING_JOINT_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_QUALIFIED',
+            'PRISM_RB_TE_RECEIVING_JOINT_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_CLOSED',
+          },r
+          cert={
+            'version':'PRISM_RB_TE_RECEIVING_JOINT_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_V1_CERT',
+            'status':'PRISM_RB_TE_RECEIVING_JOINT_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_REPRODUCED',
+            'exact_head':os.environ['HEAD_SHA'],
+            'run_id':int(os.environ['RUN_ID']),
+            'result':r,
+          }
+          open('/tmp/joint/score/result/joint_rb_te_receiving_certificate.json','w').write(
+              json.dumps(cert,indent=2,sort_keys=True)+'\n'
+          )
+          print(json.dumps(cert,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os, pandas as pd
+          r=json.load(open('/tmp/joint/score/result/joint_rb_te_receiving_result.json'))
+          m=pd.read_csv('/tmp/joint/score/result/joint_rb_te_receiving_family_metrics.csv')
+          lines=[
+            '### PRISM Joint RB+TE Receiving Active-Role Allocation V1',
+            '',
+            f"- Run: `{os.environ['RUN_ID']}`",
+            f"- Exact head: `{os.environ['HEAD_SHA']}`",
+            f"- Freeze: `{r['freeze_commit']}`",
+            f"- Disposition: `{r['disposition']}`",
+            '',
+          ]
+          for rec in m.sort_values(['family','season']).to_dict('records'):
+              lines.append(
+                f"- {rec['family']} {int(rec['season'])}: rows={int(rec['rows'])}; "
+                f"CRPS delta={rec['mean_delta_crps']:+.6f}; "
+                f"AE delta={rec['mean_delta_ae']:+.6f}; "
+                f"player-CI low={rec['player_cluster_ci95_low']:+.6f}; "
+                f"game-CI low={rec['game_cluster_ci95_low']:+.6f}; "
+                f"equal-player CI low={rec['equal_player_ci95_low']:+.6f}"
+              )
+          lines += [
+            '',
+            f"- 2024 joint room delta: {r['room_metrics']['2024']['mean_delta_room_error']:+.6f}",
+            f"- 2025 joint room delta: {r['room_metrics']['2025']['mean_delta_room_error']:+.6f}",
+            f"- RB joint-qualified: {r['rb_receiving_joint_qualified']}",
+            f"- TE joint-qualified: {r['te_receiving_joint_qualified']}",
+            '',
+            'Integrity: no q refit; no p_active retune; no family rescue; WR unscored in shared complement; no Week-4/5 fitting; no 2026 outcomes; no sportsbook/OddsAPI; no production or Week-6 lock change.',
+          ]
+          open('/tmp/joint_issue.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/joint_issue.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload joint score
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-rb-te-receiving-joint-active-role-allocation-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/joint/score/result/**
