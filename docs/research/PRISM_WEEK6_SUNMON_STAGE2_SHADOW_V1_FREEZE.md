@@ -97,6 +97,7 @@ No thresholding or recalibration.
 Weeks 1-5 historical prior source must pass:
 - scheduled team-game roster coverage >= 99%;
 - stable identity >= 99%;
+- official-inactive team-game coverage >= 99%;
 - official-inactive -> roster identity bridge >= 95%;
 - snap-source team-game coverage >= 99%;
 - positive-snap -> roster identity bridge >= 98%;
