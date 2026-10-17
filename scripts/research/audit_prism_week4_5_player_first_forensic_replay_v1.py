@@ -38,7 +38,10 @@ def read_csv(path: Path, label: str) -> pd.DataFrame:
 
 
 def family(position: Any) -> str:
-    p = str(position or "").upper()
+    if position is None or pd.isna(position):
+        p = ""
+    else:
+        p = str(position).upper()
     if p in RB_POS:
         return "RB"
     if p in {"QB", "WR", "TE"}:
@@ -674,7 +677,7 @@ def main() -> int:
         "week4_all_rows": int(all_rows["source_week"].eq(4).sum()),
         "week5_all_rows": int(all_rows["source_week"].eq(5).sum()),
         "week5_source_scope_rows": int(len(w5_source_scope)),
-        "week5_nonsettled_rows_excluded": int(
+        "week5_nonsettled_rows_retained": int(
             (~w5_source_scope["football_settlement_status"].eq("SETTLED")).sum()
         ),
         "week5_nonsettled_status_counts": {
