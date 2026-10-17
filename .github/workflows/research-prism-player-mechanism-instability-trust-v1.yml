@@ -1,0 +1,177 @@
+name: Research PRISM Player Mechanism Instability Trust V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_PLAYER_MECHANISM_INSTABILITY_TRUST_V1_FREEZE.md'
+      - 'scripts/research/evaluate_prism_player_mechanism_instability_trust_v1.py'
+      - '.github/workflows/research-prism-player-mechanism-instability-trust-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "95f1e831cf12a3c5b24234089169e0b049ec252f"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Record frozen-test start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM player mechanism-instability trust V1 scoring started: run ${{ github.run_id }}, exact head ${{ github.sha }}, freeze ${FREEZE_COMMIT}. Historical WR/TE trust test only; candidate must add information beyond existing opportunity + efficiency difficulty. Zero 2026/Week-6 outcomes, sportsbook/OddsAPI, predictive fit, projection/distribution or production change."
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pyyaml
+
+      - name: Verify frozen-before-scoring boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_PLAYER_MECHANISM_INSTABILITY_TRUST_V1_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/evaluate_prism_player_mechanism_instability_trust_v1.py" 2>/dev/null; then
+            echo "ERROR: scorer existed at candidate freeze"
+            exit 1
+          fi
+
+      - name: Verify exact historical parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,subprocess
+          expected={
+            37634044900:(11487359185,'wr-player-mechanism-persistence-v1-37634044900','sha256:13bb2df4d239f9f2832370520c3d31a08ed4f39c782766fbfb96295edc11c4e3'),
+            37631011196:(11486082927,'te-player-mechanism-persistence-v1-37631011196','sha256:1b208531a8cf34735760081b7a232c4cd164a551c325f518d33428a50d7da8ab'),
+          }
+          repo=os.environ['GITHUB_REPOSITORY']
+          for run,(aid,name,digest) in expected.items():
+              payload=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts']))
+              arts={int(a['id']):a for a in payload.get('artifacts',[])}
+              a=arts.get(aid)
+              assert a is not None,(run,aid)
+              assert not a.get('expired'),a
+              assert a.get('name')==name,a
+              assert a.get('digest')==digest,a
+              print('PARENT_VERIFIED',run,aid,name,digest)
+          PY
+
+      - name: Download exact historical panels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-mech-trust
+          mkdir -p /tmp/prism-mech-trust/{wr,te,out}
+          gh run download 37634044900 --repo "${{ github.repository }}"             --name wr-player-mechanism-persistence-v1-37634044900             --dir /tmp/prism-mech-trust/wr
+          gh run download 37631011196 --repo "${{ github.repository }}"             --name te-player-mechanism-persistence-v1-37631011196             --dir /tmp/prism-mech-trust/te
+          test -s /tmp/prism-mech-trust/wr/wr_player_mechanism_persistence_rows.csv
+          test -s /tmp/prism-mech-trust/te/te_player_mechanism_persistence_rows.csv
+
+      - name: Execute frozen trust test
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/research/evaluate_prism_player_mechanism_instability_trust_v1.py
+          python scripts/research/evaluate_prism_player_mechanism_instability_trust_v1.py             --wr /tmp/prism-mech-trust/wr/wr_player_mechanism_persistence_rows.csv             --te /tmp/prism-mech-trust/te/te_player_mechanism_persistence_rows.csv             --out-dir /tmp/prism-mech-trust/out
+
+      - name: Certify exact frozen contract
+        run: |
+          python - <<'PY'
+          import json,pandas as pd
+          p=json.load(open('/tmp/prism-mech-trust/out/mechanism_instability_trust_result.json'))
+          wr=pd.read_csv('/tmp/prism-mech-trust/out/wr_mechanism_instability_trust_rows.csv')
+          te=pd.read_csv('/tmp/prism-mech-trust/out/te_mechanism_instability_trust_rows.csv')
+          assert p['version']=='PRISM_PLAYER_MECHANISM_INSTABILITY_TRUST_V1',p
+          assert p['status'] in {
+            'PRISM_PLAYER_MECHANISM_INSTABILITY_TRUST_V1_QUALIFIED_WR_TE',
+            'PRISM_PLAYER_MECHANISM_INSTABILITY_TRUST_V1_QUALIFIED_PARTIAL',
+            'PRISM_PLAYER_MECHANISM_INSTABILITY_TRUST_V1_CLOSED',
+          },p
+          assert len(wr)==1938,len(wr)
+          assert len(te)==1236,len(te)
+          assert p['dominance_ratio']==1.5,p
+          assert p['prior_window_max']==8 and p['prior_window_min']==4,p
+          assert p['bootstrap_replicates']==5000,p
+          assert p['wr']['max_decomposition_identity_gap']<=1e-10,p
+          assert p['te']['max_decomposition_identity_gap']<=1e-10,p
+          assert p['wr']['chronology_violations']==0,p
+          assert p['te']['chronology_violations']==0,p
+          assert p['rb_status']=='SOURCE_NOT_PROVEN_FOR_THIS_V1',p
+          assert p['qb_status']=='EXCLUDED_BY_ANTI_RETEST',p
+          assert p['outcomes_2026_used']==0,p
+          assert p['week6_outcomes_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['predictive_models_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['projection_changed'] is False,p
+          assert p['distribution_changed'] is False,p
+          assert p['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json,os
+          p=json.load(open('/tmp/prism-mech-trust/out/mechanism_instability_trust_result.json'))
+          print("## PRISM player mechanism-instability trust V1")
+          print()
+          print(f"Run: {os.environ['GITHUB_RUN_ID']}")
+          print(f"Exact head: {os.environ['GITHUB_SHA']}")
+          print(f"Freeze: {os.environ['FREEZE_COMMIT']}")
+          print(f"Disposition: {p['status']}")
+          for pos in ['wr','te']:
+              q=p[pos]
+              d=q['development']; c=q['confirmation']
+              print(f"{pos.upper()}: qualified={q['qualified']}")
+              print(f"- development {d['season']}: rows={d['rows']} players={d['players']} primary_partial_rho={d['primary_partial_rank_association']:+.5f}")
+              print(f"- confirmation {c['season']}: rows={c['rows']} players={c['players']} primary_partial_rho={c['primary_partial_rank_association']:+.5f}")
+              print(f"- confirmation player-cluster 95% CI [{c['player_cluster']['ci_low']:+.5f},{c['player_cluster']['ci_high']:+.5f}]")
+              print(f"- confirmation team-week 95% CI [{c['team_week_cluster']['ci_low']:+.5f},{c['team_week_cluster']['ci_high']:+.5f}]")
+              print(f"- gates: {q['gates']}")
+          print(f"RB={p['rb_status']}; QB={p['qb_status']}.")
+          print()
+          print("Historical trust evidence only. The candidate changes no mean, width, sportsbook price or selection. Zero 2026/Week-6 outcomes, sportsbook/OddsAPI, predictive fits, threshold search, projection/distribution or production changes.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload trust evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-player-mechanism-instability-trust-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-mech-trust/out/**
