@@ -25,6 +25,12 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - name: Record replay start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM Week-4/5 player-first all-row replay started: run ${{ github.run_id }}, exact head ${{ github.sha }}. Frozen diagnostic only: no Week-6 outcomes, no sportsbook refetch/upstream, no OddsAPI, no fit, no production mutation."
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -162,6 +168,13 @@ jobs:
           print("Diagnostic only: zero Week-6 outcomes, zero sportsbook refetch/upstream predictor, zero OddsAPI, zero fitted coefficients/thresholds, zero production mutation. Week-4 exact WR dual score was not manufactured.")
           PY
           gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/prism-w45-comment.md
+
+      - name: Record failure checkpoint
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM Week-4/5 player-first all-row replay FAILED: run ${{ github.run_id }}, exact head ${{ github.sha }}. Inspect exact-head job logs before retrying. No promotion authorized."
 
       - name: Upload forensic replay artifact
         if: always()
