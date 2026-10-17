@@ -1,0 +1,224 @@
+name: Research PRISM Team Scoring-Territory Drive Creation V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_TEAM_SCORING_TERRITORY_DRIVE_CREATION_V1_FREEZE.md'
+      - 'scripts/research/evaluate_prism_team_scoring_territory_drive_creation_v1.py'
+      - 'tests/test_prism_team_scoring_territory_drive_creation_v1.py'
+      - '.github/workflows/research-prism-team-scoring-territory-drive-creation-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "82f74487e68729efdbcc0868968fd6ddccd4eef1"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Announce frozen score
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "$GITHUB_REPOSITORY" --body "PRISM Team Scoring-Territory Drive Creation V1 started: run $GITHUB_RUN_ID, exact head $GITHUB_SHA, freeze $FREEZE_COMMIT. Frozen 2024-development / 2025-confirmation drive-territory mechanism only: no direct recent-team high-value-rate candidate, no opponent/environment, no player high-value-share candidate, no sportsbook, no OddsAPI, no 2026 outcomes, no production mutation."
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pyarrow pytest pyyaml
+
+      - name: Verify frozen-before-implementation contract
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_TEAM_SCORING_TERRITORY_DRIVE_CREATION_V1_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/evaluate_prism_team_scoring_territory_drive_creation_v1.py" 2>/dev/null; then
+            echo "ERROR: scorer existed at freeze commit"
+            exit 1
+          fi
+          grep -q 'predictive candidates scored: \*\*0\*\*' docs/research/PRISM_TEAM_SCORING_TERRITORY_DRIVE_CREATION_V1_FREEZE.md
+          grep -q 'last up to \*\*4\*\*' docs/research/PRISM_TEAM_SCORING_TERRITORY_DRIVE_CREATION_V1_FREEZE.md
+          grep -q 'minimum \*\*3\*\*' docs/research/PRISM_TEAM_SCORING_TERRITORY_DRIVE_CREATION_V1_FREEZE.md
+          grep -q 'Poisson' docs/research/PRISM_TEAM_SCORING_TERRITORY_DRIVE_CREATION_V1_FREEZE.md
+
+      - name: Verify immutable parents and download artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          check_artifact () {
+            artifact="$1"; run="$2"; digest="$3"
+            test "$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact" --jq '.workflow_run.id')" = "$run"
+            test "$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact" --jq '.digest')" = "$digest"
+          }
+          check_artifact 12085367606 38991605252 "sha256:68b680c745ae8b8479b3dbaf8f41dcc4f6cb728a0f39b0ac10b77dc3ac8e4b90"
+          check_artifact 12085194208 38991915503 "sha256:c2be00311f9cf2149ebef36d419851214add08cae83bbc3b947990ce60a5e569"
+          check_artifact 12085278127 38991737241 "sha256:0be3d571129876ce0a8df755762215e147faec2ff1ac1822e05cbd84508a12bb"
+          check_artifact 12044155086 38895205962 "sha256:a42322579aee682497223c7f53bce0b14a96dc6f466558e811770e681a035dad"
+          check_artifact 12049120604 38907459996 "sha256:41b1acd3f1b8d77abb53980db160ece32f8fc40351939d4827248b9caad0c64b"
+          check_artifact 12070774378 38957575645 "sha256:e07edbad1bf97a4917ba95c58156c8941448e7b2668bd0eae2e9bcad5d4945b0"
+
+          rm -rf /tmp/prism-raw /tmp/prism-stage2 /tmp/prism-recon /tmp/prism-stage1-source /tmp/prism-stage1-mechanism
+          mkdir -p /tmp/prism-raw /tmp/prism-stage2 /tmp/prism-recon /tmp/prism-stage1-source /tmp/prism-stage1-mechanism
+          gh run download 38991605252 --repo "$GITHUB_REPOSITORY" -n prism-opportunity-quality-team-volume-v1-38991605252 -D /tmp/prism-raw
+          gh run download 38991915503 --repo "$GITHUB_REPOSITORY" -n player-active-role-conditional-allocation-source-v1-38991915503 -D /tmp/prism-stage2
+          gh run download 38991737241 --repo "$GITHUB_REPOSITORY" -n prism-opportunity-quality-source-reconciliation-v1-38991737241 -D /tmp/prism-recon
+          gh run download 38895205962 --repo "$GITHUB_REPOSITORY" -n player-active-role-participation-source-v1-38895205962 -D /tmp/prism-stage1-source
+          gh run download 38907459996 --repo "$GITHUB_REPOSITORY" -n player-active-role-participation-mechanism-v1-38907459996 -D /tmp/prism-stage1-mechanism
+
+      - name: Resolve immutable scoring inputs
+        run: |
+          set -euo pipefail
+          RAW_TEAMGAMES="$(find /tmp/prism-raw -type f -name 'prism_opportunity_quality_teamgames.csv' -print -quit)"
+          RAW_TOPOLOGY="$(find /tmp/prism-raw -type f -name 'prism_opportunity_quality_player_topology.csv' -print -quit)"
+          RAW_RESULT="$(find /tmp/prism-raw -type f -name 'prism_opportunity_quality_source_result.json' -print -quit)"
+          STAGE2_DETAIL="$(find /tmp/prism-stage2 -type f -name 'active_role_conditional_allocation_source_join_detail.csv' -print -quit)"
+          STAGE2_RESULT="$(find /tmp/prism-stage2 -type f -name 'active_role_conditional_allocation_source_result.json' -print -quit)"
+          DENOM_PARITY="$(find /tmp/prism-stage2 -type f -name 'prism_parent_denominator_persistence_parity.json' -print -quit)"
+          RECON_RESULT="$(find /tmp/prism-recon -type f -name 'prism_opportunity_quality_source_reconciliation_result.json' -print -quit)"
+          STAGE1_UNIVERSE="$(find /tmp/prism-stage1-source -type f -name 'player_active_role_pregame_universe.csv' -print -quit)"
+          STAGE1_MECHANISM="$(find /tmp/prism-stage1-mechanism -type f -name 'player_active_role_mechanism_scored_rows.csv' -print -quit)"
+          for f in "$RAW_TEAMGAMES" "$RAW_TOPOLOGY" "$RAW_RESULT" "$STAGE2_DETAIL" "$STAGE2_RESULT" "$DENOM_PARITY" "$RECON_RESULT" "$STAGE1_UNIVERSE" "$STAGE1_MECHANISM"; do
+            test -n "$f" && test -s "$f"
+          done
+          {
+            echo "RAW_TEAMGAMES=$RAW_TEAMGAMES"
+            echo "RAW_TOPOLOGY=$RAW_TOPOLOGY"
+            echo "RAW_RESULT=$RAW_RESULT"
+            echo "STAGE2_DETAIL=$STAGE2_DETAIL"
+            echo "STAGE2_RESULT=$STAGE2_RESULT"
+            echo "DENOM_PARITY=$DENOM_PARITY"
+            echo "RECON_RESULT=$RECON_RESULT"
+            echo "STAGE1_UNIVERSE=$STAGE1_UNIVERSE"
+            echo "STAGE1_MECHANISM=$STAGE1_MECHANISM"
+          } >> "$GITHUB_ENV"
+
+      - name: Run frozen mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_prism_team_scoring_territory_drive_creation_v1.py
+          pytest -q tests/test_prism_team_scoring_territory_drive_creation_v1.py
+
+      - name: Score frozen mechanism
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/prism-team-drive-creation
+          mkdir -p /tmp/prism-team-drive-creation
+          python scripts/research/evaluate_prism_team_scoring_territory_drive_creation_v1.py \
+            --raw-teamgames "$RAW_TEAMGAMES" \
+            --raw-player-topology "$RAW_TOPOLOGY" \
+            --raw-result "$RAW_RESULT" \
+            --stage2-detail "$STAGE2_DETAIL" \
+            --stage2-result "$STAGE2_RESULT" \
+            --denominator-parity "$DENOM_PARITY" \
+            --reconciliation-result "$RECON_RESULT" \
+            --stage1-universe "$STAGE1_UNIVERSE" \
+            --stage1-mechanism "$STAGE1_MECHANISM" \
+            --out-dir /tmp/prism-team-drive-creation
+
+      - name: Certify frozen contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/prism-team-drive-creation/prism_team_drive_creation_result.json'))
+          assert p['version']=='PRISM_TEAM_SCORING_TERRITORY_DRIVE_CREATION_V1',p
+          assert p['freeze_commit']=='82f74487e68729efdbcc0868968fd6ddccd4eef1',p
+          fp=p['frozen_parameters']
+          assert fp['development_season']==2024 and fp['confirmation_season']==2025,p
+          assert fp['target_weeks']==[5,18] and fp['history_window']==4 and fp['history_min']==3,p
+          assert fp['rush_territory']=='DRIVES_REACHED_OPPONENT_10',p
+          assert fp['receiving_territory']=='DRIVES_REACHED_OPPONENT_20',p
+          assert fp['team_count_law']=='POISSON' and fp['player_count_law']=='POISSON',p
+          integ=p['integrity']
+          for k in ('target_game_outcomes_used_as_predictors','predictive_models_fit','fitted_coefficients','threshold_searches','sportsbook_inputs_used','oddsapi_calls','outcomes_2026_used'):
+              assert integ[k]==0,(k,p)
+          assert integ['direct_recent_team_high_value_rate_candidate_used'] is False,p
+          assert integ['player_high_value_share_candidate_used'] is False,p
+          assert integ['opponent_environment_used'] is False,p
+          assert integ['td_outcomes_used'] is False,p
+          assert integ['production_changed'] is False,p
+          assert p['disposition'] in {'PRISM_TEAM_DRIVE_CREATION_QUALIFIED_ALL','PRISM_TEAM_DRIVE_CREATION_QUALIFIED_PARTIAL','PRISM_TEAM_DRIVE_CREATION_CLOSED'},p
+          for cell,seasons in p['season_metrics'].items():
+              for season,m in seasons.items():
+                  assert m['max_parent_mean_drift'] <= 1e-12,(cell,season,m)
+                  assert m['max_allocation_share_drift'] <= 1e-12,(cell,season,m)
+                  assert m['chronology_violations']==0,(cell,season,m)
+                  assert m['drive_history_candidate_team_games']>=400,(cell,season,m)
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/prism-team-drive-creation/prism_team_drive_creation_result.json'))
+          lines=[
+              '### PRISM Team Scoring-Territory Drive Creation V1 — frozen score','',
+              f"Run: {os.environ['GITHUB_RUN_ID']}",
+              f"Exact head: {os.environ['GITHUB_SHA']}",
+              f"Freeze: {p['freeze_commit']}",
+              f"Overall disposition: {p['disposition']}",
+              'Development 2024 / independent confirmation 2025.',
+              'Baseline = strict-prior same-season league high-value rate x canonical PRISM parent mean.',
+              'Candidate = baseline high-value rate x frozen team/league scoring-territory drive-entry ratio.',
+              'RB rush territory = drives reaching opponent 10; receiving territory = drives reaching opponent 20.',
+              'Player allocation = SAME qualified Stage-1 + Stage-2 exact active-set expectation on both sides.','',
+          ]
+          for cell,disp in p['position_dispositions'].items():
+              lines.append(f"#### {cell} — {disp}")
+              for season in ('2024','2025'):
+                  m=p['season_metrics'][cell][season]
+                  lines.append(f"- {season}: team-games={m['team_games']}; positive-HV-team-games={m['positive_high_value_team_games']}; player-games={m['player_games']}; players={m['players']}")
+                  lines.append(f"- {season}: drive rate team={m['mean_team_drive_entry_rate']:.6f}; league={m['mean_league_drive_entry_rate']:.6f}; multiplier mean={m['mean_territory_multiplier']:.6f}; clipping={m['candidate_rate_clipping_share']:.4f}")
+                  lines.append(f"- {season}: team CRPS gain={m['team_mean_crps_gain']:.6f}; team AE gain={m['team_mean_ae_gain']:.6f}; player CRPS gain={m['player_mean_crps_gain']:.6f}; player AE gain={m['player_mean_ae_gain']:.6f}")
+                  lines.append(f"- {season}: per-player mean CRPS gain={m['player_mean_per_player_crps_gain']:.6f}; median={m['player_median_per_player_crps_gain']:.6f}; positive-supported-share={m['player_positive_supported_share']:.4f}")
+                  if season=='2025':
+                      lines.append(f"- 2025 team CI: team [{m['team_cluster_bootstrap']['ci95_low']:.6f}, {m['team_cluster_bootstrap']['ci95_high']:.6f}]; game [{m['team_game_cluster_bootstrap']['ci95_low']:.6f}, {m['team_game_cluster_bootstrap']['ci95_high']:.6f}]")
+                      lines.append(f"- 2025 player CI: player [{m['player_cluster_bootstrap']['ci95_low']:.6f}, {m['player_cluster_bootstrap']['ci95_high']:.6f}]; game [{m['player_game_cluster_bootstrap']['ci95_low']:.6f}, {m['player_game_cluster_bootstrap']['ci95_high']:.6f}]; equal-player [{m['equal_player_bootstrap']['ci95_low']:.6f}, {m['equal_player_bootstrap']['ci95_high']:.6f}]")
+              failed=[k for k,v in p['qualification_gates'][cell].items() if not v]
+              lines.append(f"- Failed frozen gates: {', '.join(failed) if failed else 'none'}")
+              lines.append('')
+          lines += [
+              'Integrity: zero parent-mean drift; zero baseline/candidate player-allocation drift; no direct recent-team high-value-rate candidate; no player high-value-share candidate; no opponent/environment; no TD outcomes; no sportsbook; no OddsAPI; no 2026 outcomes; no production mutation.',
+              'Per the frozen anti-rescue contract, any failed cell is closed as-is.'
+          ]
+          open('/tmp/prism_team_drive_issue.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "$GITHUB_REPOSITORY" --body-file /tmp/prism_team_drive_issue.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload frozen score artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-team-scoring-territory-drive-creation-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/prism-team-drive-creation/**
