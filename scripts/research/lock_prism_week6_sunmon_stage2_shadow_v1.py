@@ -134,7 +134,7 @@ def load_prior_roster(
     scheduled: pd.DataFrame,
     inactive: pd.DataFrame,
     snapshots: list[dict],
-) -> tuple[pd.DataFrame, float]:
+) -> tuple[pd.DataFrame, pd.DataFrame, float]:
     raw = m78.load_weekly_rosters(TARGET_SEASON, snapshots)
     if raw.empty:
         raise RuntimeError("2026 weekly roster authority empty")
@@ -153,8 +153,8 @@ def load_prior_roster(
         inactive["roster_identity_match"] = pd.Series(dtype=bool)
         bridge = 0.0
 
-    roster = stage1_source.normalize_roster(raw, TARGET_SEASON)
-    roster = roster.loc[roster["week"].isin(PRIOR_WEEKS)].copy()
+    roster_all = stage1_source.normalize_roster(raw, TARGET_SEASON)
+    roster = roster_all.loc[roster_all["week"].isin(PRIOR_WEEKS)].copy()
     roster = roster.merge(
         scheduled,
         on=["season", "week", "team"],
@@ -177,7 +177,52 @@ def load_prior_roster(
         roster["player_id"].astype(str).str.strip().ne("").astype(int)
     )
     roster = roster.loc[roster["known_official_inactive"].eq(0)].copy()
-    return roster.reset_index(drop=True), bridge
+    return roster.reset_index(drop=True), roster_all.reset_index(drop=True), bridge
+
+
+def repair_target_player_ids(
+    target: pd.DataFrame,
+    roster_all: pd.DataFrame,
+) -> pd.DataFrame:
+    """Resolve preserved temporary target identities only from Week-6 roster authority."""
+    x = target.copy()
+    x["player_id"] = x["player_id"].astype("string")
+    x["identity_resolution_source"] = np.where(
+        x["player_id"].fillna("").str.strip().ne(""),
+        "PRESERVED_WEEK6_ARTIFACT",
+        "UNRESOLVED",
+    )
+
+    r = roster_all.loc[
+        roster_all["week"].eq(TARGET_WEEK)
+        & roster_all["player_id"].astype(str).str.strip().ne("")
+    ].copy()
+    r = r.rename(columns={"player_name_key": "player_clean_key"})
+    counts = (
+        r.groupby(["team", "player_clean_key"], sort=False)["player_id"]
+        .nunique()
+        .rename("candidate_ids")
+        .reset_index()
+    )
+    r = r.merge(counts, on=["team", "player_clean_key"], how="left")
+    r = r.loc[r["candidate_ids"].eq(1)].drop_duplicates(
+        ["team", "player_clean_key"], keep="first"
+    )
+    r = r[["team", "player_clean_key", "player_id"]].rename(
+        columns={"player_id": "roster_week6_player_id"}
+    )
+    x = x.merge(
+        r,
+        on=["team", "player_clean_key"],
+        how="left",
+        validate="one_to_one",
+    )
+    missing = x["player_id"].fillna("").str.strip().eq("")
+    rescued = missing & x["roster_week6_player_id"].astype("string").fillna("").str.strip().ne("")
+    x.loc[rescued, "player_id"] = x.loc[rescued, "roster_week6_player_id"].astype("string")
+    x.loc[rescued, "identity_resolution_source"] = "WEEK6_WEEKLY_ROSTER_STABLE_ID"
+    x = x.drop(columns=["roster_week6_player_id"])
+    return x
 
 
 def load_prior_snaps(
@@ -258,13 +303,17 @@ def attach_week6_p_active(target: pd.DataFrame, prior: pd.DataFrame) -> pd.DataF
         p0 = baseline_probability(k_pos, n_pos)
 
         for r in target.loc[target["family"].eq(fam)].itertuples(index=False):
-            h = hist.loc[
-                hist["player_id"].astype(str).eq(str(r.player_id))
-                & hist["team"].astype(str).eq(str(r.team))
-            ].sort_values("week").tail(PLAYER_WINDOW)
+            pid = "" if pd.isna(r.player_id) else str(r.player_id).strip()
+            if pid:
+                h = hist.loc[
+                    hist["player_id"].astype(str).eq(pid)
+                    & hist["team"].astype(str).eq(str(r.team))
+                ].sort_values("week").tail(PLAYER_WINDOW)
+            else:
+                h = hist.iloc[0:0].copy()
             n_player = int(len(h))
             k_player = int(h["positive_offensive_participation"].sum())
-            if n_player >= PLAYER_MIN:
+            if pid and n_player >= PLAYER_MIN:
                 p = candidate_probability(k_player, n_player, p0)
                 source = "NAMED_PLAYER_STAGE1"
             else:
@@ -276,7 +325,7 @@ def attach_week6_p_active(target: pd.DataFrame, prior: pd.DataFrame) -> pd.DataF
                 "event_id": str(r.event_id),
                 "team": str(r.team),
                 "player_clean_key": str(r.player_clean_key),
-                "player_id": str(r.player_id),
+                "player_id": pid,
                 "family": fam,
                 "p_active": float(p),
                 "stage1_probability_source": source,
@@ -286,7 +335,7 @@ def attach_week6_p_active(target: pd.DataFrame, prior: pd.DataFrame) -> pd.DataF
                 "k_player_prior": k_player,
             })
     out = pd.DataFrame(rows)
-    if out.duplicated(["event_id", "team", "player_id"]).any():
+    if out.duplicated(["event_id", "team", "player_clean_key"]).any():
         raise RuntimeError("duplicate Week-6 Stage-1 probability row")
     return out
 
@@ -319,7 +368,7 @@ def apply_shadow(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     base = target.merge(
         pactive,
-        on=["event_id", "team", "player_clean_key", "player_id", "family"],
+        on=["event_id", "team", "player_clean_key", "family"],
         how="left",
         validate="one_to_one",
     )
@@ -381,7 +430,7 @@ def apply_shadow(
                     "family": fam,
                     "player": str(r["player"]),
                     "player_clean_key": str(r["player_clean_key"]),
-                    "player_id": str(r["player_id"]),
+                    "player_id": "" if pd.isna(r["player_id"]) else str(r["player_id"]),
                     "p_active": float(r["p_active"]),
                     "stage1_probability_source": str(r["stage1_probability_source"]),
                     "n_player_prior": int(r["n_player_prior"]),
@@ -438,7 +487,7 @@ def main() -> int:
         prior_teamweeks = target_schedule_teamweeks(schedule, PRIOR_WEEKS)
         inactive, article_meta = discover_2026_prior_inactives(prior_teamweeks, snapshots)
 
-        prior_roster, inactive_bridge = load_prior_roster(
+        prior_roster, roster_all, inactive_bridge = load_prior_roster(
             prior_teamweeks, inactive, snapshots
         )
         prior, mapped_positive = load_prior_snaps(prior_roster, snapshots)
@@ -528,8 +577,7 @@ def main() -> int:
             & num(target["definitive_unavailable"]).fillna(0).eq(0)
             & target["family"].isin(["RB", "TE"])
         ].copy()
-        if target["player_id"].astype(str).str.strip().eq("").any():
-            raise RuntimeError("Week-6 target player identity missing")
+        target = repair_target_player_ids(target, roster_all)
 
         ent = entitlement[
             ["event_id", "team", "player_clean_key", "entitlement_tgt_share"]
@@ -558,7 +606,7 @@ def main() -> int:
 
         target_games = int(universe["event_id"].nunique())
         target_identity = float(
-            target["player_id"].astype(str).str.strip().ne("").mean()
+            target["player_id"].astype("string").fillna("").str.strip().ne("").mean()
         ) if len(target) else 0.0
         p_attach = float(detail["p_active"].notna().mean()) if len(detail) else 0.0
         q_finite = float(
