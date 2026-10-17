@@ -1,4 +1,5 @@
 name: Research PRISM Week5 Finite Allocation Transmission V1
+# Deterministic diagnostic; no candidate fit.
 
 on:
   push:
