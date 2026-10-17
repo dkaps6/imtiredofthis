@@ -1,0 +1,130 @@
+name: Research PRISM Room Competition State V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_ROOM_COMPETITION_STATE_V1_SOURCE_PLAN.md'
+      - 'scripts/research/audit_prism_room_competition_state_v1.py'
+      - 'tests/test_prism_room_competition_state_v1.py'
+      - '.github/workflows/research-prism-room-competition-state-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyarrow nflreadpy pyyaml
+
+      - name: Run frozen source tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_room_competition_state_v1.py
+          pytest -q tests/test_prism_room_competition_state_v1.py
+
+      - name: Run frozen room competition source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/prism_room_competition
+          mkdir -p /tmp/prism_room_competition
+          python scripts/research/audit_prism_room_competition_state_v1.py \
+            --inactives data/backtests/qb_m78_official_inactives_corrected/m78_corrected_candidate_teamweek.csv \
+            --out-dir /tmp/prism_room_competition
+
+      - name: Certify source-only boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          p=Path('/tmp/prism_room_competition/prism_room_competition_source_result.json')
+          r=json.loads(p.read_text())
+          assert r['version']=='PRISM_ROOM_COMPETITION_STATE_V1_SOURCE_AUDIT'
+          assert len(r['metric_rows'])==6
+          assert r['target_game_outcomes_used']==0
+          assert r['season_2026_outcomes_used']==0
+          assert r['sportsbook_inputs_used']==0
+          assert r['oddsapi_calls']==0
+          assert r['predictive_models_fit']==0
+          assert r['projection_values_changed']==0
+          assert r['production_changed'] is False
+          for m in r['metric_rows']:
+              assert m['family'] in {'RB','WR','TE'}
+              assert m['season'] in {2024,2025}
+              gate_cols=[k for k in m if k.startswith('gate_')]
+              assert len(gate_cols)==8
+              assert all(isinstance(m[k],bool) for k in gate_cols)
+          print(json.dumps(r,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 source checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os
+          r=json.load(open('/tmp/prism_room_competition/prism_room_competition_source_result.json'))
+          lines=[
+              '## PRISM Room Competition State V1 — source audit',
+              '',
+              f"Exact head: `{os.environ['GITHUB_SHA']}`",
+              f"Run: `{os.environ['GITHUB_RUN_ID']}`",
+              f"Disposition: `{r['disposition']}`",
+              '',
+              'This is source-only player-state work. It measures room competition removed/remaining from official inactive identity + strictly-prior snaps. It does **not** transfer vacated opportunity to a successor.',
+              '',
+              'Per family-season:',
+          ]
+          for m in r['metric_rows']:
+              lines.append(
+                  f"- {m['family']} {m['season']}: active snap {m['active_prior_snap_coverage']:.2%}; "
+                  f"inactive snap {m['inactive_prior_snap_coverage']:.2%}; "
+                  f"finite room state {m['finite_room_state_coverage']:.2%}; "
+                  f"events {m['event_team_games']}; active players {m['distinct_active_players']}"
+              )
+          lines += [
+              '',
+              'Integrity: target outcomes 0; 2026 outcomes 0; sportsbook 0; OddsAPI 0; fits 0; projection changes 0; production false.',
+              '',
+              'Protected: raw recent-share replacement CLOSED; role-elasticity V1 remains SOURCE_BLOCKED; active-role/Stage-2 allocation unchanged.'
+          ]
+          open('/tmp/prism_room_competition/issue535.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/prism_room_competition/issue535.md
+
+      - name: Upload source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-room-competition-state-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism_room_competition/**
