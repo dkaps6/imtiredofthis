@@ -137,6 +137,30 @@ def validate_inputs(stage2: pd.DataFrame, universe: pd.DataFrame) -> tuple[pd.Da
         if (s[c] < -TOL).any():
             raise RuntimeError(f"negative Stage-2 opportunity field {c}")
 
+    share_gap = (
+        s["candidate_expected_q"] - s["canonical_q"] - num(s["share_shift"])
+    ).abs()
+    if float(share_gap.max()) > TOL:
+        raise RuntimeError(f"Stage-2 share-shift identity drift: {share_gap.max()}")
+
+    baseline_mean_gap = (
+        s["team_opportunity_mean"] * s["canonical_q"]
+        - s["baseline_expected_opportunities"]
+    ).abs()
+    if float(baseline_mean_gap.max()) > TOL:
+        raise RuntimeError(
+            f"Stage-2 baseline opportunity identity drift: {baseline_mean_gap.max()}"
+        )
+
+    candidate_mean_gap = (
+        s["team_opportunity_mean"] * s["candidate_expected_q"]
+        - s["candidate_expected_opportunities"]
+    ).abs()
+    if float(candidate_mean_gap.max()) > TOL:
+        raise RuntimeError(
+            f"Stage-2 candidate opportunity identity drift: {candidate_mean_gap.max()}"
+        )
+
     shift_gap = (
         s["candidate_expected_opportunities"]
         - s["baseline_expected_opportunities"]
