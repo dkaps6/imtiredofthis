@@ -357,9 +357,11 @@ def score_player_rows(
         validate="one_to_one",
     )
     p["actual_player_high_value"] = num(p["actual_player_high_value"]).fillna(0.0)
+    # Keep the player's own persisted canonical denominator from Stage-2.
+    # The team-scored frame carries the same room-level value; merging it again
+    # would create pandas suffix columns and hide the authoritative player field.
     keep = keys + [
-        "game_id", "actual_team_high_value", "authority_denominator_mean",
-        "p_league", "p_team",
+        "game_id", "actual_team_high_value", "p_league", "p_team",
     ]
     p = p.merge(team_scored[keep], on=keys, how="inner", validate="many_to_one")
     if (p["actual_player_high_value"] > p["actual_team_high_value"] + TOL).any():
