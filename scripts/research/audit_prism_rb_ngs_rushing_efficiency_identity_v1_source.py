@@ -154,35 +154,66 @@ def season_metrics(ngs:pd.DataFrame,season:int)->dict:
     }
 
 
-def target_history(ngs:pd.DataFrame,season:int)->tuple[pd.DataFrame,dict]:
-    s=ngs[(ngs["season"].eq(season))&ngs["position"].isin(RB_POS)].copy()
-    s["secondary_finite"]=s["ryoe_total"].notna()|s["rush_pct_over_expected"].notna()
-    s["usable"]=(
-        s["player_id"].ne("")
-        & s["team"].ne("")
-        & s["ryoe_per_att"].notna()
-        & s["secondary_finite"]
-        & s["box8_pct"].notna()
-        & s["avg_time_to_los"].notna()
-        & s["ngs_efficiency"].notna()
+def load_pregame_universe(path:Path)->pd.DataFrame:
+    x=pd.read_csv(path,low_memory=False)
+    x.columns=[str(c).strip().lower() for c in x.columns]
+    need={"season","week","team","player_id","position","family","stable_roster_identity","known_official_inactive"}
+    miss=need-set(x.columns)
+    if miss:
+        raise RuntimeError(f"pregame universe missing {sorted(miss)}")
+    x["season"]=num(x["season"]).astype("Int64")
+    x["week"]=num(x["week"]).astype("Int64")
+    x["team"]=x["team"].astype("string").fillna("").str.strip().str.upper()
+    x["player_id"]=x["player_id"].astype("string").fillna("").str.strip()
+    x["position"]=x["position"].astype("string").fillna("").str.strip().str.upper()
+    x["family"]=x["family"].astype("string").fillna("").str.strip().str.upper()
+    x["stable_roster_identity"]=num(x["stable_roster_identity"]).fillna(0).astype(int)
+    x["known_official_inactive"]=num(x["known_official_inactive"]).fillna(0).astype(int)
+    x=x[x["season"].isin(TARGET_SEASONS)].copy()
+    if int(x["known_official_inactive"].sum())!=0:
+        raise RuntimeError("pregame active universe unexpectedly contains official-inactive rows")
+    if x.duplicated(["season","week","team","player_id"]).any():
+        raise RuntimeError("duplicate pregame target identity")
+    return x
+
+
+def target_history(ngs:pd.DataFrame,pregame:pd.DataFrame,season:int)->tuple[pd.DataFrame,dict]:
+    hist=ngs[(ngs["season"].eq(season))&ngs["position"].isin(RB_POS)].copy()
+    hist["secondary_finite"]=hist["ryoe_total"].notna()|hist["rush_pct_over_expected"].notna()
+    hist["usable"]=(
+        hist["player_id"].ne("")
+        & hist["team"].ne("")
+        & hist["ryoe_per_att"].notna()
+        & hist["secondary_finite"]
+        & hist["box8_pct"].notna()
+        & hist["avg_time_to_los"].notna()
+        & hist["ngs_efficiency"].notna()
     )
-    s=s[s["usable"]].sort_values(["player_id","week"]).copy()
+    hist=hist[hist["usable"]].sort_values(["player_id","week"]).copy()
+
+    target=pregame[
+        pregame["season"].eq(season)
+        & pregame["family"].eq("RB")
+        & pregame["stable_roster_identity"].eq(1)
+        & pregame["player_id"].ne("")
+    ].copy()
+
     rows=[]
-    for r in s.itertuples(index=False):
-        hist=s[(s["player_id"].eq(r.player_id))&num(s["week"]).lt(int(r.week))]
-        max_week=int(num(hist["week"]).max()) if len(hist) else pd.NA
+    for r in target.itertuples(index=False):
+        h=hist[(hist["player_id"].eq(str(r.player_id)))&num(hist["week"]).lt(int(r.week))]
+        max_week=int(num(h["week"]).max()) if len(h) else pd.NA
         rows.append({
             "season":season,"week":int(r.week),"team":str(r.team),"player_id":str(r.player_id),
-            "player":str(r.player),"position":str(r.position),
-            "prior_same_season_ngs_games":int(hist["week"].nunique()),
+            "position":str(r.position),
+            "prior_same_season_ngs_games":int(h["week"].nunique()),
             "max_prior_history_week":max_week,
-            "chronology_violation":bool(len(hist) and num(hist["week"]).ge(int(r.week)).any()),
+            "chronology_violation":bool(len(h) and num(h["week"]).ge(int(r.week)).any()),
         })
     t=pd.DataFrame(rows)
     ready=t[t["prior_same_season_ngs_games"].ge(3)].copy() if len(t) else t
     m={
         "season":season,
-        "target_ngs_rb_rows":int(len(t)),
+        "target_pregame_rb_rows":int(len(t)),
         "history_ready_rows":int(len(ready)),
         "history_ready_distinct_rbs":int(ready["player_id"].nunique()) if len(ready) else 0,
         "history_ready_teams":int(ready["team"].nunique()) if len(ready) else 0,
@@ -190,17 +221,18 @@ def target_history(ngs:pd.DataFrame,season:int)->tuple[pd.DataFrame,dict]:
     }
     return t,m
 
-
 def main()->int:
     ap=argparse.ArgumentParser()
+    ap.add_argument("--pregame-universe",type=Path,required=True)
     ap.add_argument("--out-dir",type=Path,required=True)
     a=ap.parse_args();a.out_dir.mkdir(parents=True,exist_ok=True)
 
     ngs,meta=load_ngs()
+    pregame=load_pregame_universe(a.pregame_universe)
     sm=[season_metrics(ngs,s) for s in SEASONS]
     target_frames=[];tm=[]
     for s in TARGET_SEASONS:
-        t,m=target_history(ngs,s);target_frames.append(t);tm.append(m)
+        t,m=target_history(ngs,pregame,s);target_frames.append(t);tm.append(m)
     targets=pd.concat(target_frames,ignore_index=True)
 
     gates={}
