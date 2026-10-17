@@ -1,0 +1,195 @@
+name: Research PRISM Opportunity Quality Team High Value Volume V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_OPPORTUNITY_QUALITY_TEAM_HIGH_VALUE_VOLUME_V1_SOURCE_PLAN.md'
+      - 'scripts/research/audit_prism_opportunity_quality_team_high_value_volume_v1.py'
+      - 'tests/test_prism_opportunity_quality_team_high_value_volume_v1.py'
+      - '.github/workflows/research-prism-opportunity-quality-team-high-value-volume-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "48d9331f86aa052c90bc48816b2f031b84900c4b"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Announce frozen PRISM opportunity-quality source audit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body 'PRISM opportunity-quality team high-value-volume V1 source audit started: run ${{ github.run_id }}, exact head ${{ github.sha }}. Source-only / anti-retest audit: no predictive candidate, no player high-value-share rescue, no sportsbook, no OddsAPI, no 2026 outcomes, no production mutation.'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow pytest pyyaml
+
+      - name: Verify immutable source freeze
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_OPPORTUNITY_QUALITY_TEAM_HIGH_VALUE_VOLUME_V1_SOURCE_PLAN.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/audit_prism_opportunity_quality_team_high_value_volume_v1.py" 2>/dev/null; then
+            echo "ERROR: source evaluator existed at frozen pre-audit commit"
+            exit 1
+          fi
+          grep -q 'predictive candidates scored: **0**' docs/research/PRISM_OPPORTUNITY_QUALITY_TEAM_HIGH_VALUE_VOLUME_V1_SOURCE_PLAN.md
+          grep -q '2024 development' docs/research/PRISM_OPPORTUNITY_QUALITY_TEAM_HIGH_VALUE_VOLUME_V1_SOURCE_PLAN.md
+          grep -q '2025 independent confirmation' docs/research/PRISM_OPPORTUNITY_QUALITY_TEAM_HIGH_VALUE_VOLUME_V1_SOURCE_PLAN.md
+
+      - name: Verify immutable parent artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12023852453 --jq '.workflow_run.id')" = "38848080453"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12023852453 --jq '.digest')" = "sha256:1d8a22bf6240b4d4443ab7432d3224b63eaef97439639e7b47f536aed174adda"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070806828 --jq '.workflow_run.id')" = "38955368643"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070806828 --jq '.digest')" = "sha256:e91a108495d7a2b6eb289e0618ab6af09e3d6cdf6895e534742a07340e4a2a83"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-high-value-opportunity-source-audit-v1-38848080453
+          path: /tmp/high-value-parent
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38848080453
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-conditional-allocation-source-v1-38955368643
+          path: /tmp/stage2-parent
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38955368643
+
+      - name: Resolve immutable parent files
+        run: |
+          set -euo pipefail
+          HV_ROWS="$(find /tmp/high-value-parent -type f -name 'high_value_opportunity_playerweeks.csv' -print -quit)"
+          HV_RESULT="$(find /tmp/high-value-parent -type f -name 'high_value_opportunity_source_result.json' -print -quit)"
+          S2_DETAIL="$(find /tmp/stage2-parent -type f -name 'active_role_conditional_allocation_source_join_detail.csv' -print -quit)"
+          S2_RESULT="$(find /tmp/stage2-parent -type f -name 'active_role_conditional_allocation_source_result.json' -print -quit)"
+          for f in "$HV_ROWS" "$HV_RESULT" "$S2_DETAIL" "$S2_RESULT"; do
+            test -n "$f" && test -s "$f"
+          done
+          echo "HV_ROWS=$HV_ROWS" >> "$GITHUB_ENV"
+          echo "HV_RESULT=$HV_RESULT" >> "$GITHUB_ENV"
+          echo "S2_DETAIL=$S2_DETAIL" >> "$GITHUB_ENV"
+          echo "S2_RESULT=$S2_RESULT" >> "$GITHUB_ENV"
+
+      - name: Run frozen source safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_opportunity_quality_team_high_value_volume_v1.py
+          pytest -q tests/test_prism_opportunity_quality_team_high_value_volume_v1.py
+
+      - name: Run frozen PRISM opportunity-quality source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/prism-opportunity-quality
+          mkdir -p /tmp/prism-opportunity-quality
+          python scripts/research/audit_prism_opportunity_quality_team_high_value_volume_v1.py             --high-value-playerweeks "$HV_ROWS"             --high-value-result "$HV_RESULT"             --stage2-detail "$S2_DETAIL"             --stage2-result "$S2_RESULT"             --out-dir /tmp/prism-opportunity-quality
+
+      - name: Certify frozen source-only boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/prism-opportunity-quality/prism_opportunity_quality_source_result.json'))
+          assert p['version']=='PRISM_OPPORTUNITY_QUALITY_TEAM_HIGH_VALUE_VOLUME_V1_SOURCE_AUDIT',p
+          assert p['freeze_commit']=='48d9331f86aa052c90bc48816b2f031b84900c4b',p
+          assert p['target_seasons']==[2024,2025],p
+          assert p['target_weeks']==[5,18],p
+          assert p['closed_persistence_v1_reused_as_candidate'] is False,p
+          assert p['player_high_value_history_used_as_predictor'] is False,p
+          assert p['target_game_high_value_counts_used_as_predictors']==0,p
+          assert p['predictive_models_fit']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'PRISM_OPPORTUNITY_QUALITY_SOURCE_READY_ALL',
+              'PRISM_OPPORTUNITY_QUALITY_SOURCE_READY_PARTIAL',
+              'PRISM_OPPORTUNITY_QUALITY_SOURCE_BLOCKED',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 source checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/prism-opportunity-quality/prism_opportunity_quality_source_result.json'))
+          lines=[
+              '### PRISM opportunity-quality / team high-value-volume V1 source audit',
+              '',
+              f"- Run: `{os.environ['RUN_ID']}`",
+              f"- Exact head: `{os.environ['HEAD_SHA']}`",
+              f"- Frozen-before-audit commit: `{p['freeze_commit']}`",
+              f"- Disposition: `{p['disposition']}`",
+              '',
+          ]
+          for cell, disp in p['position_dispositions'].items():
+              lines.append(f"- {cell}: `{disp}`")
+              for m in p['season_cells']:
+                  if m['cell']==cell:
+                      failed=[k for k,v in m['gates'].items() if not v]
+                      lines.append(
+                          f"  - {m['season']}: rows={m['player_games']}, players={m['players']}, "
+                          f"positive team-games={m['positive_high_value_teamgames']}, "
+                          f"prior offense={m['strict_prior_offense_attach_rate']:.3%}, "
+                          f"prior opponent={m['strict_prior_opponent_attach_rate']:.3%}, "
+                          f"failed={','.join(failed) if failed else 'none'}"
+                      )
+          lines += [
+              '',
+              'This is source readiness only. No predictive candidate was scored; the closed player high-value-share persistence V1 was not reused or rescued.',
+              'Integrity: no sportsbook, no OddsAPI, no 2026 outcomes, no production mutation.',
+          ]
+          open('/tmp/prism_opportunity_quality_issue.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/prism_opportunity_quality_issue.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload PRISM opportunity-quality source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-opportunity-quality-team-high-value-volume-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/prism-opportunity-quality/**
