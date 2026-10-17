@@ -1,5 +1,79 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-16 — PRISM WEEK-6 STAGE-2 SHADOW LOCKED / OPPORTUNITY QUALITY SOURCE AUDIT NEXT
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-16_PRISM_WEEK6_SHADOW_LOCKED_OPPORTUNITY_QUALITY_NEXT.md`
+
+Canonical player-first order:
+
+`PLAYER IDENTITY -> CURRENT ROLE/STATE -> TEAMMATE COMPETITION -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+### Historical Stage-2 milestone
+
+`PLAYER_ACTIVE_ROLE_CONDITIONAL_ALLOCATION_BRIDGE_QUALIFIED_PARTIAL`
+
+Qualified:
+- RB rushing;
+- RB receiving;
+- TE receiving.
+
+Closed:
+- QB passing exact V1.
+
+WR receiving remains source-blocked/not scored.
+
+### Week-6 forward shadow
+
+`PRISM_WEEK6_SUNMON_STAGE2_SHADOW_LOCKED`
+
+Canonical lock:
+- run `38990758368` — SUCCESS;
+- exact head `67677542e3e0230930d71a67b082fa73ead39399`;
+- artifact `12085545101`;
+- digest `sha256:2f1c9b65b6db2e746d9ab8419fa361e0d6c5706cf8b493fbfe64d5d7189d1b61`;
+- result `docs/research/PRISM_WEEK6_SUNMON_STAGE2_SHADOW_V1_LOCK_RESULT.md`.
+
+Population:
+- 13 Sunday/Monday Week-6 games;
+- SEA-DEN excluded because it already played before the Stage-2 freeze;
+- 248 locked player-cell rows;
+- RB rushing / RB receiving / TE receiving.
+
+At lock:
+- Week-6 target outcomes read 0;
+- sportsbook upstream 0;
+- OddsAPI calls 0;
+- production mutation false.
+
+Do not alter or grade the shadow until the included games settle.
+
+### Exact next action
+
+Continue PRISM research without waiting for outcomes.
+
+The next architectural layer is **opportunity quality/topology**, but do not rescue the closed simple high-value-share persistence V1.
+
+Freeze a source/anti-retest audit for a distinct question:
+
+Can PRISM separately model:
+1. **how many high-value opportunities the team creates**, and
+2. **which named player receives those opportunities conditional on current role/competition**,
+
+without assuming recent player red-zone share simply persists?
+
+Use the already-qualified high-value PBP source as a parent where appropriate.
+
+No sportsbook.
+No OddsAPI.
+No 2026 outcomes.
+No production mutation.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-16 — PRISM STAGE-2 BRIDGE QUALIFIED PARTIAL / WEEK-6 PROSPECTIVE SHADOW NEXT
 
 **Model name:** PRISM — Player Role & Individual Situation Model
