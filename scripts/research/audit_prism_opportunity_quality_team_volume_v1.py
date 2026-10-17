@@ -156,10 +156,12 @@ def event_frames(
         roster["season"].eq(season),
         ["season", "week", "team", "player_id", "family", "position"],
     ].copy()
-    rush = rush.loc[rush["player_id"].ne("")].merge(
+    # Keep every finite team opportunity in the pool. Missing player identity
+    # remains complement mass rather than disappearing before team aggregation.
+    rush = rush.merge(
         r, on=["season", "week", "team", "player_id"], how="left", validate="many_to_one"
     )
-    target = target.loc[target["player_id"].ne("")].merge(
+    target = target.merge(
         r, on=["season", "week", "team", "player_id"], how="left", validate="many_to_one"
     )
 
@@ -183,8 +185,12 @@ def event_frames(
     metrics = {
         "rusher_stable_identity_coverage": rush_identity,
         "receiver_stable_identity_coverage": target_identity,
-        "rusher_position_bridge": float(rush["family"].astype("string").fillna("").ne("").mean()) if len(rush) else 0.0,
-        "receiver_position_bridge": float(target["family"].astype("string").fillna("").isin(["RB", "WR", "TE"]).mean()) if len(target) else 0.0,
+        "rusher_position_bridge": float(
+            rush.loc[rush["player_id"].ne(""), "family"].astype("string").fillna("").ne("").mean()
+        ) if rush["player_id"].ne("").any() else 0.0,
+        "receiver_position_bridge": float(
+            target.loc[target["player_id"].ne(""), "family"].astype("string").fillna("").isin(["RB", "WR", "TE"]).mean()
+        ) if target["player_id"].ne("").any() else 0.0,
         "yardline_coverage_rush": float(rush["yardline_100"].notna().mean()) if len(rush) else 0.0,
         "yardline_coverage_target": float(target["yardline_100"].notna().mean()) if len(target) else 0.0,
         "air_yards_coverage_target": float(target["air_yards"].notna().mean()) if len(target) else 0.0,
@@ -354,13 +360,13 @@ def player_topology(
     target: pd.DataFrame,
 ) -> pd.DataFrame:
     rows = []
-    r = rush.loc[rush["inside10"]].groupby(
+    r = rush.loc[rush["inside10"] & rush["player_id"].ne("")].groupby(
         ["season", "week", "game_id", "team", "player_id", "family"], dropna=False
     ).size().rename("high_value_opportunities").reset_index()
     r["channel"] = "RB_INSIDE10_RUSH"
     rows.append(r)
 
-    t = target.loc[target["red_zone"]].groupby(
+    t = target.loc[target["red_zone"] & target["player_id"].ne("")].groupby(
         ["season", "week", "game_id", "team", "player_id", "family"], dropna=False
     ).size().rename("high_value_opportunities").reset_index()
     t["channel"] = "RED_ZONE_TARGET"
@@ -396,11 +402,12 @@ def season_metrics(
     ).abs()
 
     weeks = sorted(tg["week"].unique())
+    observed = num(tg["offensive_plays"]).gt(0)
     metrics = {
         "season": season,
         "scheduled_teamgames": int(len(s)),
-        "pbp_teamgames": int(tg["game_id"].notna().sum()),
-        "scheduled_teamgame_coverage": float(tg["game_id"].notna().mean()) if len(tg) else 0.0,
+        "pbp_teamgames": int(observed.sum()),
+        "scheduled_teamgame_coverage": float(observed.mean()) if len(tg) else 0.0,
         "pbp_team_opponent_identity_coverage": float(
             (tg["team"].astype(str).ne("") & tg["opponent"].astype(str).ne("")).mean()
         ) if len(tg) else 0.0,
