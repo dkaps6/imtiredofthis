@@ -222,6 +222,7 @@ def repair_target_player_ids(
     x.loc[rescued, "player_id"] = x.loc[rescued, "roster_week6_player_id"].astype("string")
     x.loc[rescued, "identity_resolution_source"] = "WEEK6_WEEKLY_ROSTER_STABLE_ID"
     x = x.drop(columns=["roster_week6_player_id"])
+    x["player_id"] = x["player_id"].astype("string").fillna("").str.strip()
     return x
 
 
@@ -369,7 +370,7 @@ def apply_shadow(
     pcols = [c for c in pactive.columns if c != "player_id"]
     base = target.merge(
         pactive[pcols],
-        on=["event_id", "team", "player_clean_key", "family"],
+        on=["event_id", "team", "player_clean_key", "player_id", "family"],
         how="left",
         validate="one_to_one",
     )
