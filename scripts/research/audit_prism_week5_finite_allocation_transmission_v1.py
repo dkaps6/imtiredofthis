@@ -3,7 +3,8 @@
 
 Diagnostic only. Quantifies deterministic finite-pool overbooking/compression in
 preserved pregame player-state rows and validates exact production attenuation
-on the frozen Week-5 top-failure casebook. No candidate projection is fit.
+on the frozen Week-5 top-failure casebook. The cap is treated as a conservation
+safeguard, not as the error itself. No candidate projection is fit.
 """
 from __future__ import annotations
 
