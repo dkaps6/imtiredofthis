@@ -1,0 +1,157 @@
+name: Research PRISM Component Cancellation Control Audit V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_COMPONENT_CANCELLATION_CONTROL_V1_PROTOCOL.md'
+      - 'scripts/research/audit_prism_component_cancellation_control_v1.py'
+      - '.github/workflows/research-prism-component-cancellation-control-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "a877b2541ac848436b2c298a0c10a88b53e12a72"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Record start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM component-cancellation control audit started: run ${{ github.run_id }}, exact head ${{ github.sha }}. Diagnostic only: tests whether small final player error can hide large opposing component errors. No Week-6 outcomes, sportsbook/OddsAPI, fits, thresholds, projection changes, or production mutation."
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_COMPONENT_CANCELLATION_CONTROL_V1_PROTOCOL.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/audit_prism_component_cancellation_control_v1.py" 2>/dev/null; then
+            echo "ERROR: implementation existed at protocol freeze"
+            exit 1
+          fi
+
+      - name: Verify immutable authorities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, subprocess
+          expected={
+            37777319154:(11550446909,'player-output-component-decomposition-v1-37777319154','sha256:7acfc453258a49f3aadf0d0ea386b13827eb715f1dfb055b96505f733320d204'),
+            39060246734:(12111007952,'prism-week4-5-player-first-forensic-replay-v1-39060246734','sha256:0f120e2002452af548fbea20f0ff1355ec04eb926e53b5845ca663ea2e98a5be'),
+          }
+          repo=os.environ['GITHUB_REPOSITORY']
+          for run,(aid,name,digest) in expected.items():
+              raw=subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts'])
+              arts={int(a['id']):a for a in json.loads(raw).get('artifacts',[])}
+              a=arts.get(aid)
+              assert a is not None,(run,aid)
+              assert not a.get('expired'),a
+              assert a.get('name')==name,a
+              assert a.get('digest')==digest,a
+              print('VERIFIED',run,aid,name,digest)
+          PY
+
+      - name: Download exact authorities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-cancel
+          mkdir -p /tmp/prism-cancel/{components,replay,out}
+          gh run download 37777319154 --repo "${{ github.repository }}"             --name player-output-component-decomposition-v1-37777319154             --dir /tmp/prism-cancel/components
+          gh run download 39060246734 --repo "${{ github.repository }}"             --name prism-week4-5-player-first-forensic-replay-v1-39060246734             --dir /tmp/prism-cancel/replay
+          test -s /tmp/prism-cancel/components/player_output_component_rows.csv
+          test -s /tmp/prism-cancel/replay/prism_week4_5_matched_correct_controls.csv
+
+      - name: Execute frozen diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/research/audit_prism_component_cancellation_control_v1.py
+          python scripts/research/audit_prism_component_cancellation_control_v1.py             --component-rows /tmp/prism-cancel/components/player_output_component_rows.csv             --matched-controls /tmp/prism-cancel/replay/prism_week4_5_matched_correct_controls.csv             --out-dir /tmp/prism-cancel/out
+
+      - name: Certify diagnostic boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/prism-cancel/out/prism_component_cancellation_result.json'))
+          assert p['version']=='PRISM_COMPONENT_CANCELLATION_CONTROL_AUDIT_V1',p
+          assert p['status']=='PRISM_COMPONENT_CANCELLATION_CONTROL_AUDIT_COMPLETE__DIAGNOSTIC_ONLY',p
+          assert p['exact_component_rows']==3991,p
+          assert p['max_identity_gap']<=1e-10,p
+          assert p['matched_control_rows_with_exact_components']>0,p
+          assert p['unique_matched_controls_with_exact_components']>0,p
+          assert p['week6_outcomes_read']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['models_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['projection_means_changed']==0,p
+          assert p['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+          p=json.load(open('/tmp/prism-cancel/out/prism_component_cancellation_result.json'))
+          print("## PRISM component-cancellation control audit V1")
+          print()
+          print(f"Run: {os.environ['GITHUB_RUN_ID']}")
+          print(f"Exact head: {os.environ['GITHUB_SHA']}")
+          print(f"Disposition: {p['status']}")
+          print(f"Exact component rows: {p['exact_component_rows']}")
+          print(f"Bottom final-error decile median final error: {p['bottom_final_error_decile_median_final_abs_error']:.4f}")
+          print(f"Bottom final-error decile median gross component magnitude: {p['bottom_final_error_decile_median_gross_component_magnitude']:.4f}")
+          print(f"Bottom final-error decile median cancellation fraction: {p['bottom_final_error_decile_median_cancellation_fraction']:.4f}")
+          print(f"Bottom final-error decile p75 cancellation fraction: {p['bottom_final_error_decile_p75_cancellation_fraction']:.4f}")
+          print(f"Unique replay matched controls with exact components: {p['unique_matched_controls_with_exact_components']}")
+          print(f"Matched-control median cancellation fraction: {p['unique_matched_controls_median_cancellation_fraction']:.4f}")
+          print()
+          print("Interpretation boundary: final-number accuracy is being audited as a control-validity proxy only. No reliability selector, projection adjustment, sportsbook/OddsAPI use, fit, threshold search, Week-6 outcome read, or production change.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-component-cancellation-control-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-cancel/out/**
