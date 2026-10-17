@@ -122,6 +122,49 @@ def load_actuals(week: int) -> pd.DataFrame:
     return out.drop_duplicates(["player_clean_key", "team"], keep="last")
 
 
+def load_prior_season_identity() -> pd.DataFrame:
+    """Build source-valid 2025 named-player identity/playbook summaries."""
+    import nflreadpy as nfl
+
+    raw = nfl.load_player_stats(seasons=[2025], summary_level="week")
+    if hasattr(raw, "to_dicts"):
+        raw = pd.DataFrame(raw.to_dicts())
+    elif hasattr(raw, "to_pandas"):
+        raw = raw.to_pandas()
+    x = _normalize_weekly(raw, 2025)
+    if x.empty:
+        raise RuntimeError("2025 player identity source is empty")
+    rows = []
+    specs = {
+        "pass_yards": ("pass_yards", "pass_att"),
+        "rush_yards": ("rush_yards", "rushes"),
+        "rec_yards": ("rec_yards", "targets"),
+        "receptions": ("receptions", "targets"),
+    }
+    for market, (out_col, opp_col) in specs.items():
+        if out_col not in x.columns or opp_col not in x.columns:
+            continue
+        z = x[["week", "player_clean_key", "player", out_col, opp_col]].copy()
+        z["market"] = market
+        z["identity_output"] = num(z[out_col])
+        z["identity_opportunity"] = num(z[opp_col])
+        z["identity_efficiency"] = z["identity_output"] / z["identity_opportunity"].replace(0, np.nan)
+        rows.append(z[["week", "player_clean_key", "player", "market", "identity_output", "identity_opportunity", "identity_efficiency"]])
+    long = pd.concat(rows, ignore_index=True)
+    long = long.loc[long["player_clean_key"].astype(str).ne("")].copy()
+    out = long.groupby(["player_clean_key", "market"], as_index=False).agg(
+        prior_season_games=("week", "nunique"),
+        prior_season_output_mean=("identity_output", "mean"),
+        prior_season_output_q25=("identity_output", lambda s: float(num(s).quantile(0.25))),
+        prior_season_output_q75=("identity_output", lambda s: float(num(s).quantile(0.75))),
+        prior_season_opportunity_mean=("identity_opportunity", "mean"),
+        prior_season_opportunity_q25=("identity_opportunity", lambda s: float(num(s).quantile(0.25))),
+        prior_season_opportunity_q75=("identity_opportunity", lambda s: float(num(s).quantile(0.75))),
+        prior_season_efficiency_mean=("identity_efficiency", "mean"),
+    )
+    return out
+
+
 def prepare_history(h: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     req = {
         "season", "week", "event_id", "team", "player", "player_clean_key", "position_family",
@@ -255,7 +298,8 @@ def build_week4(board: pd.DataFrame, history: pd.DataFrame, rep: pd.DataFrame, a
     ] if cc in a.columns]
     x = x.merge(a[keep_actual], on=["team", "player_clean_key"], how="left", validate="many_to_one")
     x["actual"] = x.apply(market_actual, axis=1)
-    x = x.loc[x["actual"].notna()].copy()
+    x["outcome_available"] = x["actual"].notna()
+    x["settlement_scope"] = np.where(x["outcome_available"], "SETTLED_RECONSTRUCTED", "OUTCOME_UNAVAILABLE")
     x["position_family"] = x["position"].map(family)
     x["abs_error"] = (x["model_proj"] - x["actual"]).abs()
 
@@ -319,7 +363,9 @@ def build_week5(settled: pd.DataFrame, state: pd.DataFrame, cases: pd.DataFrame,
         raise RuntimeError(f"Week-5 settled board missing {sorted(miss)}")
     x = settled.copy()
     x["season"] = num(x["season"]); x["week"] = num(x["week"])
-    x = x.loc[x["season"].eq(SEASON) & x["week"].eq(5) & x["football_settlement_status"].eq("SETTLED") & x["market"].isin(ALL_W5)].copy()
+    x = x.loc[x["season"].eq(SEASON) & x["week"].eq(5) & x["market"].isin(ALL_W5)].copy()
+    x["outcome_available"] = x["football_settlement_status"].eq("SETTLED") & num(x["actual"]).notna()
+    x["settlement_scope"] = x["football_settlement_status"].astype(str)
     x["team"] = x["team"].map(canon_team); x["opponent"] = x["opponent"].map(canon_team)
     x["position_family"] = x["position"].map(family)
     x["model_proj"] = num(x["model_proj"]); x["actual"] = num(x["actual"])
@@ -420,14 +466,27 @@ def build_week5(settled: pd.DataFrame, state: pd.DataFrame, cases: pd.DataFrame,
     return x
 
 
-def attach_prior(history: pd.DataFrame, rep: pd.DataFrame, all_rows: pd.DataFrame) -> pd.DataFrame:
+def attach_prior(history: pd.DataFrame, rep: pd.DataFrame, prior_identity: pd.DataFrame, all_rows: pd.DataFrame) -> pd.DataFrame:
     pieces = []
     for week in [4, 5]:
         t = all_rows.loc[all_rows["source_week"].eq(week), ["player_clean_key", "market", "team", "position_family"]].drop_duplicates()
         pc = prior_context(history, rep, t, week)
         pieces.append(pc)
     pc = pd.concat(pieces, ignore_index=True)
-    return all_rows.merge(pc, left_on=["source_week", "player_clean_key", "market"], right_on=["target_week", "player_clean_key", "market"], how="left", validate="many_to_one")
+    out = all_rows.merge(
+        pc,
+        left_on=["source_week", "player_clean_key", "market"],
+        right_on=["target_week", "player_clean_key", "market"],
+        how="left",
+        validate="many_to_one",
+    )
+    out = out.merge(prior_identity, on=["player_clean_key", "market"], how="left", validate="many_to_one")
+    out["historical_identity_source"] = np.where(
+        num(out["prior_season_games"]).fillna(0).gt(0),
+        "2025_PLAYER_WEEKLY_SOURCE_VALID",
+        "NO_2025_SAME_MARKET_IDENTITY",
+    )
+    return out
 
 
 def role_signal(row: pd.Series) -> str:
@@ -508,8 +567,8 @@ def make_controls(all_rows: pd.DataFrame, cases: pd.DataFrame) -> pd.DataFrame:
             & all_rows["position_family"].eq(c["position_family"])
         ].copy()
         pool = pool.loc[~pool.apply(lambda r: (r["source_week"], r["player_clean_key"], r["market"]) in case_keys, axis=1)]
-        med = pool["abs_error"].median()
-        good = pool.loc[pool["abs_error"].le(med)].copy()
+        q25 = pool["abs_error"].quantile(0.25)
+        good = pool.loc[pool["abs_error"].le(q25)].copy()
         if good.empty:
             good = pool.copy()
         if good.empty:
@@ -542,10 +601,21 @@ def main() -> int:
     a = ap.parse_args(); a.out_dir.mkdir(parents=True, exist_ok=True)
 
     history, rep = prepare_history(read_csv(a.w1w4_components, "W1-W4 components"))
+    prior_identity = load_prior_season_identity()
     week4_actuals = load_actuals(4)
     week5_actuals = load_actuals(5)
+    w4_board_source = read_csv(a.w4_board, "Week-4 preserved board")
+    w4_authority = w4_board_source.sort_values(["team", "player_clean_key", "market"]).drop_duplicates(
+        ["team", "player_clean_key", "market"], keep="last"
+    ).copy()
+    w4_authority["replay_eligible"] = w4_authority["market"].isin(ALL_W5)
+    w4_authority["replay_scope"] = np.where(
+        w4_authority["replay_eligible"],
+        "PRISM_PLAYER_MARKET_REPLAY_ELIGIBLE",
+        "ATD_PATHWAY_UNCERTIFIED__PRESERVED_NOT_ATTRIBUTED",
+    )
     w4 = build_week4(
-        read_csv(a.w4_board, "Week-4 preserved board"),
+        w4_board_source,
         history,
         rep,
         week4_actuals,
@@ -564,9 +634,12 @@ def main() -> int:
     )
     common = sorted(set(w4.columns) | set(w5.columns))
     all_rows = pd.concat([w4.reindex(columns=common), w5.reindex(columns=common)], ignore_index=True, sort=False)
-    all_rows = attach_prior(history, rep, all_rows)
+    all_rows = attach_prior(history, rep, prior_identity, all_rows)
     all_rows["role_signal"] = all_rows.apply(role_signal, axis=1)
     all_rows["final_component_state"] = all_rows.apply(final_component_state, axis=1)
+    all_attrs = all_rows.apply(attribution, axis=1, result_type="expand")
+    all_attrs.columns = ["primary_attribution", "secondary_evidence"]
+    all_rows = pd.concat([all_rows.reset_index(drop=True), all_attrs.reset_index(drop=True)], axis=1)
     all_rows["signed_error"] = all_rows["model_proj"] - all_rows["actual"]
     all_rows["market_error_median"] = all_rows.groupby(["source_week", "market"])["abs_error"].transform("median")
     all_rows["error_to_market_median"] = all_rows["abs_error"] / all_rows["market_error_median"].replace(0, np.nan)
@@ -595,6 +668,8 @@ def main() -> int:
     summary = {
         "version": VERSION,
         "status": "PRISM_WEEK4_5_PLAYER_FIRST_FORENSIC_REPLAY_EXECUTED__NO_PROMOTION",
+        "week4_authority_player_market_rows": int(len(w4_authority)),
+        "week4_atd_authority_rows_preserved_not_attributed": int((~w4_authority["replay_eligible"]).sum()),
         "all_row_total": int(len(all_rows)),
         "week4_all_rows": int(all_rows["source_week"].eq(4).sum()),
         "week5_all_rows": int(all_rows["source_week"].eq(5).sum()),
@@ -619,6 +694,8 @@ def main() -> int:
         "pregame_role_signals_above_projection_or_rules": int(len(signals)),
         "source_blocked_case_rows": int(len(blocked)),
         "week5_four_prior_same_market_rows": int((all_rows["source_week"].eq(5) & num(all_rows["prior_same_market_games"]).ge(4)).sum()),
+        "prior_season_identity_rows_with_support": int(num(all_rows["prior_season_games"]).fillna(0).gt(0).sum()),
+        "prior_season_identity_coverage": float(num(all_rows["prior_season_games"]).fillna(0).gt(0).mean()),
         "week4_wr_dual_score_manufactured": False,
         "week6_outcomes_used": 0,
         "sportsbook_refetch": False,
@@ -630,7 +707,9 @@ def main() -> int:
         "boundary": "retrospective player-level forensic diagnosis only; any discovered mechanism requires separate freeze and independent validation",
     }
 
+    w4_authority.to_csv(a.out_dir / "prism_week4_authority_manifest.csv", index=False, float_format="%.12f")
     all_rows.to_csv(a.out_dir / "prism_week4_5_all_row_replay.csv", index=False, float_format="%.12f")
+    all_rows.to_csv(a.out_dir / "prism_week4_5_named_player_attribution_all_rows.csv", index=False, float_format="%.12f")
     cases.to_csv(a.out_dir / "prism_week4_5_named_player_attribution_casebook.csv", index=False, float_format="%.12f")
     controls.to_csv(a.out_dir / "prism_week4_5_matched_correct_controls.csv", index=False, float_format="%.12f")
     mech.to_csv(a.out_dir / "prism_week4_5_repeated_mechanism_summary.csv", index=False)
