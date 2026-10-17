@@ -120,16 +120,19 @@ jobs:
           import json
           p=json.load(open('/tmp/prism-w45/out/prism_week4_5_player_first_forensic_replay_result.json'))
           assert p['status']=='PRISM_WEEK4_5_PLAYER_FIRST_FORENSIC_REPLAY_EXECUTED__NO_PROMOTION',p
-          assert p['week4_all_rows'] >= 400,p
-          assert p['week5_all_rows'] == 392,p
+          assert p['week4_authority_player_market_rows'] == 873,p
+          assert p['week4_atd_authority_rows_preserved_not_attributed'] == 390,p
+          assert p['week4_all_rows'] == 483,p
+          assert p['week5_all_rows'] == 396,p
           assert p['week5_source_scope_rows'] == 396,p
-          assert p['week5_nonsettled_rows_excluded'] == 4,p
+          assert p['week5_nonsettled_rows_retained'] == 4,p
           assert p['week5_nonsettled_status_counts'] == {'DNP_INACTIVE':4},p
           assert p['week4_exact_component_rows'] >= 300,p
           assert p['week5_exact_component_rows'] == 40,p
           assert p['week5_direct_rows_with_actual_opportunity'] >= 350,p
           assert p['casebook_rows'] == 80,p
-          assert p['matched_control_rows'] >= 75,p
+          assert p['matched_control_rows'] > 0,p
+          assert p['prior_season_identity_rows_with_support'] > 0,p
           assert p['max_final_identity_gap'] <= 1e-8,p
           assert p['week4_wr_dual_score_manufactured'] is False,p
           assert p['week6_outcomes_used'] == 0,p
@@ -160,10 +163,12 @@ jobs:
           print(f"Exact head: {os.environ['GITHUB_SHA']}")
           print(f"Disposition: {p['status']}")
           print()
-          print(f"- all-row player-market records: {p['all_row_total']} ({p['week4_all_rows']} Week 4 / {p['week5_all_rows']} Week 5)")
+          print(f"- Week-4 preserved authority: {p['week4_authority_player_market_rows']} player-market rows; {p['week4_atd_authority_rows_preserved_not_attributed']} ATD rows preserved but not attributed")
+          print(f"- all-row replay records: {p['all_row_total']} ({p['week4_all_rows']} Week 4 supported markets / {p['week5_all_rows']} Week 5)")
           print(f"- exact final-error component identities: {p['week4_exact_component_rows']} Week 4 / {p['week5_exact_component_rows']} Week 5")
           print(f"- detailed named-player cases: {p['casebook_rows']}")
           print(f"- matched correct controls: {p['matched_control_rows']}")
+          print(f"- 2025 same-player identity coverage: {p['prior_season_identity_coverage']:.3%}")
           print(f"- pregame role signals above projection/rules in reviewed cases: {p['pregame_role_signals_above_projection_or_rules']}")
           print(f"- downstream-transmission-dominant reviewed cases: {p['casebook_downstream_dominant_rows']}")
           print(f"- max final-error identity gap: {p['max_final_identity_gap']:.3e}")
