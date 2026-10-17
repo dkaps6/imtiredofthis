@@ -102,12 +102,13 @@ Target source seasons:
 - 2025.
 
 Primary as-of target seasons for a later mechanism:
-- 2023;
-- 2024;
-- 2025;
+- 2024 development;
+- 2025 independent confirmation;
 - regular-season Weeks 5-18.
 
-2022 may supply historical/source context but cannot rescue a failed 2025 confirmation later.
+2022-2023 may supply source/history context only. They are not scored as Stage-2-compatible target seasons because the qualified PRISM Stage-2 historical entitlement authority is frozen on 2024-2025.
+
+No earlier season may rescue a failed 2025 confirmation later.
 
 No 2026 outcomes.
 
@@ -162,7 +163,7 @@ Target-game high-value counts may not enter any pregame predictor.
 
 ## Source gates
 
-Per target season 2023, 2024 and 2025:
+Per target season 2024 and 2025:
 
 Core PBP/team topology:
 - scheduled team-game coverage >= 99%;
