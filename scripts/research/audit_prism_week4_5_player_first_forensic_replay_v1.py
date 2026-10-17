@@ -550,8 +550,14 @@ def main() -> int:
         rep,
         week4_actuals,
     )
+    w5_source = read_csv(a.w5_settled, "Week-5 settled board")
+    w5_source_scope = w5_source.loc[
+        num(w5_source["season"]).eq(SEASON)
+        & num(w5_source["week"]).eq(5)
+        & w5_source["market"].isin(ALL_W5)
+    ].copy()
     w5 = build_week5(
-        read_csv(a.w5_settled, "Week-5 settled board"),
+        w5_source,
         read_csv(a.w5_state, "Week-5 player state"),
         read_csv(a.w5_cases, "Week-5 frozen casebook"),
         week5_actuals,
@@ -592,6 +598,17 @@ def main() -> int:
         "all_row_total": int(len(all_rows)),
         "week4_all_rows": int(all_rows["source_week"].eq(4).sum()),
         "week5_all_rows": int(all_rows["source_week"].eq(5).sum()),
+        "week5_source_scope_rows": int(len(w5_source_scope)),
+        "week5_nonsettled_rows_excluded": int(
+            (~w5_source_scope["football_settlement_status"].eq("SETTLED")).sum()
+        ),
+        "week5_nonsettled_status_counts": {
+            str(k): int(v)
+            for k, v in w5_source_scope.loc[
+                ~w5_source_scope["football_settlement_status"].eq("SETTLED"),
+                "football_settlement_status",
+            ].value_counts(dropna=False).items()
+        },
         "week4_exact_component_rows": int((all_rows["source_week"].eq(4) & all_rows["exact_component_authority"].eq(True)).sum()),
         "week5_exact_component_rows": int((all_rows["source_week"].eq(5) & all_rows["exact_component_authority"].eq(True)).sum()),
         "max_final_identity_gap": float(num(all_rows.loc[all_rows["exact_component_authority"].eq(True), "final_identity_gap"]).max()),
