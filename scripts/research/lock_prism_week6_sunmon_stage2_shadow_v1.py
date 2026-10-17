@@ -367,9 +367,8 @@ def apply_shadow(
     target: pd.DataFrame,
     pactive: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    pcols = [c for c in pactive.columns if c != "player_id"]
     base = target.merge(
-        pactive[pcols],
+        pactive,
         on=["event_id", "team", "player_clean_key", "player_id", "family"],
         how="left",
         validate="one_to_one",
