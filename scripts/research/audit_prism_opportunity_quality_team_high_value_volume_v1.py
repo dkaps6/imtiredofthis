@@ -165,9 +165,14 @@ def build_team_topology(playerweeks: pd.DataFrame, schedule: pd.DataFrame) -> pd
     # Zero high-value count is a valid football outcome only when the parent
     # channel itself is present for that team-game.
     for c in ("team_inside20_rushes", "team_inside10_rushes", "team_inside5_rushes"):
-        t[c] = t[c].where(t["rush_source_present"], np.nan).fillna(0.0)
+        # Preserve NaN when the parent rushing channel itself is absent.
+        # A genuine zero high-value count is only legal inside a source-present
+        # team-game; missing source may never be relabeled as zero.
+        t.loc[~t["rush_source_present"], c] = np.nan
+        t.loc[t["rush_source_present"] & t[c].isna(), c] = 0.0
     for c in ("team_redzone_targets", "team_inside10_targets"):
-        t[c] = t[c].where(t["target_source_present"], np.nan).fillna(0.0)
+        t.loc[~t["target_source_present"], c] = np.nan
+        t.loc[t["target_source_present"] & t[c].isna(), c] = 0.0
 
     if (t.loc[t["rush_source_present"], "team_inside10_rushes"] > t.loc[t["rush_source_present"], "team_rushes"] + TOL).any():
         raise RuntimeError("inside10 rushing pool exceeds team rushes")
@@ -370,11 +375,12 @@ def evaluate_cell(
     prior_def = ts[["season", "week", "team", "prior_opp_allowed_games"]].merge(
         team_keys, on=["season", "week", "team"], how="inner"
     )
-    league_available = ts.loc[
-        ts[["season", "week", "team"]]
-        .apply(tuple, axis=1)
-        .isin(set(team_keys.apply(tuple, axis=1)))
-    ]
+    league_available = ts.merge(
+        team_keys,
+        on=["season", "week", "team"],
+        how="inner",
+        validate="one_to_one",
+    )
 
     metrics = {
         "cell": cell,
@@ -406,6 +412,16 @@ def evaluate_cell(
         "negative_complement_rooms": int(
             (num(room["complement_high_value"]) < -TOL).sum()
         ),
+        "finite_room_pool_rate": float(
+            np.isfinite(num(room["team_high_value_pool"])).mean()
+        ) if len(room) else 0.0,
+        "integer_team_pool_rate": float(
+            np.isclose(
+                num(room["team_high_value_pool"]),
+                np.rint(num(room["team_high_value_pool"])),
+                atol=TOL,
+            ).mean()
+        ) if len(room) else 0.0,
         "max_player_over_pool": float(
             (
                 num(q["actual_high_value_opportunities"])
@@ -431,7 +447,12 @@ def evaluate_cell(
         "strict_prior_opponent_attach_ge_95": metrics["strict_prior_opponent_attach_rate"] >= 0.95,
         "strict_prior_league_environment_100": metrics["strict_prior_league_environment_rate"] >= 1.0 - TOL,
         "chronology_violations_zero": metrics["chronology_violations"] == 0,
-        "finite_pool_conservation": metrics["negative_complement_rooms"] == 0 and metrics["max_player_over_pool"] <= TOL,
+        "finite_pool_conservation": (
+            metrics["negative_complement_rooms"] == 0
+            and metrics["max_player_over_pool"] <= TOL
+            and metrics["finite_room_pool_rate"] >= 0.99
+            and metrics["integer_team_pool_rate"] >= 0.99
+        ),
         "support_rows": metrics["player_games"] >= support["rows"],
         "support_players": metrics["players"] >= support["players"],
         "support_positive_teamgames": metrics["positive_high_value_teamgames"] >= support["positive_teamgames"],
