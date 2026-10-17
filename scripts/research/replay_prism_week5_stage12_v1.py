@@ -636,24 +636,43 @@ def score(args: argparse.Namespace) -> int:
         ),
     )
     cb = cb.loc[cb["cell"].ne("")].copy()
+    scored_case_link = scored[[
+        "cell", "team", "player_clean_key", "player_id",
+        "original_week5_expected_opportunity",
+        "canonical_parent_expected_opportunity",
+        "stage12_candidate_expected_opportunity",
+        "actual_opportunity", "candidate_improved_vs_parent",
+        "candidate_improved_vs_original", "share_shift",
+        "stage1_probability_source", "p_active",
+    ]].rename(columns={"actual_opportunity": "stage12_scored_actual_opportunity"})
     cases = cb.merge(
-        scored[[
-            "cell", "team", "player_clean_key", "player_id",
-            "original_week5_expected_opportunity",
-            "canonical_parent_expected_opportunity",
-            "stage12_candidate_expected_opportunity",
-            "actual_opportunity", "candidate_improved_vs_parent",
-            "candidate_improved_vs_original", "share_shift",
-            "stage1_probability_source", "p_active",
-        ]],
+        scored_case_link,
         on=["cell", "team", "player_clean_key"],
         how="left",
         validate="many_to_one",
     )
     if len(cases):
+        both_actual = (
+            num(cases["actual_opportunity"]).notna()
+            & num(cases["stage12_scored_actual_opportunity"]).notna()
+        )
+        actual_gap = (
+            num(cases.loc[both_actual, "actual_opportunity"])
+            - num(cases.loc[both_actual, "stage12_scored_actual_opportunity"])
+        ).abs()
+        if len(actual_gap) and float(actual_gap.max()) > 1e-12:
+            raise RuntimeError(
+                f"frozen casebook/outcome authority actual-opportunity mismatch: {actual_gap.max()}"
+            )
         cases["candidate_moved_toward_actual_from_original"] = (
-            (num(cases["stage12_candidate_expected_opportunity"]) - num(cases["actual_opportunity"])).abs()
-            < (num(cases["original_week5_expected_opportunity"]) - num(cases["actual_opportunity"])).abs()
+            (
+                num(cases["stage12_candidate_expected_opportunity"])
+                - num(cases["stage12_scored_actual_opportunity"])
+            ).abs()
+            < (
+                num(cases["original_week5_expected_opportunity"])
+                - num(cases["stage12_scored_actual_opportunity"])
+            ).abs()
         )
 
     scored_path = out / "prism_week5_stage12_scored_rows.csv"
