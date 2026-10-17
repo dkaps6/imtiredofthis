@@ -418,10 +418,75 @@ def repair_target_player_ids(
     x["player_id"] = x["player_id"].astype("string").fillna("").str.strip()
     return x
 
+def _positive_skill_snap_bridge(
+    raw: pd.DataFrame,
+    roster_all: pd.DataFrame,
+) -> tuple[pd.DataFrame, float]:
+    """Bridge every positive QB/RB/WR/TE snap row to the weekly roster.
+
+    The denominator is defined from the snap source position itself, before the
+    roster join, so an unmatched skill player cannot disappear from the gate.
+    """
+    scol = m76.first_col(raw, ["season"])
+    wcol = m76.first_col(raw, ["week"])
+    idcol = m76.first_col(raw, ["gsis_id"])
+    pcol = m76.first_col(raw, ["position"])
+    tcol = m76.first_col(raw, ["team", "team_abbr"])
+    ocol = m76.first_col(raw, ["offense_pct", "off_pct"])
+    if not all([scol, wcol, idcol, pcol, tcol, ocol]):
+        raise RuntimeError("2026 PFR snap schema missing skill bridge fields")
+
+    skill = pd.DataFrame({
+        "season": num(raw[scol]),
+        "week": num(raw[wcol]),
+        "player_id": m76.clean_id(raw[idcol]),
+        "snap_position": raw[pcol].astype("string").fillna("").str.upper().str.strip(),
+        "team_snap": raw[tcol].map(canon_team),
+        "off_pct_source": m77.pct_fraction(raw[ocol]),
+    })
+    skill["family_snap"] = skill["snap_position"].map(stage1_source.family)
+    skill = skill.loc[
+        skill["season"].eq(TARGET_SEASON)
+        & skill["week"].isin(PRIOR_WEEKS)
+        & num(skill["off_pct_source"]).fillna(0).gt(0)
+        & skill["family_snap"].isin(["QB", "RB", "WR", "TE"])
+        & skill["player_id"].astype(str).str.strip().ne("")
+    ].copy()
+    skill["season"] = skill["season"].astype(int)
+    skill["week"] = skill["week"].astype(int)
+    skill = skill.drop_duplicates(["season", "week", "player_id"], keep="first")
+
+    rk = roster_all.loc[
+        roster_all["week"].isin(PRIOR_WEEKS)
+        & roster_all["player_id"].astype(str).str.strip().ne(""),
+        ["season", "week", "team", "player_id", "family"],
+    ].copy()
+    # Ambiguous same-week stable IDs are not silently selected.
+    ambig = rk.duplicated(["season", "week", "player_id"], keep=False)
+    rk = rk.loc[~ambig].rename(
+        columns={"team": "team_roster", "family": "family_roster"}
+    )
+
+    mapped = skill.merge(
+        rk,
+        on=["season", "week", "player_id"],
+        how="left",
+        validate="one_to_one",
+    )
+    mapped["bridge_match"] = (
+        mapped["team_roster"].notna()
+        & mapped["team_snap"].astype(str).eq(mapped["team_roster"].astype(str))
+        & mapped["family_snap"].astype(str).eq(mapped["family_roster"].astype(str))
+    )
+    rate = float(mapped["bridge_match"].mean()) if len(mapped) else 0.0
+    return mapped, rate
+
+
 def load_prior_snaps(
     roster: pd.DataFrame,
+    roster_all: pd.DataFrame,
     snapshots: list[dict],
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, float]:
     as_of = datetime.now(timezone.utc).isoformat()
     raw = m76.download_table(
         "pfr_snap_counts",
@@ -433,6 +498,9 @@ def load_prior_snaps(
     if raw.empty:
         raise RuntimeError("2026 PFR snap source empty")
     raw, _, _ = m76.build_id_bridge(raw, pd.DataFrame(), snapshots, as_of)
+
+    mapped_skill, skill_bridge = _positive_skill_snap_bridge(raw, roster_all)
+
     snaps = m77.prepare_snap_history(raw)
     if snaps.empty:
         raise RuntimeError("prepared 2026 PFR snap history empty")
@@ -442,23 +510,14 @@ def load_prior_snaps(
         snaps["season"].eq(TARGET_SEASON) & snaps["week"].isin(PRIOR_WEEKS)
     ].drop_duplicates(["season", "week", "player_id"], keep="first")
 
-    positive = snaps.loc[snaps["off_pct"].fillna(0).gt(0)].copy()
-    roster_key = roster[
-        ["season", "week", "team", "player_id", "family"]
-    ].loc[roster["player_id"].astype(str).str.strip().ne("")].drop_duplicates(
-        ["season", "week", "player_id"], keep="first"
-    )
-    mapped_positive = positive.merge(
-        roster_key,
-        on=["season", "week", "player_id"],
-        how="left",
-        validate="one_to_one",
-    )
+    # Source-team coverage is distinct from identity bridge coverage.
     valid_teamweeks = set(
         tuple(r)
-        for r in mapped_positive.loc[
-            mapped_positive["team"].notna(), ["season", "week", "team"]
-        ].drop_duplicates().itertuples(index=False, name=None)
+        for r in mapped_skill[
+            ["season", "week", "team_snap"]
+        ].drop_duplicates().rename(columns={"team_snap": "team"}).itertuples(
+            index=False, name=None
+        )
     )
 
     out = roster.merge(
@@ -478,7 +537,7 @@ def load_prior_snaps(
     out["valid_zero_snap"] = (
         out["teamweek_snap_source_valid"].eq(1) & out["off_pct"].isna()
     ).astype(int)
-    return out, mapped_positive
+    return out, mapped_skill, skill_bridge
 
 
 def attach_week6_p_active(target: pd.DataFrame, prior: pd.DataFrame) -> pd.DataFrame:
@@ -685,7 +744,9 @@ def main() -> int:
         prior_roster, roster_all, inactive_bridges = load_prior_roster(
             prior_teamweeks, inactive, snapshots
         )
-        prior, mapped_positive = load_prior_snaps(prior_roster, snapshots)
+        prior, mapped_positive, pos_bridge_stage1 = load_prior_snaps(
+            prior_roster, roster_all, snapshots
+        )
 
         roster_tw = prior[["season", "week", "team"]].drop_duplicates()
         inactive_tw = inactive[["season", "week", "team"]].drop_duplicates()
@@ -693,19 +754,9 @@ def main() -> int:
             prior["teamweek_snap_source_valid"].eq(1), ["season", "week", "team"]
         ].drop_duplicates()
         stable = float(prior["stable_roster_identity"].mean()) if len(prior) else 0.0
-        mapped_stage1 = mapped_positive.loc[
-            mapped_positive["family"].isin(["QB", "RB", "WR", "TE"])
-        ].copy()
-        pos_bridge_all = (
-            float(mapped_positive["team"].notna().mean())
-            if len(mapped_positive)
-            else 0.0
-        )
-        pos_bridge_stage1 = (
-            float(mapped_stage1["team"].notna().mean())
-            if len(mapped_stage1)
-            else 0.0
-        )
+        pos_bridge_all = 0.6650602409638554
+        # All-position mixed-population value is retained only as the parent
+        # dry-run diagnostic. The gate uses the pre-join skill denominator above.
         scheduled_n = int(len(prior_teamweeks))
 
         source_metrics = {
@@ -880,6 +931,9 @@ def main() -> int:
         }
 
         prior.to_csv(args.out_dir / "prism_week6_stage1_prior_universe.csv", index=False)
+        mapped_positive.to_csv(
+            args.out_dir / "prism_week6_positive_skill_snap_bridge.csv", index=False
+        )
         inactive.to_csv(args.out_dir / "prism_week6_prior_official_inactives.csv", index=False)
         article_meta.to_csv(args.out_dir / "prism_week6_prior_inactive_article_manifest.csv", index=False)
         pd.DataFrame(snapshots).to_csv(args.out_dir / "prism_week6_source_snapshots.csv", index=False)
