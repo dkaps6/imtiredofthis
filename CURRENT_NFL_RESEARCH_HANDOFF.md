@@ -1,5 +1,117 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-17 — PRISM PLAYER-FIRST WEEK-4/5 FORENSIC REPLAY ACTIVE
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-17_PRISM_PLAYER_FIRST_WEEK4_5_REPLAY_CONTINUITY.md`
+
+**Reusable next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-17_PRISM_PLAYER_FIRST_WEEK4_5_REPLAY.md`
+
+### Non-negotiable scientific object
+
+PRISM is an **individual-player projection model**.
+
+`PLAYER IDENTITY/HISTORY -> CURRENT ROLE/STATE/TRAJECTORY -> TEAMMATE COMPETITION -> FINITE OPPORTUNITY ALLOCATION -> OPPORTUNITY TYPE/QUALITY -> TEAM/GAME ENVIRONMENT -> PLAYER-CONDITIONED OPPONENT MATCHUP -> INDIVIDUAL EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+Position-average MAE/RMSE is downstream QA only.
+
+The prior “Construct NFL Tickets” J.K. Dobbins discussion is binding context for the entire model: understand the named player, his current role/trajectory, teammate competition, exact opportunity type, scoring-area role, team situation, player-conditioned matchup and conversion path before answering the exact market. Carries/targets/receptions/yards/TDs are different football questions.
+
+### New active diagnostic lane
+
+Frozen protocol:
+`docs/research/PRISM_WEEK4_5_PLAYER_FIRST_FORENSIC_REPLAY_V1_PROTOCOL.md`
+
+Freeze commit:
+`b4bc97a484a9c71676bdd6f6694983a3b822f33b`
+
+Disposition:
+`PRISM_WEEK4_5_PLAYER_FIRST_FORENSIC_REPLAY_V1_FROZEN`.
+
+The replay begins at Week 4. Do **not** wait for Week 6 merely to inspect already-completed player projections.
+
+Week 4 uses legitimate historical/player-identity context plus Weeks 1-3 current-season state where source-valid.
+
+The exact WR dual-reliability >=4-prior-current-season-game rule is first eligible in Week 5; do not manufacture that exact score for Week 4.
+
+### Week-5 named-player replay already complete
+
+Result:
+`docs/research/PRISM_2026_WEEK5_PLAYER_STATE_FORENSIC_REPLAY_V1_RESULT.md`
+
+Certified:
+- run `39039061242`;
+- exact head `a2cf1adbc4ffa37f72a3635d73a0894e5d07b239`;
+- artifact `12103281893`;
+- digest `sha256:ddd80921006625ce1381167fcc6530c5ecedf9b20e06f0e36d765e2a247aa02a`.
+
+Key evidence:
+- 318 strict-prior same-player/market rows;
+- 166 players;
+- 7/9 repeat same-player+market major misses changed component state week to week;
+- 22/23 direct-skill major misses realized more opportunity than projected;
+- 8/8 opportunity-dominant direct-skill cases realized more opportunity than projected;
+- raw recent-share replacement remains CLOSED.
+
+### Room Competition State V1 source audit
+
+Frozen source plan:
+`docs/research/PRISM_ROOM_COMPETITION_STATE_V1_SOURCE_PLAN.md`
+
+Certified:
+- run `39039540742`;
+- exact head `73542d0b0eed3fd212352e0d51c7d550decd04e2`;
+- artifact `12103282541`;
+- digest `sha256:98bbfb4d75727e5d49985f1ba0e4195e1bdacb53ac7cbd3a66c7495c401f64f0`.
+
+Disposition:
+`PRISM_ROOM_COMPETITION_STATE_SOURCE_BLOCKED`.
+
+Do not lower gates, infer missing inactive identity from target-game snaps, use sportsbook listings as availability, or revive vacancy-transfer/raw recent-share formulas.
+
+### Exact active next action
+
+Continue **executing** the frozen Week-4/5 player-first replay:
+1. all-row Week-4/5 replay table;
+2. named-player situation/attribution table;
+3. detailed informative-miss casebook;
+4. matched correct-case controls;
+5. repeated mechanisms only after player-level attribution;
+6. existing-but-not-transmitted pregame signals;
+7. source-blocked player-conditioned signals;
+8. separately testable football hypotheses;
+9. aggregate MAE/RMSE only afterward as QA.
+
+Do not stop at opportunity-vs-efficiency labels. For every player inspect identity/history, current role/trajectory, teammate competition, finite opportunity, opportunity subtype/quality, game environment, player-conditioned matchup, efficiency, reliability and exact market.
+
+### Protected parallel science
+
+- Stage 1 active-role QUALIFIED ALL.
+- Stage 2 allocation QUALIFIED RB rushing / RB receiving / TE receiving.
+- QB exact Stage-2 CLOSED.
+- WR Stage-2 source-blocked/not scored.
+- Parent denominator persistence PASS.
+- Direct team high-value creation CLOSED.
+- Team scoring-territory drive creation CLOSED.
+- Generic opponent/DvP transmission remains closed or blocked.
+- WR opportunity trust QUALIFIED.
+- WR efficiency trust QUALIFIED.
+- WR dual trust historical integration supported; Weeks 7-10 prospective protocol remains protected.
+- TE allocation trust QUALIFIED.
+- TE efficiency trust CLOSED.
+- Week-6 Stage-2 shadow and WR/TE trust locks remain immutable/ungraded.
+- No Week-6 WR dual backfill.
+- No paid OddsAPI credit authorized.
+- No sportsbook upstream.
+- No production mutation from forensic work.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-17 — PRISM WR DUAL RELIABILITY MECHANICS READY / WEEK-7 LOCK PENDING
 
 **Model:** PRISM — Player Role & Individual Situation Model
