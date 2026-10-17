@@ -45,12 +45,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nflreadpy scipy pytest pyarrow beautifulsoup4 requests
+          pip install nflreadpy scipy pytest pyarrow beautifulsoup4 requests pyyaml
 
       - name: Verify immutable pre-shadow freeze
         run: |
           set -euo pipefail
           git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git merge-base --is-ancestor 566ca4e5b90317d8751a20d9c7cd0a0f348ab05f HEAD
           git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_WEEK6_SUNMON_STAGE2_SHADOW_V1_FREEZE.md"
           if git cat-file -e "$FREEZE_COMMIT:scripts/research/lock_prism_week6_sunmon_stage2_shadow_v1.py" 2>/dev/null; then
             echo "ERROR: shadow implementation existed at freeze commit"
@@ -82,11 +83,13 @@ jobs:
           A="/tmp/week6-origin/data/current_player_availability.csv"
           T="/tmp/week6-origin/data/target_entitlement_v1_trace.csv"
           S="/tmp/week6-origin/data/schedules/schedule_2026.csv"
-          for f in "$U" "$A" "$T" "$S"; do test -s "$f"; done
+          I="/tmp/week6-origin/data/player_identity_roster_history.csv"
+          for f in "$U" "$A" "$T" "$S" "$I"; do test -s "$f"; done
           echo "W6_UNIVERSE=$U" >> "$GITHUB_ENV"
           echo "W6_AVAILABILITY=$A" >> "$GITHUB_ENV"
           echo "W6_ENTITLEMENT=$T" >> "$GITHUB_ENV"
           echo "W6_SCHEDULE=$S" >> "$GITHUB_ENV"
+          echo "W6_IDENTITY_HISTORY=$I" >> "$GITHUB_ENV"
 
       - name: Run frozen mechanical safeguards
         env:
@@ -102,7 +105,7 @@ jobs:
         run: |
           rm -rf /tmp/prism-week6-shadow
           mkdir -p /tmp/prism-week6-shadow
-          python scripts/research/lock_prism_week6_sunmon_stage2_shadow_v1.py             --universe "$W6_UNIVERSE"             --availability "$W6_AVAILABILITY"             --target-entitlement "$W6_ENTITLEMENT"             --schedule "$W6_SCHEDULE"             --out-dir /tmp/prism-week6-shadow
+          python scripts/research/lock_prism_week6_sunmon_stage2_shadow_v1.py             --universe "$W6_UNIVERSE"             --availability "$W6_AVAILABILITY"             --target-entitlement "$W6_ENTITLEMENT"             --schedule "$W6_SCHEDULE"             --identity-history "$W6_IDENTITY_HISTORY"             --out-dir /tmp/prism-week6-shadow
 
       - name: Certify source/lock contract
         run: |
@@ -113,6 +116,7 @@ jobs:
           assert p['freeze_commit']=='f954bf392c133c2507ff1b4bfa4d8325030abcc5',p
           assert p['origin_run']==38791377571,p
           assert p['origin_artifact']==11999923880,p
+          assert p['source_reconciliation_commit']=='566ca4e5b90317d8751a20d9c7cd0a0f348ab05f',p
           assert p['excluded_game']=='SEA-DEN',p
           assert p['eligible_cells']==['RB_RUSHING','RB_RECEIVING','TE_RECEIVING'],p
           assert p['week6_target_outcomes_read']==0,p
