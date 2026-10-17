@@ -260,15 +260,17 @@ def specialist_authority(
     ag["authority_covered"] = (
         ag["authority_q"].notna() & np.isfinite(ag["authority_q"]) & ag["authority_q"].ge(0)
     )
+    ag["authority_denominator_mean"] = num(ag["target_denominator_mean"])
     ag["denominator_finite"] = (
-        np.isfinite(ag["target_denominator_mean"]) & ag["target_denominator_mean"].gt(0)
+        np.isfinite(ag["authority_denominator_mean"])
+        & ag["authority_denominator_mean"].gt(0)
     )
     ag["season"] = int(season)
     ag["week"] = int(week)
     out = ag[
         [
             "season", "week", "team", "player_name_key", "authority_q",
-            "authority_covered", "denominator_finite",
+            "authority_denominator_mean", "authority_covered", "denominator_finite",
         ]
     ].copy()
 
@@ -383,11 +385,14 @@ def overlay_specialist(base: pd.DataFrame, spec: pd.DataFrame, family: str) -> p
         & np.isfinite(num(out["authority_q"]))
         & num(out["authority_q"]).ge(0)
     )
-    out["denominator_finite"] = np.where(
+    out["authority_denominator_mean"] = np.where(
         out["specialist_row"],
-        num(out["denominator_implied"]).gt(0) & np.isfinite(num(out["denominator_implied"])),
-        num(out["target_denominator_mean"]).gt(0)
-        & np.isfinite(num(out["target_denominator_mean"])),
+        num(out["denominator_implied"]),
+        num(out["target_denominator_mean"]),
+    )
+    out["denominator_finite"] = (
+        num(out["authority_denominator_mean"]).gt(0)
+        & np.isfinite(num(out["authority_denominator_mean"]))
     )
     return out
 
@@ -439,9 +444,13 @@ def evaluate_cell(
         tuple(v) for v in a.loc[dup, join_keys].itertuples(index=False, name=None)
     )
     a = a.loc[~dup].copy()
-    keep = join_keys + ["authority_q", "authority_covered", "denominator_finite"]
+    keep = join_keys + [
+        "authority_q", "authority_denominator_mean",
+        "authority_covered", "denominator_finite",
+    ]
     z = target.merge(a[keep], on=join_keys, how="left", validate="many_to_one")
     z["authority_covered"] = z["authority_covered"].fillna(False).astype(bool)
+    z["authority_denominator_mean"] = num(z["authority_denominator_mean"])
     z["denominator_finite"] = z["denominator_finite"].fillna(False).astype(bool)
     z["ambiguous_identity"] = [
         tuple(v) in ambiguous_keys
@@ -648,6 +657,7 @@ def main() -> int:
     qb = base.loc[base["position"].eq("QB")].copy()
     qb_pass = qb.assign(
         authority_q=qb["qb_pass_att_share"],
+        authority_denominator_mean=num(qb["qb_pass_denominator_mean"]),
         authority_covered=qb["qb_pass_att_share"].notna(),
         denominator_finite=np.isfinite(qb["qb_pass_denominator_mean"])
         & qb["qb_pass_denominator_mean"].gt(0),
@@ -662,12 +672,14 @@ def main() -> int:
     rb = base.loc[base["position"].isin(rb_pos)].copy()
     rb_rush = rb.assign(
         authority_q=rb["rush_q"],
+        authority_denominator_mean=num(rb["rush_denominator_mean"]),
         authority_covered=rb["rush_q"].notna(),
         denominator_finite=np.isfinite(rb["rush_denominator_mean"])
         & rb["rush_denominator_mean"].gt(0),
     )
     rb_recv = rb.assign(
         authority_q=rb["target_q"],
+        authority_denominator_mean=num(rb["target_denominator_mean"]),
         authority_covered=rb["target_q"].notna(),
         denominator_finite=np.isfinite(rb["target_denominator_mean"])
         & rb["target_denominator_mean"].gt(0),
