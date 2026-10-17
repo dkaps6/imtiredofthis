@@ -9,11 +9,16 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
 jobs:
   source-audit:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
+      - name: Record start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM pass-catcher QB-regime allocation source audit started: run ${{ github.run_id }}, exact head ${{ github.sha }}. Source/chronology only; no predictive scoring, sportsbook/OddsAPI, fit, target outcomes, or production mutation."
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -56,6 +61,20 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: python scripts/utils/audit_repo.py --strict
+      - name: Record result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY' > /tmp/qbreg-comment.md
+          import json,os
+          p=json.load(open('/tmp/qbreg/out/passcatcher_qb_regime_source_result.json'))
+          print(f"PRISM pass-catcher QB-regime allocation source audit complete. Run {os.environ['GITHUB_RUN_ID']}, exact head {os.environ['GITHUB_SHA']}. Disposition: {p['disposition']}.")
+          for r in p['metrics']:
+              print(f"{r['family']} {r['season']}: QB-regime={r['qb_regime_source_valid_teamweek_rate']:.3%}, same-QB>=2={r['same_qb_ge2_rate']:.3%}, same-QB>=3={r['same_qb_ge3_rate']:.3%}, support={r['same_qb_ge2_support_rows']} rows/{r['same_qb_ge2_distinct_players']} players, ready={r['source_ready']}.")
+          print("Integrity: target-game outcomes in source state 0; predictive candidates 0; sportsbook/OddsAPI 0; fits/thresholds 0; production unchanged.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/qbreg-comment.md
       - name: Upload
         if: always()
         uses: actions/upload-artifact@v4
