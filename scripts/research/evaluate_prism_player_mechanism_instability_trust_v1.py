@@ -154,31 +154,74 @@ def raw_corr(frame: pd.DataFrame) -> float:
     return float(z.iloc[:,0].corr(z.iloc[:,1]))
 
 
+def _weighted_residual(y: np.ndarray, controls: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    X=np.column_stack([np.ones(len(y)),controls])
+    sw=np.sqrt(weights)
+    beta=np.linalg.lstsq(X*sw[:,None],y*sw,rcond=None)[0]
+    return y-X@beta
+
+
+def _weighted_corr(a: np.ndarray, b: np.ndarray, weights: np.ndarray) -> float:
+    wsum=float(weights.sum())
+    if wsum<=0:
+        return np.nan
+    ma=float(np.sum(weights*a)/wsum)
+    mb=float(np.sum(weights*b)/wsum)
+    da=a-ma; db=b-mb
+    va=float(np.sum(weights*da*da)/wsum)
+    vb=float(np.sum(weights*db*db)/wsum)
+    if va<=1e-24 or vb<=1e-24:
+        return np.nan
+    cov=float(np.sum(weights*da*db)/wsum)
+    return cov/np.sqrt(va*vb)
+
+
 def clustered_bootstrap(
     frame: pd.DataFrame,
     cluster_col: str,
     seed: int,
 ) -> dict:
-    clusters=frame[cluster_col].dropna().astype(str).unique()
+    cols=[
+        "mechanism_switch_rate_rank","current_abs_total_error_rank",
+        "prior8_abs_opportunity_error_mean_rank","prior8_abs_efficiency_error_mean_rank",
+        cluster_col,
+    ]
+    z=frame[cols].dropna().copy()
+    clusters=z[cluster_col].astype(str).unique()
     if len(clusters)<2:
         return {"reps":0,"ci_low":np.nan,"ci_high":np.nan,"p_positive":np.nan}
-    groups={k:g for k,g in frame.groupby(frame[cluster_col].astype(str),sort=False)}
+
+    cluster_index={k:i for i,k in enumerate(clusters)}
+    row_codes=np.array([cluster_index[k] for k in z[cluster_col].astype(str)],dtype=int)
+    a=z["mechanism_switch_rate_rank"].to_numpy(float)
+    b=z["current_abs_total_error_rank"].to_numpy(float)
+    controls=z[[
+        "prior8_abs_opportunity_error_mean_rank",
+        "prior8_abs_efficiency_error_mean_rank",
+    ]].to_numpy(float)
+
     rng=np.random.default_rng(seed)
     vals=[]
     for _ in range(N_BOOT):
-        sampled=rng.choice(clusters,size=len(clusters),replace=True)
-        b=pd.concat([groups[str(k)] for k in sampled],ignore_index=True)
-        v=partial_corr(b,"current_abs_total_error")
+        sampled=rng.choice(len(clusters),size=len(clusters),replace=True)
+        counts=np.bincount(sampled,minlength=len(clusters)).astype(float)
+        weights=counts[row_codes]
+        keep=weights>0
+        if int(keep.sum())<3:
+            continue
+        aa=_weighted_residual(a[keep],controls[keep],weights[keep])
+        bb=_weighted_residual(b[keep],controls[keep],weights[keep])
+        v=_weighted_corr(aa,bb,weights[keep])
         if np.isfinite(v):
             vals.append(v)
     if not vals:
         return {"reps":0,"ci_low":np.nan,"ci_high":np.nan,"p_positive":np.nan}
-    a=np.asarray(vals,float)
+    arr=np.asarray(vals,float)
     return {
-        "reps":int(len(a)),
-        "ci_low":float(np.quantile(a,0.025)),
-        "ci_high":float(np.quantile(a,0.975)),
-        "p_positive":float(np.mean(a>0)),
+        "reps":int(len(arr)),
+        "ci_low":float(np.quantile(arr,0.025)),
+        "ci_high":float(np.quantile(arr,0.975)),
+        "p_positive":float(np.mean(arr>0)),
     }
 
 
