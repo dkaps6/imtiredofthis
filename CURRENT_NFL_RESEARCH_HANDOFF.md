@@ -1,5 +1,83 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-16 — PRISM OPPORTUNITY QUALITY SOURCE RECONCILED / DENOMINATOR PERSISTENCE ACTIVE
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-16_PRISM_OPPORTUNITY_QUALITY_SOURCE_RECONCILED_DENOMINATOR_ACTIVE.md`
+
+Canonical player-first order:
+
+`PLAYER IDENTITY -> CURRENT ROLE/STATE -> TEAMMATE COMPETITION -> OPPORTUNITY ALLOCATION -> OPPORTUNITY QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+### Opportunity-quality source milestone
+
+`PRISM_OPPORTUNITY_QUALITY_SOURCE_RECONCILED_READY_ALL`
+
+Reconciled source authorities:
+- Stage-2 compatibility: run `38991429245`, artifact `12085262613`;
+- raw finite team pools: canonical hardened run `38991605252`, artifact `12085367606`;
+- exact dual-source reconciliation: run `38991737241`, artifact `12085278127`.
+
+Exact reconciliation:
+- 832 / 832 2024-2025 Weeks 5-18 team-games;
+- zero key mismatch;
+- zero count drift for team rushes, inside-10 rushes, team targets and red-zone targets.
+
+Source-ready opportunity-quality cells:
+- RB rush inside-10;
+- RB receiving red-zone targets;
+- TE receiving red-zone targets.
+
+No predictive candidate has been scored.
+
+### Current exact action
+
+Persist the already-existing numeric canonical pregame parent opportunity denominator before any opportunity-quality mechanism is frozen.
+
+Frozen mechanical addendum:
+`docs/research/PRISM_OPPORTUNITY_QUALITY_PARENT_DENOMINATOR_PERSISTENCE_V1_ADDENDUM.md`
+
+Freeze commit:
+`3a980c9ba821c5e0a3b41231314db5c21bb0adef`.
+
+Active exact-head run:
+`38991915503` on `02e96ad9faabee62c1ecb31303b48746e4945a8c`.
+
+Allowed change:
+persist `authority_denominator_mean` only.
+
+Required:
+- identical source keys;
+- authority q drift <=1e-12;
+- denominator finite flags identical;
+- scientific source disposition identical;
+- same ready/blocked cells.
+
+Only after parity passes may one opportunity-quality mechanism be frozen before scoring.
+
+### Protected state
+
+Final guarded Week-6 prospective shadow remains:
+- run `38991032116` SUCCESS;
+- artifact `12084848700`;
+- 13 Sunday/Monday games;
+- SEA-DEN excluded;
+- no target outcomes read at lock.
+
+Do not reopen the closed player high-value-share persistence V1.
+Do not use player recent red-zone/inside-10 share as the next candidate.
+Do not add opponent/environment transmission until the team opportunity-quality mechanism is separately qualified.
+
+No sportsbook upstream.
+No OddsAPI.
+No 2026 outcomes.
+No production mutation.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-16 — PRISM WEEK-6 STAGE-2 SHADOW LOCKED / OPPORTUNITY QUALITY SOURCE AUDIT NEXT
 
 **Model:** PRISM — Player Role & Individual Situation Model
