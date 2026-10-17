@@ -1,0 +1,69 @@
+name: Research PRISM RB NGS Efficiency Source V1 Child PR
+on:
+  pull_request:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/audit_prism_rb_ngs_rushing_efficiency_identity_v1_source.py'
+      - '.github/workflows/research-prism-rb-ngs-efficiency-source-v1-child-pr.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pandas numpy pyyaml 'pyarrow==18.1.0'
+      - name: Execute frozen source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_rb_ngs_rushing_efficiency_identity_v1_source.py
+          rm -rf /tmp/rb-ngs-source
+          mkdir -p /tmp/rb-ngs-source
+          python scripts/research/audit_prism_rb_ngs_rushing_efficiency_identity_v1_source.py             --out-dir /tmp/rb-ngs-source
+      - name: Certify source-only boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/rb-ngs-source/rb_ngs_rushing_efficiency_identity_source_result.json'))
+          assert p['version']=='PRISM_RB_NGS_RUSHING_EFFICIENCY_IDENTITY_V1_SOURCE_AUDIT',p
+          assert p['source_seasons']==[2023,2024,2025],p
+          assert p['target_history_seasons']==[2024,2025],p
+          i=p['integrity']
+          assert i['target_game_ngs_rows_used_in_predictor_state']==0,p
+          assert i['target_game_rush_yards_ypc_used_in_predictor_state']==0,p
+          assert i['sportsbook_inputs_used']==0 and i['oddsapi_calls']==0,p
+          assert i['outcomes_or_ngs_2026_loaded']==0,p
+          assert i['predictive_models_fit']==0 and i['thresholds_searched']==0,p
+          assert i['production_changed'] is False,p
+          assert i['chronology_violations']==0,p
+          assert p['disposition'] in {
+            'PRISM_RB_NGS_RUSHING_EFFICIENCY_IDENTITY_SOURCE_READY',
+            'PRISM_RB_NGS_RUSHING_EFFICIENCY_IDENTITY_SOURCE_BLOCKED',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-rb-ngs-efficiency-source-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/rb-ngs-source/**
