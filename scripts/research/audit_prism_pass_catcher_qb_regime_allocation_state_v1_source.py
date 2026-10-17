@@ -141,3 +141,5 @@ def main():
     (z.out_dir/"passcatcher_qb_regime_source_result.json").write_text(json.dumps(result,indent=2,sort_keys=True,default=str)+"\n")
     print(json.dumps(result,indent=2,sort_keys=True,default=str))
 if __name__=="__main__": main()
+
+# workflow-trigger-v1
