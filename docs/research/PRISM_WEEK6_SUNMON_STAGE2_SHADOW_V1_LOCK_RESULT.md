@@ -30,10 +30,10 @@ Frozen mechanical source reconciliation:
 - no scientific gate or threshold changed.
 
 Canonical locked execution:
-- run `38990758368` — **SUCCESS**;
-- exact head `67677542e3e0230930d71a67b082fa73ead39399`;
-- artifact `12085545101`;
-- digest `sha256:2f1c9b65b6db2e746d9ab8419fa361e0d6c5706cf8b493fbfe64d5d7189d1b61`.
+- run `38991032116` — **SUCCESS**;
+- exact head `3c0190cc8f1cd6271bfd6912cf84cff82008ff80`;
+- artifact `12084848700`;
+- digest `sha256:ec1376dfa90fff3b5fc31e199588f7fe5f570017946adfd0b85be847af901e6e`.
 
 Preserved Week-6 pregame origin:
 - run `38791377571`;
@@ -72,7 +72,7 @@ Coverage:
 
 Stage-1 parent identity bridges:
 - official-inactive -> roster, qualified skill-family population: **97.5535%**;
-- positive-snap -> roster, qualified skill-family population: **100%**.
+- positive-snap -> roster, qualified skill-family population: **99.6386%**.
 
 All-position diagnostics were retained but were not substituted for the Stage-1 parent population:
 - inactive -> roster all-position diagnostic: **95.0304%**;
@@ -148,7 +148,7 @@ The source-blocked dry run exposed three mechanical issues:
 
 The repair was frozen before implementation and before any Sunday/Monday target outcome.
 
-No gate was lowered.
+No gate was lowered. The final canonical run also includes a regression guard proving unmatched positive skill-snap rows remain in the gate denominator rather than disappearing after the roster join.
 
 Identity-only reconciliations included:
 - Audric Estim -> Audric Estimé -> GSIS `00-0039373`;
