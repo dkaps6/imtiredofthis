@@ -31,10 +31,10 @@ WR receiving remains source-blocked/not scored.
 `PRISM_WEEK6_SUNMON_STAGE2_SHADOW_LOCKED`
 
 Canonical lock:
-- run `38990758368` — SUCCESS;
-- exact head `67677542e3e0230930d71a67b082fa73ead39399`;
-- artifact `12085545101`;
-- digest `sha256:2f1c9b65b6db2e746d9ab8419fa361e0d6c5706cf8b493fbfe64d5d7189d1b61`;
+- run `38991032116` — SUCCESS;
+- exact head `3c0190cc8f1cd6271bfd6912cf84cff82008ff80`;
+- artifact `12084848700`;
+- digest `sha256:ec1376dfa90fff3b5fc31e199588f7fe5f570017946adfd0b85be847af901e6e`;
 - result `docs/research/PRISM_WEEK6_SUNMON_STAGE2_SHADOW_V1_LOCK_RESULT.md`.
 
 Population:
