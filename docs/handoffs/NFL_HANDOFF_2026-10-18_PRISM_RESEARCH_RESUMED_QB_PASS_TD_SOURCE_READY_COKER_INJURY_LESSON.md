@@ -110,6 +110,22 @@ This lesson is important for future trajectory/source audits, but it does **not*
 
 ---
 
+## 4A. GENERALIZED ANOMALY INVESTIGATION GATE — BINDING ACROSS FUTURE CHATS
+
+The Coker error is not a one-player exception. It exposes a general PRISM reasoning requirement now also written into `AGENTS.md`:
+
+> **Anomalies are questions, not trends.**
+
+If a player's recent stat/usage sequence contains an abrupt discontinuity, zero/near-zero, missed game, partial game, injury-limited game, return from injury, or sudden opportunity change, the next operator must investigate the cause **before** calling it role growth/decline, trajectory, efficiency change or reliability evidence.
+
+Reconcile source-valid injury/practice status, active/DNP state, snaps/routes/carries/targets, early exits, QB/starter changes, teammate availability and other plausible context. State-label abnormal observations before using them.
+
+If the cause is unresolved, fail closed as `UNRESOLVED_CONTEXT`; do not use the observation as affirmative evidence for a bet or model adjustment.
+
+This is binding for game-day football checks, postmortems, forensic replays, player-state research and future production feature design.
+
+---
+
 ## 5. SIGNED-OPPORTUNITY FRONTIER — PRESERVED
 
 ### Stage-2 player-specific mechanism learning
