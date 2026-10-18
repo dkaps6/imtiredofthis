@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score frozen PRISM RB short-yardage carry-type identity V1."""
+"""Score frozen PRISM RB short-yardage carry-type identity V1.\n\nScientific contract is frozen in the corresponding mechanism-freeze document.\n"""
 from __future__ import annotations
 
 import argparse
