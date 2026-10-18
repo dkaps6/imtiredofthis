@@ -1,0 +1,198 @@
+name: Research PRISM WR TE Opportunity Bias Conservation Bridge V1 Source
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/audit_prism_wr_te_opportunity_bias_conservation_bridge_v1_source.py'
+      - 'tests/test_prism_wr_te_opportunity_bias_conservation_bridge_v1_source.py'
+      - '.github/workflows/research-prism-wr-te-opportunity-bias-conservation-bridge-v1-source.yml'
+      - 'docs/research/PRISM_WR_TE_OPPORTUNITY_BIAS_CONSERVATION_BRIDGE_V1_SOURCE_PLAN.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest pyyaml
+
+      - name: Verify immutable source freeze and exact authorities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git merge-base --is-ancestor eb9698dfb44883e3bdd2ebf8706f26f63718e0ce HEAD
+          git cat-file -e eb9698dfb44883e3bdd2ebf8706f26f63718e0ce:docs/research/PRISM_WR_TE_OPPORTUNITY_BIAS_CONSERVATION_BRIDGE_V1_SOURCE_PLAN.md
+          if git cat-file -e eb9698dfb44883e3bdd2ebf8706f26f63718e0ce:scripts/research/audit_prism_wr_te_opportunity_bias_conservation_bridge_v1_source.py 2>/dev/null; then
+            echo "ERROR: bridge source auditor existed at freeze commit"
+            exit 1
+          fi
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12128983909 --jq '.workflow_run.id')" = "39109423266"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12128983909 --jq '.digest')" = "sha256:bb14d6474778d0afd53ca74bb60237b381aa4e973195bab3d09d54ed87ef2490"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/10061328722 --jq '.workflow_run.id')" = "34238301577"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/10061328722 --jq '.digest')" = "sha256:8df31b5e136621d959272daf0422dfc665593cd0da2eb0892b4aa69c1417f3ce"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/10029942404 --jq '.workflow_run.id')" = "34152797603"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/10029942404 --jq '.digest')" = "sha256:f9951441b748ef72514dbc81adf6fbe9cd023c9bf64ecb52a016840989ab4cdb"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-wr-te-player-signed-component-bias-v1-signal-39109423266
+          path: /tmp/signal
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39109423266
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wr-r15-wr1-anchor-participation-v1
+          path: /tmp/wr-authority
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 34238301577
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: te-r5p-production-contract-refit-v1
+          path: /tmp/te-authority
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 34152797603
+
+      - name: Resolve immutable inputs
+        run: |
+          SIGNAL_ROWS="$(find /tmp/signal -type f -name 'wr_te_player_signed_component_bias_signal_rows.csv' -print -quit)"
+          SIGNAL_RESULT="$(find /tmp/signal -type f -name 'wr_te_player_signed_component_bias_signal_result.json' -print -quit)"
+          WR_AUTH="$(find /tmp/wr-authority -type f -name 'wr_r15_confirmation_predictions.csv' -print -quit)"
+          TE_AUTH="$(find /tmp/te-authority -type f -name 'te_r5p_oos_player_casebook.csv' -print -quit)"
+          test -n "$SIGNAL_ROWS" && test -s "$SIGNAL_ROWS"
+          test -n "$SIGNAL_RESULT" && test -s "$SIGNAL_RESULT"
+          test -n "$WR_AUTH" && test -s "$WR_AUTH"
+          test -n "$TE_AUTH" && test -s "$TE_AUTH"
+          echo "SIGNAL_ROWS=$SIGNAL_ROWS" >> "$GITHUB_ENV"
+          echo "SIGNAL_RESULT=$SIGNAL_RESULT" >> "$GITHUB_ENV"
+          echo "WR_AUTH=$WR_AUTH" >> "$GITHUB_ENV"
+          echo "TE_AUTH=$TE_AUTH" >> "$GITHUB_ENV"
+
+      - name: Run focused source tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_wr_te_opportunity_bias_conservation_bridge_v1_source.py
+          pytest -q tests/test_prism_wr_te_opportunity_bias_conservation_bridge_v1_source.py
+
+      - name: Audit conservation-bridge source topology only
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/bridge-source
+          mkdir -p /tmp/bridge-source
+          python scripts/research/audit_prism_wr_te_opportunity_bias_conservation_bridge_v1_source.py \
+            --wr-authority "$WR_AUTH" \
+            --te-authority "$TE_AUTH" \
+            --signal-rows "$SIGNAL_ROWS" \
+            --signal-result "$SIGNAL_RESULT" \
+            --out-dir /tmp/bridge-source
+
+      - name: Certify no bridge outcome score occurred
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/bridge-source/wr_te_opportunity_bias_conservation_bridge_source_result.json'))
+          assert p['version']=='PRISM_WR_TE_OPPORTUNITY_BIAS_CONSERVATION_BRIDGE_V1_SOURCE_AUDIT',p
+          assert p['freeze_commit']=='eb9698dfb44883e3bdd2ebf8706f26f63718e0ce',p
+          assert p['signal_run']==39109423266,p
+          assert p['signal_artifact']==12128983909,p
+          assert p['wr_parent_run']==34238301577,p
+          assert p['wr_parent_artifact']==10061328722,p
+          assert p['te_parent_run']==34152797603,p
+          assert p['te_parent_artifact']==10029942404,p
+          assert p['qualified_signal_cells']==['WR_OPPORTUNITY','TE_OPPORTUNITY'],p
+          assert p['excluded_closed_cells']==['WR_EFFICIENCY','TE_EFFICIENCY'],p
+          assert p['support_floor_rows']==250,p
+          assert p['support_floor_players']==50,p
+          assert p['outcomes_scored']==0,p
+          assert p['projection_actions_scored']==0,p
+          assert p['coefficients_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['week6_outcomes_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'PRISM_WR_TE_OPPORTUNITY_BIAS_CONSERVATION_BRIDGE_SOURCE_READY_ALL',
+              'PRISM_WR_TE_OPPORTUNITY_BIAS_CONSERVATION_BRIDGE_SOURCE_BLOCKED',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 source result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/bridge-source/wr_te_opportunity_bias_conservation_bridge_source_result.json'))
+          lines=[
+              '### PRISM WR/TE opportunity-bias conservation bridge V1 — source/topology audit',
+              '',
+              f"- Run: `{os.environ['RUN_ID']}`",
+              f"- Exact head: `{os.environ['HEAD_SHA']}`",
+              f"- Frozen source plan: `{p['freeze_commit']}`",
+              f"- Disposition: `{p['disposition']}`",
+              '',
+          ]
+          for pos in ('WR','TE'):
+              for season, rec in p['summaries'][pos].items():
+                  failed=[k for k,v in rec['source_gates'].items() if not v]
+                  lines += [
+                      f"- {pos} {season}: authority rows {rec['authority_rows']}; rooms {rec['authority_rooms']}; room-size median {rec['room_size_median']:.1f}",
+                      f"  - signal rows {rec['signal_supported_rows']}; exact matches {rec['exact_matched_rows']} ({rec['join_coverage']:.2%})",
+                      f"  - multi-player bridge rows/players {rec['bridge_eligible_rows']} / {rec['bridge_eligible_players']}; single-player supported rows {rec['single_player_room_supported_rows']}",
+                      f"  - factor p01/p50/p99 {rec['bias_factor_p01']:.4f} / {rec['bias_factor_median']:.4f} / {rec['bias_factor_p99']:.4f}",
+                      f"  - failed source gates: {failed if failed else 'none'}",
+                  ]
+          lines += [
+              '',
+              'Source/topology only: no target or receiving-yard outcome improvement was scored, no room was renormalized, no projection changed, no sportsbook/OddsAPI or 2026/Week-6 outcomes were used.',
+          ]
+          open('/tmp/issue535_bridge_source.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/issue535_bridge_source.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload immutable bridge source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-wr-te-opportunity-bias-conservation-bridge-v1-source-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/bridge-source/**
