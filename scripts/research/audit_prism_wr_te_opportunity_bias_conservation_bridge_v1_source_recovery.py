@@ -158,11 +158,17 @@ def load_wr_topology(detail_path: Path, audit_path: Path) -> tuple[pd.DataFrame,
         raise RuntimeError("wrong WR topology audit version")
     if int(audit.get("source_audit", {}).get("frozen_full_wr_rows", -1)) != 6409:
         raise RuntimeError("WR topology full-row count drift")
-    mech = audit.get("mechanical_audit", {})
-    if float(mech.get("max_frozen_wr_room_mass_gap", math.inf)) > 1e-12:
+    # source_audit.json stores these mechanical certifications at top level.
+    if float(audit.get("max_frozen_wr_room_mass_gap", math.inf)) > 1e-12:
         raise RuntimeError("WR topology room-mass conservation failed")
-    if float(mech.get("max_frozen_anchor_entitlement_delta", math.inf)) > 1e-12:
+    if float(audit.get("max_frozen_anchor_entitlement_delta", math.inf)) > 1e-12:
         raise RuntimeError("WR topology anchor conservation failed")
+    if int(audit.get("rank1_anchor_identity_mismatches", -1)) != 0:
+        raise RuntimeError("WR topology anchor identity mismatch")
+    if float(audit.get("secondary_bridge_coverage", 0.0)) != 1.0:
+        raise RuntimeError("WR topology secondary bridge coverage drift")
+    if int(audit.get("strict_prior_future_violations", -1)) != 0:
+        raise RuntimeError("WR topology strict-prior violation")
 
     x = canon_identity(pd.read_csv(detail_path, low_memory=False))
     required = {
@@ -191,17 +197,30 @@ def load_preserved_opportunity(
     if result.get("version") != "OPPORTUNITY_AUTHORITY_PRIORITY_V1":
         raise RuntimeError("wrong preserved opportunity authority version")
     integ = result.get("integrity", {})
-    required_true = (
+    gates = result.get("gates", {})
+    integrity_required_true = (
         "te_r5p_2024_2025_applied",
         "wr_r15_2024_applied_all_weeks",
+        "specialist_assets_invariant",
+    )
+    gate_required_true = (
         "source_priority_boundary_exact",
         "specialist_assets_invariant",
         "team_volume_inputs_invariant",
         "zero_sportsbook_inputs",
+        "zero_target_future_feature_rows",
     )
-    bad = [k for k in required_true if integ.get(k) is not True]
-    if bad:
-        raise RuntimeError(f"preserved opportunity authority integrity failed: {bad}")
+    bad_integrity = [k for k in integrity_required_true if integ.get(k) is not True]
+    bad_gates = [k for k in gate_required_true if gates.get(k) is not True]
+    if bad_integrity or bad_gates:
+        raise RuntimeError(
+            "preserved opportunity authority integrity failed: "
+            f"integrity={bad_integrity} gates={bad_gates}"
+        )
+    if int(integ.get("sportsbook_inputs_used", -1)) != 0:
+        raise RuntimeError("preserved opportunity authority used sportsbook inputs")
+    if int(integ.get("target_future_feature_rows", -1)) != 0:
+        raise RuntimeError("preserved opportunity authority used target/future features")
 
     d = canon_identity(pd.read_csv(direct_path, low_memory=False))
     m = canon_identity(pd.read_csv(market_path, low_memory=False))
