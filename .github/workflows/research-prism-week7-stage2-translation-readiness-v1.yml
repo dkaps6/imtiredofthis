@@ -1,4 +1,5 @@
 name: Research PRISM Week7 Stage2 Translation Readiness V1
+# Reprobe after Week-6 source maturation — 2026-10-17.
 
 on:
   push:
