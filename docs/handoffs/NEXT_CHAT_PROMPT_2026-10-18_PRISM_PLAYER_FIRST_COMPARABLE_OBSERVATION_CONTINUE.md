@@ -91,43 +91,71 @@ PRESERVE THESE RESULTS:
 - PlayerForm participation-state membership V2 SOURCE READY:
   run `39160972259`, head `d5043287e66500a891b3d5ada8ad1bb61683c4f2`.
 
-CURRENT ACTIVE FRONTIER:
+LATEST EXECUTED FRONTIER:
 
-At handoff creation the research branch was:
+The Comparable-Observation Receiving Opportunity Identity V1 has now executed.
 
-`43e1c81a177e47118415d02fc072758e22f50825`
-
-with:
-
+Frozen contract:
 `docs/research/PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_FREEZE.md`
 
-Status:
-`PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_FROZEN`
+Freeze:
+`43e1c81a177e47118415d02fc072758e22f50825`
 
-Core question:
+Authoritative run:
+`39161342922`
 
-For an affected named RB/WR/TE, is his next-game receiving-opportunity identity more faithful when an injury-corroborated partial-participation observation is prevented from updating ordinary current-season PlayerForm target-share identity?
+Exact head:
+`bcbeffa8dbebb869eadb004cde4a2032c417bf0f`
 
-This is a NAMED-PLAYER target-share identity test.
-Position is not the rule.
+Artifact:
+`12148837679`
 
-The branch-head amendment also freezes a comparable-target-game gate:
-exclude target games that are themselves major participation collapses from the primary role-fidelity cohort, using only the pre-frozen participation-state labels.
+Digest:
+`sha256:ac6272b41632389d4a5d996cef53ff7aae539e4ada034287bfbed57171ba24be`
+
+Disposition:
+`PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_CLOSED`
+
+Primary object was the affected named player.
+
+2024:
+- 362 affected target games;
+- 64 named players;
+- equal-player improvement -0.000428;
+- median player -0.000867;
+- improved/tied/worsened 35.94% / 1.56% / 62.50%.
+
+2025:
+- 293 affected target games;
+- 62 named players;
+- equal-player improvement -0.000546;
+- median player -0.000483;
+- improved/tied/worsened 35.48% / 0.00% / 64.52%;
+- player-bootstrap 95% CI [-0.001321,+0.000259].
+
+596 abnormal target games were excluded from ordinary-role scoring under the pre-frozen target-state gate.
+
+Close ONLY the exact action:
+prevent legally injury-corroborated partial-participation rows from updating ordinary current-season PlayerForm target-share identity via this exact exclusion/blend construction.
+
+Do NOT conclude injury context is irrelevant.
+
+Do NOT rescue with a different drop rule, partial weight, extrapolation, anomaly threshold, current/prior blend, position coefficient, player subset or recency tuning.
 
 EXACT NEXT ACTION:
 
 1. Reconcile live branch/head/PR/Actions.
-2. Check whether a scorer/workflow/result already landed after the handoff.
-3. If not, implement and execute the already-frozen Comparable-Observation Receiving Opportunity Identity V1 exactly as written.
-4. Do not retune the freeze after seeing outcomes.
-5. Keep all predictors strictly prior.
-6. Preserve the comparable-target-game gate.
-7. Evaluate the named-player improvement distribution as primary. RB/WR/TE family summaries are guardrails only.
-8. No 2026 outcomes.
-9. No sportsbook/OddsAPI predictors.
-10. No production mutation.
-11. If CLOSED, close only this exact intervention; do not say injury/context is irrelevant.
-12. If QUALIFIED, freeze a separate finite-opportunity integration before any production change.
+2. Confirm run `39161342922` remains the authoritative completed result and check whether a result document has already been committed.
+3. If the result document is absent, record the immutable result without changing science.
+4. Then return to the core CURRENT ROLE / STATE layer and source-map one genuinely distinct NAMED-PLAYER mechanism.
+5. The next mechanism must explain why the specific player's current opportunity should change. It cannot be another variant of deleting/reweighting the same historical target-share observations.
+6. Anti-retest all closed trajectory/history-exclusion/trust families before freezing anything.
+7. Freeze source, chronology, formula/action and named-player qualification gates before outcome scoring.
+8. Do not optimize a position aggregate as the objective.
+9. No 2026 outcomes for historical research.
+10. No sportsbook/OddsAPI predictors.
+11. No production mutation.
+12. QB passing TD remains backlog-only unless I explicitly change the queue.
 
 COMMUNICATION REQUIREMENT:
 
