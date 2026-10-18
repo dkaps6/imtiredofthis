@@ -1,5 +1,130 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-17 — PRISM EXTENDED PLAYER-FIRST REPLAY / QB-REGIME CLOSED / RB NGS SOURCE BLOCKED
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-17_PRISM_EXTENDED_REPLAY_QB_REGIME_CLOSED_RB_NGS_BLOCKED.md`
+
+**Reusable next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-17_PRISM_EXTENDED_REPLAY_QB_REGIME_CLOSED_RB_NGS_BLOCKED.md`
+
+### Non-negotiable scientific object
+
+PRISM remains an **individual-player projection model**:
+
+`PLAYER IDENTITY/HISTORY -> CURRENT ROLE/STATE/TRAJECTORY -> TEAMMATE COMPETITION -> FINITE OPPORTUNITY ALLOCATION -> OPPORTUNITY TYPE/QUALITY -> TEAM/GAME ENVIRONMENT -> PLAYER-CONDITIONED OPPONENT MATCHUP -> INDIVIDUAL EFFICIENCY -> RELIABILITY -> MARKET-SPECIFIC OUTCOME`.
+
+Position-average MAE/RMSE is downstream QA only.
+
+### Extended Week-4/5 replay — COMPLETE
+
+Run `39060246734` — SUCCESS:
+- exact head `4cd7b4483be1e93e8107a8686381b14379a6d569`;
+- artifact `12111007952`;
+- digest `sha256:0f120e2002452af548fbea20f0ff1355ec04eb926e53b5845ca663ea2e98a5be`;
+- preserved Week-4 authority = 873 player-market rows;
+- Week-4 supported replay = 483;
+- Week-4 ATD preserved / not attributed = 390;
+- Week-5 all-row replay = 396;
+- combined replay = 879;
+- casebook = 80;
+- matched controls = 80;
+- 2025 same-player identity support = 83.732%;
+- zero Week-6 outcomes / OddsAPI / fit / threshold search / production mutation.
+
+Weeks 1-3 feed Week 4. Weeks 1-4 feed Week 5. Do not wait for Week 6 or rerun this replay.
+
+### Component-cancellation warning
+
+Run `39061107622` confirmed that small final error can hide large opposing component errors:
+- bottom final-error decile median final error 0.7818;
+- median gross component magnitude 3.9901;
+- median cancellation fraction 0.8597.
+
+Do not treat final-number correctness as proof internal player-state reasoning was correct.
+
+### Finite-allocation architecture gap remains confirmed
+
+Do not remove conservation.
+
+The target is **jointly coherent named-player entitlement / allocation before conservation**.
+
+Qualified Stage-2 cells remain:
+- RB rushing;
+- RB receiving;
+- TE receiving.
+
+QB exact Stage 2 CLOSED.
+WR Stage 2 source-blocked.
+
+### Pass-catcher × QB-regime allocation
+
+Source audit:
+- run `39067415356`;
+- disposition `PRISM_PASS_CATCHER_QB_REGIME_ALLOCATION_STATE_V1_SOURCE_READY_ALL`.
+
+Frozen predictive signal:
+- run `39067914161`;
+- result `docs/research/PRISM_PASS_CATCHER_QB_REGIME_ALLOCATION_SIGNAL_V1_RESULT.md`;
+- disposition `PRISM_PASS_CATCHER_QB_REGIME_ALLOCATION_SIGNAL_V1_CLOSED`.
+
+The source was excellent, but direct same-QB target-share adjustment worsened WR and TE prediction. Do not rescue with alternate windows, >=3-only, shrink coefficients, QB-change subgroups, WR1/TE1 carveouts, family pooling or receiving-yards translation.
+
+### Player mechanism-instability trust — CLOSED
+
+Run `39061903343`:
+`PRISM_PLAYER_MECHANISM_INSTABILITY_TRUST_V1_CLOSED`.
+
+Do not reopen as another trust threshold/window.
+
+### RB NGS rushing efficiency identity V1 — SOURCE BLOCKED
+
+Run `39068580334`:
+- result `docs/research/PRISM_RB_NGS_RUSHING_EFFICIENCY_IDENTITY_V1_SOURCE_RESULT.md`;
+- disposition `PRISM_RB_NGS_RUSHING_EFFICIENCY_IDENTITY_SOURCE_BLOCKED`.
+
+Provider quality passed cleanly. Frozen >=3 prior same-player support failed:
+- 2024 = 476 rows / 52 RBs;
+- 2025 = 511 rows / 52 RBs;
+- required >=900 rows / >=80 RBs.
+
+Do not lower gates or pool seasons after seeing support.
+
+### Live research state before this continuity write
+
+- research branch `research-individual-opportunity-roadmap-2026-10-08`
+- branch head `9279975fd4ef9c207aced7c72dc31f7175311b90`
+- PR #672 OPEN / DRAFT
+- latest branch message `Research: record RB NGS efficiency source block`
+
+### Exact next action
+
+Reconcile live main / branch / PR #672 / newest Issue #535 / exact-head Actions first.
+
+Then continue from the **post-RB-NGS player-first frontier**.
+
+Do not reopen:
+- raw recent-share replacement;
+- same-QB target-allocation delta;
+- player mechanism-instability trust;
+- RB NGS V1 with weaker gates;
+- Room Competition State V1;
+- RB/TE depth-role transition;
+- generic DvP;
+- generic old conservation rescues.
+
+Any next mechanism must be genuinely distinct after anti-retest, strictly pregame, named-player first, finite-opportunity coherent, and market-specific.
+
+One still-open distinction is whether QB identity changes a named pass catcher's **opportunity type / target quality** rather than target share. Anti-retest existing QB-pair / opportunity-quality families before scoring this or any other new candidate.
+
+Week-6 locks remain immutable and ungraded. Week-7 Stage-2 readiness may be rechecked only when complete legal Week-6 prior-state data exist. No paid OddsAPI without explicit authorization. Sportsbook remains downstream.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-17 — PRISM WEEK-4/5 REPLAY COMPLETE / FINITE ALLOCATION COHERENCE GAP CONFIRMED
 
 **Model:** PRISM — Player Role & Individual Situation Model
