@@ -1,0 +1,159 @@
+name: Research PRISM WR TE Player Signed Component Bias V1 Source
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/audit_prism_wr_te_player_signed_component_bias_v1.py'
+      - 'tests/test_prism_wr_te_player_signed_component_bias_v1.py'
+      - '.github/workflows/research-prism-wr-te-player-signed-component-bias-v1-source.yml'
+      - 'docs/research/PRISM_WR_TE_PLAYER_SIGNED_COMPONENT_BIAS_V1_SOURCE_PLAN.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest pyyaml
+
+      - name: Verify immutable source freeze and parent artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git merge-base --is-ancestor bec1e2becbe37fc68aab9da25bf28898ee3f41bf HEAD
+          git cat-file -e bec1e2becbe37fc68aab9da25bf28898ee3f41bf:docs/research/PRISM_WR_TE_PLAYER_SIGNED_COMPONENT_BIAS_V1_SOURCE_PLAN.md
+          if git cat-file -e bec1e2becbe37fc68aab9da25bf28898ee3f41bf:scripts/research/audit_prism_wr_te_player_signed_component_bias_v1.py 2>/dev/null; then
+            echo "ERROR: source implementation existed at freeze commit"
+            exit 1
+          fi
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12111278777 --jq '.workflow_run.id')" = "39061606501"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12111278777 --jq '.digest')" = "sha256:f64c6e7efde9deaf91b7bc19076693a5106cb632338c461acc4d2cfe2ae37ea9"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-player-mechanism-instability-source-v1-39061606501
+          path: /tmp/component-parent
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39061606501
+
+      - name: Resolve immutable component source rows
+        run: |
+          WR_ROWS="$(find /tmp/component-parent -type f -name 'wr_mechanism_instability_source_rows.csv' -print -quit)"
+          TE_ROWS="$(find /tmp/component-parent -type f -name 'te_mechanism_instability_source_rows.csv' -print -quit)"
+          test -n "$WR_ROWS" && test -s "$WR_ROWS"
+          test -n "$TE_ROWS" && test -s "$TE_ROWS"
+          echo "WR_ROWS=$WR_ROWS" >> "$GITHUB_ENV"
+          echo "TE_ROWS=$TE_ROWS" >> "$GITHUB_ENV"
+
+      - name: Run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_wr_te_player_signed_component_bias_v1.py
+          pytest -q tests/test_prism_wr_te_player_signed_component_bias_v1.py
+
+      - name: Audit signed component-bias source only
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/signed-component-bias-source
+          mkdir -p /tmp/signed-component-bias-source
+          python scripts/research/audit_prism_wr_te_player_signed_component_bias_v1.py             --wr-source-rows "$WR_ROWS"             --te-source-rows "$TE_ROWS"             --out-dir /tmp/signed-component-bias-source
+
+      - name: Certify no predictive score occurred
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/signed-component-bias-source/wr_te_player_signed_component_bias_source_result.json'))
+          assert p['version']=='PRISM_WR_TE_PLAYER_SIGNED_COMPONENT_BIAS_V1_SOURCE_AUDIT',p
+          assert p['freeze_commit']=='bec1e2becbe37fc68aab9da25bf28898ee3f41bf',p
+          assert p['parent_run']==39061606501,p
+          assert p['parent_artifact']==12111278777,p
+          assert p['positions']==['WR','TE'],p
+          assert p['components']==['OPPORTUNITY','EFFICIENCY'],p
+          assert p['predictive_relationships_scored']==0,p
+          assert p['models_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['component_means_changed']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['week6_outcomes_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'PRISM_WR_TE_PLAYER_SIGNED_COMPONENT_BIAS_SOURCE_READY_ALL',
+              'PRISM_WR_TE_PLAYER_SIGNED_COMPONENT_BIAS_SOURCE_BLOCKED',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 source result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/signed-component-bias-source/wr_te_player_signed_component_bias_source_result.json'))
+          lines=[
+              '### PRISM WR/TE player signed component-bias V1 — source audit',
+              '',
+              f"- Run: `{os.environ['RUN_ID']}`",
+              f"- Exact head: `{os.environ['HEAD_SHA']}`",
+              f"- Frozen source plan: `{p['freeze_commit']}`",
+              f"- Disposition: `{p['disposition']}`",
+              '',
+          ]
+          for pos in p['positions']:
+              lines.append(f"- {pos}: `{p['position_dispositions'][pos]}`")
+              for season,rec in p['summaries'][pos].items():
+                  lines.append(
+                      f"  - {season}: {rec['eligible_rows']} rows / {rec['distinct_players']} players / "
+                      f"{rec['teams']} teams; prior-count median {rec['prior_component_rows_median']:.1f}; "
+                      f"chronology violations {rec['chronology_violations']}; max identity gap {rec['max_decomposition_identity_gap']:.3e}"
+                  )
+          lines += [
+              '',
+              'Source-only: no signed bias relationship, correlation, MAE, player improvement, component correction, 2026/Week-6 outcomes, sportsbook/OddsAPI or production mutation was scored.',
+          ]
+          open('/tmp/issue535_signed_component_bias_source.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/issue535_signed_component_bias_source.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload immutable source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-wr-te-player-signed-component-bias-v1-source-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/signed-component-bias-source/**
