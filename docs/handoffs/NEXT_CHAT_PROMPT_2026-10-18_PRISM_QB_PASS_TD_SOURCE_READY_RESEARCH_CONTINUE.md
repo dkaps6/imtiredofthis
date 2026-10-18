@@ -23,6 +23,10 @@ IMPORTANT CONTINUITY:
 VERY IMPORTANT PLAYER-STATE LESSON:
 Jalen Coker's Week-3 18-yard game was injury-affected and his Week-4 apparent 0 was a DNP, not a healthy zero-yard performance. Do NOT treat `138 -> 66 -> 18 -> 0` as a role-decline trajectory. Injury-limited games, partial games and DNPs must be explicitly state-labeled and not treated as ordinary healthy trajectory observations.
 
+ANOMALY INVESTIGATION RULE — BINDING:
+**Anomalies are questions, not trends.** Before using any abrupt stat/usage change, zero/near-zero, missed game, partial game, injury-limited game, return-from-injury game, or sudden opportunity shift as trajectory evidence, investigate why it happened. Reconcile source-valid injury/practice status, DNP/active state, snaps/routes/carries/targets, early exits, QB/starter changes and teammate availability. State-label the observation. If the cause is unresolved, fail closed as uncertain; do NOT turn it into role/trajectory evidence or use it to approve a bet/model adjustment.
+
+
 RESEARCH THAT HAS ALREADY ADVANCED — DO NOT REPEAT:
 1. WR-R15 exact authority recovery run `39110742338` failed closed on immutable byte identity. Do not rescue it.
 2. TE signed-opportunity bridge independent-path decision is COMPLETE:
