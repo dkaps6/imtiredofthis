@@ -1,5 +1,87 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — BETS LOCKED / RETURN TO RESEARCH / SIGNED OPPORTUNITY FRONTIER
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-18_PRISM_BETS_LOCKED_RETURN_TO_RESEARCH_SIGNED_OPPORTUNITY.md`
+
+**Reusable next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-18_PRISM_BETS_LOCKED_RETURN_TO_RESEARCH.md`
+
+### Immediate mode
+
+Sunday betting work is **LOCKED/CLOSED** unless the user explicitly reopens it.
+
+Return immediately to PRISM research.
+
+### Binding continuity
+
+- PRISM is an individual-player projection model.
+- **The player should have the rules. The position should not have the player.**
+- Dobbins logic remains binding: player-specific football context + PRISM agreement + exact market-specific question.
+- Ticket work is downstream only.
+- No paid OddsAPI without explicit authorization.
+
+### Latest research state
+
+Preserve:
+- RB receiving Stage-2 player-specific authority **QUALIFIED**;
+- RB rushing Stage-2 hard authority **CLOSED**;
+- Stage-1 direct RB/TE player-authority bridges **CLOSED**;
+- WR signed opportunity bias **QUALIFIED**;
+- TE signed opportunity bias **QUALIFIED**;
+- WR signed efficiency bias **CLOSED**;
+- TE signed efficiency bias **CLOSED**.
+
+WR-R15 exact authority recovery:
+- run `39110742338`;
+- **SOURCE RECOVERY BLOCKED / NO BRIDGE SCORE**;
+- expected SHA `91d108ee7981935d78179257b204a0204e9a4f8061e6eba4d6810845ed057d05`;
+- rebuilt SHA `7dce6b0e194d37ec3b814caf79942eea3b83fcda520b481788ec6b2b3f0778c3`.
+
+Do not:
+- weaken byte identity;
+- replace the expected digest;
+- score the WR topology/bridge from rebuilt authority;
+- rescue closed efficiency lanes.
+
+### Exact next action
+
+Resume from the signed-opportunity frontier after the WR authority fail-close.
+
+First determine whether the already-frozen **TE conserved bridge** has an independently valid source/execution path that does **not** depend on the failed WR-R15 exact-authority recovery.
+
+- If YES: execute only that frozen TE path under the existing pre-result gates.
+- If NO: document the exact blocker and move to the next genuinely distinct player-specific mechanism.
+- Do not retune or rescue WR.
+
+Secondary backlog only:
+- no dedicated certified QB passing-TD projection layer currently exists; preserve this as a player-first market-specific research gap for future frozen work.
+
+### Newly preserved live lessons
+
+RB Weeks 3-5:
+- 237-194;
+- 55.0%;
+- +19.20u;
+- RB receptions strongest recent betting lane;
+- underlying RB point-projection low-side bias still unresolved.
+
+Ticket construction:
+- positive-side legs use actual `+` milestone props when available;
+- UNDER opinions use actual normal under lines;
+- football logic + PRISM + exact line must all agree;
+- Watson concentration lesson preserved;
+- bets are now locked, so do not rebuild them by default.
+
+---
+
+# CURRENT NFL RESEARCH HANDOFF — READ FIRST
+
 ## TOP CHECKPOINT — 2026-10-18 — STAGE-1 PLAYER AUTHORITY CLOSED / SIGNED COMPONENT-BIAS FRONTIER
 
 **Model:** PRISM — Player Role & Individual Situation Model
