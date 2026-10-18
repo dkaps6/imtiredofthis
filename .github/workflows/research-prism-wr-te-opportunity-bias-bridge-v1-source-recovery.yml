@@ -44,7 +44,30 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r authority-src/requirements.txt
-          pip install nflreadpy pyarrow scikit-learn joblib pyyaml pytest
+          # Reproduce the dependency versions recorded by the original
+          # successful WR-R15 authority run (34238301577). In particular,
+          # pyarrow 26 no longer imports against the repo's frozen NumPy 1.26.4.
+          pip install \
+            'pyarrow==25.0.1' \
+            'fastparquet==2026.5.0' \
+            'fsspec==2026.7.0' \
+            'cramjam==2.12.1' \
+            'charset-normalizer==3.5.1' \
+            'urllib3==2.7.0' \
+            'platformdirs==4.11.7' \
+            'pydantic==2.13.5' \
+            'pydantic-core==2.46.5' \
+            'pydantic-settings==2.15.0' \
+            'python-dotenv==1.2.3' \
+            'soupsieve==2.9.2' \
+            'threadpoolctl==3.6.0' \
+            'tqdm==4.70.0' \
+            'typing-inspection==0.4.4' \
+            'typing-extensions==4.16.0' \
+            'nflreadpy==0.1.5' \
+            'scikit-learn==1.4.2' \
+            'joblib==1.6.0' \
+            'pyyaml==6.0.3' pytest
 
       - name: Verify immutable recovery freeze and artifact lineage
         env:
