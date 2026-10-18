@@ -64,7 +64,11 @@ Comparable-Observation Receiving Opportunity Identity V1:
 - artifact `12148837679`;
 - digest `sha256:ac6272b41632389d4a5d996cef53ff7aae539e4ada034287bfbed57171ba24be`;
 - disposition:
-  `PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_CLOSED`.
+  `PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_CLOSED`;
+- canonical result document:
+  `docs/research/PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_RESULT.md`;
+- result-commit research head at final handoff reconciliation:
+  `51a95b4b9f0135c471f0d20a374b63ca04a81be6`.
 
 Primary object was the affected named player.
 
@@ -121,19 +125,25 @@ Do not rescue with:
 
 ### Exact next action
 
-No successor predictive mechanism had been frozen after the comparable-observation closure at handoff time.
+The comparable-observation result document defines the next distinct player-first frontier:
+
+> separate **participation exposure** from **opportunity earning conditional on that exposure**.
+
+A partial game may still contain useful evidence about how often the named player earns targets while he is actually on the field, even when his full-game total is depressed by reduced participation.
 
 Next chat must:
 
 1. reconcile live branch/head/PR/Actions;
-2. confirm whether the immutable comparable-observation result document has already been committed;
-3. if absent, record the result without changing science;
-4. return to the core **CURRENT ROLE / STATE** layer;
-5. source-map one genuinely distinct **named-player** mechanism that explains current opportunity without merely deleting/reweighting the same historical target-share observations;
-6. anti-retest closed trajectory/history-exclusion/trust families before freezing anything;
-7. freeze source/chronology/action/named-player gates before outcome scoring.
+2. treat `51a95b4b9f0135c471f0d20a374b63ca04a81be6` as the last reconciled research head unless live GitHub advanced;
+3. perform a **source/semantic audit first** for a named-player participation-conditioned receiving-opportunity object;
+4. prove exact weekly named-player target evidence can be paired with source-valid offensive participation exposure at sufficient historical coverage and strict chronology;
+5. do not call snaps “routes” or imply route participation unless the source truly supplies routes;
+6. do not score a predictive formula until the source audit passes;
+7. if source-ready, freeze a new predictive contract and named-player qualification gates before scoring;
+8. anti-retest the closed complete-deletion, trajectory, history-exclusion and trust families.
 
 Do not:
+- rescue complete deletion with partial weighting/reweighting;
 - move to QB TD;
 - chase position MAE as the objective;
 - use 2026 outcomes for historical research;
