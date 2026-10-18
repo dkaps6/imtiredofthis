@@ -1,5 +1,78 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — PRISM PLAYER-SPECIFIC RULE LEARNING FIRST BREAKTHROUGH
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-18_PRISM_PLAYER_SPECIFIC_RULE_LEARNING_FIRST_BREAKTHROUGH.md`
+
+**Reusable next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-18_PRISM_PLAYER_SPECIFIC_RULE_LEARNING_FIRST_BREAKTHROUGH.md`
+
+### Major new validated result
+
+> **The player should have the rules. The position should not have the player.**
+
+PRISM now has its first historically validated player-specific projection rule.
+
+Stage-2 player mechanism-benefit history:
+- run `39098772787` — SOURCE READY ALL.
+
+Hierarchical future mechanism-utility signal:
+- run `39099164620`;
+- RB rushing QUALIFIED;
+- RB receiving QUALIFIED;
+- TE receiving CLOSED on the frozen tail-harm gate.
+
+Conservation-safe player-specific Stage-2 authority bridge:
+- run `39099474655`;
+- **RB receiving QUALIFIED**;
+- **RB rushing CLOSED**.
+
+RB receiving 2025:
+- CRPS gain vs universal Stage-2 +0.008520;
+- player CI low +0.005441;
+- game CI low +0.006117;
+- equal-player CI low +0.005582;
+- 78.51% named players improved;
+- finite opportunity conserved exactly.
+
+RB rushing's utility signal was real, but the hard authority intervention harmed
+development/confirmation and is CLOSED. Do not rescue with soft authority or
+alternate thresholds/subsets.
+
+### Exact next action
+
+Do not rescue closed RB rushing or TE.
+
+Open the next materially distinct player-specific parent:
+**Stage-1 Active-Role Participation**.
+
+Canonical Stage-1 authority:
+- run `38907459996`;
+- artifact `12049120604`;
+- 11,166 OOS player rows;
+- Stage-1 remains qualified across QB/RB/WR/TE.
+
+First freeze and execute a **source-only same-player mechanism-benefit history
+audit**. No blind fit.
+
+Preserve:
+- Week-6 locks immutable/ungraded;
+- Week-7 Stage-2 readiness fail-closed until legal Week-6 prior-state source matures;
+- Weeks 7-10 WR dual prospective protocol;
+- no paid OddsAPI without explicit authorization;
+- sportsbook downstream only;
+- no production mutation from research without authorization;
+- all existing closed/source-blocked anti-retest boundaries.
+
+---
+
+# CURRENT NFL RESEARCH HANDOFF — READ FIRST
+
 ## TOP CHECKPOINT — 2026-10-18 — PRISM PLAYER-SPECIFIC RULE LEARNING DIRECTIVE
 
 **Model:** PRISM — Player Role & Individual Situation Model
