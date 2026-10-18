@@ -1,0 +1,271 @@
+name: Research PRISM WR TE Opportunity Bias Bridge V1 Source Recovery
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_WR_TE_OPPORTUNITY_BIAS_CONSERVATION_BRIDGE_V1_SOURCE_RECOVERY_AMENDMENT.md'
+      - 'scripts/research/audit_prism_wr_te_opportunity_bias_conservation_bridge_v1_source_recovery.py'
+      - 'tests/test_prism_wr_te_opportunity_bias_conservation_bridge_v1_source_recovery.py'
+      - '.github/workflows/research-prism-wr-te-opportunity-bias-bridge-v1-source-recovery.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  recover-and-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout research branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout exact original WR-R15 source commit
+        uses: actions/checkout@v4
+        with:
+          ref: 02c3dd1a681d4ab2953683039e39830554f9ec9f
+          path: authority-src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install exact-source dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r authority-src/requirements.txt
+          pip install nflreadpy pyarrow scikit-learn joblib pyyaml pytest
+
+      - name: Verify immutable recovery freeze and artifact lineage
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git merge-base --is-ancestor d0fd57c3f10de74cbdd8c5dc7e027464d9e67d6c HEAD
+          git cat-file -e d0fd57c3f10de74cbdd8c5dc7e027464d9e67d6c:docs/research/PRISM_WR_TE_OPPORTUNITY_BIAS_CONSERVATION_BRIDGE_V1_SOURCE_RECOVERY_AMENDMENT.md
+          if git cat-file -e d0fd57c3f10de74cbdd8c5dc7e027464d9e67d6c:scripts/research/audit_prism_wr_te_opportunity_bias_conservation_bridge_v1_source_recovery.py 2>/dev/null; then
+            echo "ERROR: recovery auditor existed at freeze commit"
+            exit 1
+          fi
+
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12128983909 --jq '.workflow_run.id')" = "39109423266"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12128983909 --jq '.digest')" = "sha256:bb14d6474778d0afd53ca74bb60237b381aa4e973195bab3d09d54ed87ef2490"
+
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/10893281689 --jq '.workflow_run.id')" = "36203881629"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/10893281689 --jq '.digest')" = "sha256:33b12fd521196838054f4ee4240d8cea8f66c2fce5b5bfc9eb902bc67d730adb"
+
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/10935999653 --jq '.workflow_run.id')" = "36332720457"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/10935999653 --jq '.digest')" = "sha256:4fde0a72c3aef7ae2412580333a7fefcd3078e53a31f0e9ebb945fd6a6ed1bb5"
+
+          test "$(git -C authority-src rev-parse HEAD)" = "02c3dd1a681d4ab2953683039e39830554f9ec9f"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-wr-te-player-signed-component-bias-v1-signal-39109423266
+          path: /tmp/signal
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39109423266
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wr-anchor-role-transmission-audit-v1
+          path: /tmp/wr-topology
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 36203881629
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: opportunity-authority-priority-v1
+          path: /tmp/opportunity-authority
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 36332720457
+
+      - name: Build exact authority-era 2022 inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}/authority-src
+        run: |
+          rm -rf /tmp/wr-hist-2022
+          python authority-src/scripts/backtest/build_historical_inputs.py             --season 2022 --prior-season 2021 --weeks '1-18' --out-dir /tmp/wr-hist-2022
+          python authority-src/scripts/backtest/enrich_historical_defense.py             --team-weekly /tmp/wr-hist-2022/team_weekly_history.csv             --seasons 2021,2022             --audit /tmp/wr-hist-2022/historical_defense_enrichment_audit.csv             --observations /tmp/wr-hist-2022/historical_defense_observations.csv
+          python authority-src/scripts/backtest/validate_historical_inputs.py             --season 2022 --prior-season 2021 --weeks '1-18'             --data-dir /tmp/wr-hist-2022             --report /tmp/wr-hist-2022/historical_input_validation.csv
+          python authority-src/scripts/backtest/historical_player_logs.py             --seasons 2021,2022             --schedule /tmp/wr-hist-2022/schedule_history.csv             --out /tmp/wr-hist-2022/player_game_logs_history.csv
+          python authority-src/scripts/backtest/build_historical_injuries.py             --seasons 2021,2022 --out /tmp/wr-hist-2022/injuries_history.csv
+          python authority-src/scripts/backtest/build_historical_weather.py             --schedule /tmp/wr-hist-2022/schedule_history.csv             --out /tmp/wr-hist-2022/weather_history.csv
+
+      - name: Build exact authority-era 2023 inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}/authority-src
+        run: |
+          rm -rf /tmp/wr-hist-2023
+          python authority-src/scripts/backtest/build_historical_inputs.py             --season 2023 --prior-season 2022 --weeks '1-18' --out-dir /tmp/wr-hist-2023
+          python authority-src/scripts/backtest/enrich_historical_defense.py             --team-weekly /tmp/wr-hist-2023/team_weekly_history.csv             --seasons 2022,2023             --audit /tmp/wr-hist-2023/historical_defense_enrichment_audit.csv             --observations /tmp/wr-hist-2023/historical_defense_observations.csv
+          python authority-src/scripts/backtest/validate_historical_inputs.py             --season 2023 --prior-season 2022 --weeks '1-18'             --data-dir /tmp/wr-hist-2023             --report /tmp/wr-hist-2023/historical_input_validation.csv
+          python authority-src/scripts/backtest/historical_player_logs.py             --seasons 2022,2023             --schedule /tmp/wr-hist-2023/schedule_history.csv             --out /tmp/wr-hist-2023/player_game_logs_history.csv
+          python authority-src/scripts/backtest/build_historical_injuries.py             --seasons 2022,2023 --out /tmp/wr-hist-2023/injuries_history.csv
+          python authority-src/scripts/backtest/build_historical_weather.py             --schedule /tmp/wr-hist-2023/schedule_history.csv             --out /tmp/wr-hist-2023/weather_history.csv
+
+      - name: Build exact authority-era 2024 inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}/authority-src
+        run: |
+          rm -rf /tmp/wr-hist-2024
+          python authority-src/scripts/backtest/build_historical_inputs.py             --season 2024 --prior-season 2023 --weeks '1-18' --out-dir /tmp/wr-hist-2024
+          python authority-src/scripts/backtest/enrich_historical_defense.py             --team-weekly /tmp/wr-hist-2024/team_weekly_history.csv             --seasons 2023,2024             --audit /tmp/wr-hist-2024/historical_defense_enrichment_audit.csv             --observations /tmp/wr-hist-2024/historical_defense_observations.csv
+          python authority-src/scripts/backtest/validate_historical_inputs.py             --season 2024 --prior-season 2023 --weeks '1-18'             --data-dir /tmp/wr-hist-2024             --report /tmp/wr-hist-2024/historical_input_validation.csv
+          python authority-src/scripts/backtest/historical_player_logs.py             --seasons 2023,2024             --schedule /tmp/wr-hist-2024/schedule_history.csv             --out /tmp/wr-hist-2024/player_game_logs_history.csv
+          python authority-src/scripts/backtest/build_historical_injuries.py             --seasons 2023,2024 --out /tmp/wr-hist-2024/injuries_history.csv
+          python authority-src/scripts/backtest/build_historical_weather.py             --schedule /tmp/wr-hist-2024/schedule_history.csv             --out /tmp/wr-hist-2024/weather_history.csv
+
+      - name: Rebuild exact original WR-R15 authority
+        env:
+          PYTHONPATH: ${{ github.workspace }}/authority-src
+        run: |
+          rm -rf /tmp/wr-r15-rebuilt
+          mkdir -p /tmp/wr-r15-rebuilt
+          python authority-src/scripts/backtest/evaluate_wr_r15_wr1_anchor_participation_v1.py             --data-2022 /tmp/wr-hist-2022             --logs-2022 /tmp/wr-hist-2022/player_game_logs_history.csv             --data-2023 /tmp/wr-hist-2023             --logs-2023 /tmp/wr-hist-2023/player_game_logs_history.csv             --data-2024 /tmp/wr-hist-2024             --logs-2024 /tmp/wr-hist-2024/player_game_logs_history.csv             --iterations 2000             --out-dir /tmp/wr-r15-rebuilt
+
+          test -s /tmp/wr-r15-rebuilt/wr_r15_confirmation_predictions.csv
+          ACTUAL="$(sha256sum /tmp/wr-r15-rebuilt/wr_r15_confirmation_predictions.csv | awk '{print $1}')"
+          EXPECTED="91d108ee7981935d78179257b204a0204e9a4f8061e6eba4d6810845ed057d05"
+          echo "WR rebuilt predictions SHA256: $ACTUAL"
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Resolve immutable recovery inputs
+        run: |
+          SIGNAL_ROWS="$(find /tmp/signal -type f -name 'wr_te_player_signed_component_bias_signal_rows.csv' -print -quit)"
+          SIGNAL_RESULT="$(find /tmp/signal -type f -name 'wr_te_player_signed_component_bias_signal_result.json' -print -quit)"
+          WR_TOPOLOGY_DETAIL="$(find /tmp/wr-topology -type f -name 'player_detail_anchor_transmission.csv' -print -quit)"
+          WR_TOPOLOGY_AUDIT="$(find /tmp/wr-topology -type f -name 'source_audit.json' -print -quit)"
+          OPPORTUNITY_DIRECT="$(find /tmp/opportunity-authority -type f -name 'opportunity_authority_priority_direct_detail.csv' -print -quit)"
+          OPPORTUNITY_MARKET="$(find /tmp/opportunity-authority -type f -name 'opportunity_authority_priority_market_detail.csv' -print -quit)"
+          OPPORTUNITY_RESULT="$(find /tmp/opportunity-authority -type f -name 'opportunity_authority_priority_result.json' -print -quit)"
+
+          for f in "$SIGNAL_ROWS" "$SIGNAL_RESULT" "$WR_TOPOLOGY_DETAIL" "$WR_TOPOLOGY_AUDIT" "$OPPORTUNITY_DIRECT" "$OPPORTUNITY_MARKET" "$OPPORTUNITY_RESULT"; do
+            test -n "$f" && test -s "$f"
+          done
+
+          echo "SIGNAL_ROWS=$SIGNAL_ROWS" >> "$GITHUB_ENV"
+          echo "SIGNAL_RESULT=$SIGNAL_RESULT" >> "$GITHUB_ENV"
+          echo "WR_TOPOLOGY_DETAIL=$WR_TOPOLOGY_DETAIL" >> "$GITHUB_ENV"
+          echo "WR_TOPOLOGY_AUDIT=$WR_TOPOLOGY_AUDIT" >> "$GITHUB_ENV"
+          echo "OPPORTUNITY_DIRECT=$OPPORTUNITY_DIRECT" >> "$GITHUB_ENV"
+          echo "OPPORTUNITY_MARKET=$OPPORTUNITY_MARKET" >> "$GITHUB_ENV"
+          echo "OPPORTUNITY_RESULT=$OPPORTUNITY_RESULT" >> "$GITHUB_ENV"
+
+      - name: Run focused recovery tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_wr_te_opportunity_bias_conservation_bridge_v1_source_recovery.py
+          pytest -q tests/test_prism_wr_te_opportunity_bias_conservation_bridge_v1_source_recovery.py
+
+      - name: Audit recovered conservation-bridge source only
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/bridge-recovery
+          mkdir -p /tmp/bridge-recovery
+          python scripts/research/audit_prism_wr_te_opportunity_bias_conservation_bridge_v1_source_recovery.py             --wr-predictions /tmp/wr-r15-rebuilt/wr_r15_confirmation_predictions.csv             --wr-topology-detail "$WR_TOPOLOGY_DETAIL"             --wr-topology-audit "$WR_TOPOLOGY_AUDIT"             --signal-rows "$SIGNAL_ROWS"             --signal-result "$SIGNAL_RESULT"             --opportunity-direct "$OPPORTUNITY_DIRECT"             --opportunity-market "$OPPORTUNITY_MARKET"             --opportunity-result "$OPPORTUNITY_RESULT"             --out-dir /tmp/bridge-recovery
+
+      - name: Certify recovery-only boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/bridge-recovery/wr_te_opportunity_bias_bridge_source_recovery_result.json'))
+          assert p['version']=='PRISM_WR_TE_OPPORTUNITY_BIAS_CONSERVATION_BRIDGE_V1_SOURCE_RECOVERY_AUDIT',p
+          assert p['freeze_commit']=='d0fd57c3f10de74cbdd8c5dc7e027464d9e67d6c',p
+          assert p['wr_source_commit']=='02c3dd1a681d4ab2953683039e39830554f9ec9f',p
+          assert p['wr_expected_predictions_sha256']=='91d108ee7981935d78179257b204a0204e9a4f8061e6eba4d6810845ed057d05',p
+          assert p['wr_recovery']['rebuilt_predictions_sha256']==p['wr_expected_predictions_sha256'],p
+          assert p['wr_topology_run']==36203881629,p
+          assert p['wr_topology_artifact']==10893281689,p
+          assert p['preserved_opportunity_run']==36332720457,p
+          assert p['preserved_opportunity_artifact']==10935999653,p
+          assert p['signal_run']==39109423266,p
+          assert p['signal_artifact']==12128983909,p
+          assert p['bridge_outcome_rows_scored']==0,p
+          assert p['target_corrections_applied']==0,p
+          assert p['room_renormalizations_applied']==0,p
+          assert p['coefficients_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['week6_outcomes_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'PRISM_WR_TE_OPPORTUNITY_BIAS_CONSERVATION_BRIDGE_SOURCE_RECOVERED_READY_ALL',
+              'PRISM_WR_TE_OPPORTUNITY_BIAS_CONSERVATION_BRIDGE_SOURCE_RECOVERY_BLOCKED',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 recovery result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/bridge-recovery/wr_te_opportunity_bias_bridge_source_recovery_result.json'))
+          lines=[
+              '### PRISM WR/TE opportunity-bias conservation bridge V1 — source recovery audit',
+              '',
+              f"- Run: `{os.environ['RUN_ID']}`",
+              f"- Exact head: `{os.environ['HEAD_SHA']}`",
+              f"- Recovery freeze: `{p['freeze_commit']}`",
+              f"- Disposition: `{p['disposition']}`",
+              f"- WR-R15 rebuilt prediction SHA: `{p['wr_recovery']['rebuilt_predictions_sha256']}`",
+              '',
+          ]
+          for pos in ('WR','TE'):
+              for season, rec in p['summaries'][pos].items():
+                  failed=[k for k,v in rec['source_gates'].items() if not v]
+                  lines += [
+                      f"- {pos} {season}: signal rows {rec['signal_rows']}; bridge-eligible {rec['eligible_rows']} / {rec['eligible_players']} players",
+                      f"  - full rooms {rec['full_rooms']}; room-size p10/median/p90/max {rec['room_size_p10']:.1f}/{rec['room_size_median']:.1f}/{rec['room_size_p90']:.1f}/{rec['room_size_max']:.1f}",
+                      f"  - bias factor p01/p50/p99 {rec['factor_quantiles']['p01']:.4f}/{rec['factor_quantiles']['median']:.4f}/{rec['factor_quantiles']['p99']:.4f}",
+                      f"  - failed source gates: {failed if failed else 'none'}",
+                  ]
+                  if pos=='WR' and int(season)==2024:
+                      lines.append(
+                          f"  - preserved WR-2024 target parity rows/max gap: {rec['wr2024_target_parity_rows']} / {rec['wr2024_target_parity_max_gap']:.3e}"
+                      )
+          lines += [
+              '',
+              'Recovery/source only: WR-R15 was reproduced byte-for-byte from its original source commit; no opportunity-bias correction, room renormalization, outcome improvement score, coefficient/threshold search, 2026/Week-6 outcome, sportsbook/OddsAPI input, or production mutation occurred.',
+          ]
+          open('/tmp/issue535_bridge_recovery.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/issue535_bridge_recovery.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload preserved recovered authority and source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-wr-te-opportunity-bias-conservation-bridge-v1-source-recovery-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/wr-r15-rebuilt/wr_r15_confirmation_predictions.csv
+            /tmp/wr-r15-rebuilt/wr_r15_conservation_audit.csv
+            /tmp/wr-r15-rebuilt/wr_r15_result.json
+            /tmp/bridge-recovery/**
