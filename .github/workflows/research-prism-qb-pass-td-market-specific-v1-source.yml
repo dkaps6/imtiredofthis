@@ -1,0 +1,140 @@
+name: Research PRISM QB Passing TD Market-Specific V1 Source
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/audit_prism_qb_pass_td_market_specific_v1.py'
+      - '.github/workflows/research-prism-qb-pass-td-market-specific-v1-source.yml'
+      - 'docs/research/PRISM_QB_PASS_TD_MARKET_SPECIFIC_V1_SOURCE_PLAN.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install nflreadpy==0.1.5 pandas numpy pyarrow pyyaml
+
+      - name: Verify source freeze ancestry
+        run: |
+          git merge-base --is-ancestor af709a937f61c39240b73a1d6960ab47e60eb152 HEAD
+          git cat-file -e af709a937f61c39240b73a1d6960ab47e60eb152:docs/research/PRISM_QB_PASS_TD_MARKET_SPECIFIC_V1_SOURCE_PLAN.md
+          if git cat-file -e af709a937f61c39240b73a1d6960ab47e60eb152:scripts/research/audit_prism_qb_pass_td_market_specific_v1.py 2>/dev/null; then
+            echo "ERROR: source implementation existed at freeze commit"
+            exit 1
+          fi
+
+      - name: Compile source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_qb_pass_td_market_specific_v1.py
+
+      - name: Audit QB passing-TD source only
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb-pass-td-source
+          mkdir -p /tmp/qb-pass-td-source
+          python scripts/research/audit_prism_qb_pass_td_market_specific_v1.py \
+            --out-dir /tmp/qb-pass-td-source
+
+      - name: Certify source-only execution
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/qb-pass-td-source/qb_pass_td_source_result.json'))
+          assert p['version']=='PRISM_QB_PASS_TD_MARKET_SPECIFIC_V1_SOURCE_AUDIT',p
+          assert p['freeze_commit']=='af709a937f61c39240b73a1d6960ab47e60eb152',p
+          assert p['seasons']==[2022,2023,2024,2025],p
+          assert p['predictive_relationships_scored']==0,p
+          assert p['models_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['qb_pass_td_projections_created']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['week6_week7_outcomes_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'PRISM_QB_PASS_TD_MARKET_SPECIFIC_SOURCE_READY',
+              'PRISM_QB_PASS_TD_MARKET_SPECIFIC_SOURCE_BLOCKED',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 source result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/qb-pass-td-source/qb_pass_td_source_result.json'))
+          lines=[
+              '### PRISM QB passing-TD market-specific V1 — source audit',
+              '',
+              f"- Run: `{os.environ['RUN_ID']}`",
+              f"- Exact head: `{os.environ['HEAD_SHA']}`",
+              f"- Frozen source plan: `{p['freeze_commit']}`",
+              f"- Disposition: `{p['disposition']}`",
+              '',
+          ]
+          for season in p['seasons']:
+              rec=p['season_summaries'][str(season)]
+              lines.append(
+                  f"- {season}: {rec['pass_attempt_rows']} pass attempts / "
+                  f"{rec['distinct_passers']} passers / {rec['teams']} teams; "
+                  f"ID coverage {rec['passer_id_coverage']:.4%}; "
+                  f"TD coverage {rec['pass_td_coverage']:.4%}; "
+                  f"yardline coverage {rec['yardline_coverage']:.4%}; ready={rec['source_ready']}"
+              )
+          for season in (2024,2025):
+              rec=p['history_feasibility'][str(season)]
+              lines.append(
+                  f"- {season} strict-prior feasibility: {rec['rows_prior_ge_3']} rows / "
+                  f"{rec['qbs_prior_ge_3']} QBs with >=3 prior QB-games; ready={rec['history_ready']}"
+              )
+          lines += [
+              '',
+              'Source-only. No QB passing-TD prediction, calibration, 2026/Week-6/7 outcome use, sportsbook/OddsAPI input, threshold search or production mutation occurred.',
+          ]
+          open('/tmp/issue535_qb_pass_td_source.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/issue535_qb_pass_td_source.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload immutable source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-qb-pass-td-market-specific-v1-source-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb-pass-td-source/**
