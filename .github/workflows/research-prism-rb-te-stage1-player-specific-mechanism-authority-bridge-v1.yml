@@ -1,0 +1,179 @@
+name: Research PRISM RB TE Stage1 Player Specific Mechanism Authority Bridge V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/evaluate_prism_rb_te_stage1_player_specific_mechanism_authority_bridge_v1.py'
+      - 'tests/test_prism_rb_te_stage1_player_specific_mechanism_authority_bridge_v1.py'
+      - '.github/workflows/research-prism-rb-te-stage1-player-specific-mechanism-authority-bridge-v1.yml'
+      - 'docs/research/PRISM_RB_TE_STAGE1_PLAYER_SPECIFIC_MECHANISM_AUTHORITY_BRIDGE_V1_FREEZE.md'
+      - 'docs/research/PRISM_STAGE1_PLAYER_HIERARCHICAL_MECHANISM_ELIGIBILITY_SIGNAL_V1_RESULT.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest pyyaml
+
+      - name: Verify immutable pre-score freeze and parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git merge-base --is-ancestor ba405d3e67495af8a812362b3401250476fff5f1 HEAD
+          git cat-file -e ba405d3e67495af8a812362b3401250476fff5f1:docs/research/PRISM_RB_TE_STAGE1_PLAYER_SPECIFIC_MECHANISM_AUTHORITY_BRIDGE_V1_FREEZE.md
+          if git cat-file -e ba405d3e67495af8a812362b3401250476fff5f1:scripts/research/evaluate_prism_rb_te_stage1_player_specific_mechanism_authority_bridge_v1.py 2>/dev/null; then
+            echo "ERROR: Stage-1 authority bridge evaluator existed at freeze commit"
+            exit 1
+          fi
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.workflow_run.id')" = "38907459996"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.digest')" = "sha256:41b1acd3f1b8d77abb53980db160ece32f8fc40351939d4827248b9caad0c64b"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12126251820 --jq '.workflow_run.id')" = "39099930673"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12126251820 --jq '.digest')" = "sha256:9ef8c1c7e07fd4be381a745b5eb96d5ed976809d88aff478e623a5d74794f519"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-participation-mechanism-v1-38907459996
+          path: /tmp/stage1-parent
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38907459996
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-stage1-player-hierarchical-mechanism-eligibility-signal-v1-39099930673
+          path: /tmp/stage1-player-eligibility
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39099930673
+
+      - name: Resolve immutable inputs
+        run: |
+          PARENT_ROWS="$(find /tmp/stage1-parent -type f -name 'player_active_role_mechanism_scored_rows.csv' -print -quit)"
+          SIGNAL_ROWS="$(find /tmp/stage1-player-eligibility -type f -name 'stage1_player_hierarchical_eligibility_signal_rows.csv' -print -quit)"
+          test -n "$PARENT_ROWS" && test -s "$PARENT_ROWS"
+          test -n "$SIGNAL_ROWS" && test -s "$SIGNAL_ROWS"
+          echo "PARENT_ROWS=$PARENT_ROWS" >> "$GITHUB_ENV"
+          echo "SIGNAL_ROWS=$SIGNAL_ROWS" >> "$GITHUB_ENV"
+
+      - name: Run focused mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_prism_rb_te_stage1_player_specific_mechanism_authority_bridge_v1.py
+          pytest -q tests/test_prism_rb_te_stage1_player_specific_mechanism_authority_bridge_v1.py
+
+      - name: Score frozen player-specific Stage-1 authority bridge
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/rb-te-stage1-authority
+          mkdir -p /tmp/rb-te-stage1-authority
+          python scripts/research/evaluate_prism_rb_te_stage1_player_specific_mechanism_authority_bridge_v1.py             --parent-rows "$PARENT_ROWS"             --signal-rows "$SIGNAL_ROWS"             --out-dir /tmp/rb-te-stage1-authority
+
+      - name: Certify frozen contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/rb-te-stage1-authority/rb_te_stage1_player_specific_authority_bridge_result.json'))
+          assert p['version']=='PRISM_RB_TE_STAGE1_PLAYER_SPECIFIC_MECHANISM_AUTHORITY_BRIDGE_V1',p
+          assert p['freeze_commit']=='ba405d3e67495af8a812362b3401250476fff5f1',p
+          assert p['parent_run']==38907459996,p
+          assert p['parent_artifact']==12049120604,p
+          assert p['signal_run']==39099930673,p
+          assert p['signal_artifact']==12126251820,p
+          assert p['families']==['RB','TE'],p
+          assert p['minimum_mechanism_history']==3,p
+          assert p['negative_or_zero_signal_action']=='REVERT_TO_FAMILY_P_BASELINE',p
+          assert p['positive_signal_action']=='PRESERVE_STAGE1_P_CANDIDATE',p
+          assert p['low_meta_support_action']=='PRESERVE_STAGE1_P_CANDIDATE',p
+          assert p['production_changed'] is False,p
+          assert p['coefficients_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['week6_outcomes_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['disposition'] in {
+              'PRISM_RB_TE_STAGE1_PLAYER_SPECIFIC_MECHANISM_AUTHORITY_BRIDGE_QUALIFIED_ALL',
+              'PRISM_RB_TE_STAGE1_PLAYER_SPECIFIC_MECHANISM_AUTHORITY_BRIDGE_QUALIFIED_PARTIAL',
+              'PRISM_RB_TE_STAGE1_PLAYER_SPECIFIC_MECHANISM_AUTHORITY_BRIDGE_CLOSED_ALL',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/rb-te-stage1-authority/rb_te_stage1_player_specific_authority_bridge_result.json'))
+          lines=[
+              '### PRISM RB/TE Stage-1 player-specific mechanism-authority bridge V1',
+              '',
+              f"- Run: `{os.environ['RUN_ID']}`",
+              f"- Exact head: `{os.environ['HEAD_SHA']}`",
+              f"- Frozen-before-scoring commit: `{p['freeze_commit']}`",
+              f"- Disposition: `{p['disposition']}`",
+              '',
+          ]
+          for fam in p['families']:
+              m24=p['metrics'][fam]['2024']; m25=p['metrics'][fam]['2025']; mp=p['metrics'][fam]['pooled']
+              failed=[k for k,v in p['qualification_gates'][fam].items() if k!='tail_floor' and not v]
+              lines += [
+                  f"- {fam}: `{p['family_dispositions'][fam]}`",
+                  f"  - 2024 Brier/logloss gain vs universal Stage-1: {m24['mean_delta_brier']:+.6f} / {m24['mean_delta_logloss']:+.6f}",
+                  f"  - 2025 Brier/logloss gain: {m25['mean_delta_brier']:+.6f} / {m25['mean_delta_logloss']:+.6f}",
+                  f"  - 2025 player-CI low {m25['player_cluster_bootstrap']['ci95_low']:+.6f}; game-CI low {m25['game_cluster_bootstrap']['ci95_low']:+.6f}; equal-player CI low {m25['equal_player_bootstrap']['ci95_low']:+.6f}",
+                  f"  - player improved/tied/worsened: {m25['equal_player_improved_share']:.2%} / {m25['equal_player_tied_share']:.2%} / {m25['equal_player_worsened_share']:.2%}; median {m25['equal_player_median_improvement']:+.6f}; p10 {m25['equal_player_p10_improvement']:+.6f}",
+                  f"  - fallback-to-family rows/players: {m25['authority_fallback_rows']} / {m25['authority_fallback_players']}; low-meta-support gain {m25['low_meta_support_mean_delta_brier']:+.6f}",
+                  f"  - pooled Brier gain {mp['mean_delta_brier']:+.6f}; pooled player-CI low {mp['player_cluster_bootstrap']['ci95_low']:+.6f}; game-CI low {mp['game_cluster_bootstrap']['ci95_low']:+.6f}",
+                  f"  - failed gates: {failed if failed else 'none'}",
+              ]
+          lines += [
+              '',
+              'Research-only Stage-1 authority scoring. No Stage-1 retune, no production mutation, no coefficient/threshold search, no 2026/Week-6 outcomes, no sportsbook/OddsAPI.',
+          ]
+          open('/tmp/issue535_rb_te_stage1_authority.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/issue535_rb_te_stage1_authority.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload immutable bridge result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-rb-te-stage1-player-specific-mechanism-authority-bridge-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/rb-te-stage1-authority/**
