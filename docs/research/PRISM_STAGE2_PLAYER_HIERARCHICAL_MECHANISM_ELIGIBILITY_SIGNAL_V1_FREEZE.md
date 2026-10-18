@@ -90,11 +90,15 @@ For target row `t`:
 
 is the arithmetic mean of strictly-prior Stage-2 `delta_crps` rows with:
 - same cell;
-- same `authority_rank_state`.
+- same `authority_rank_state`;
+- **different named-player identity from the target player**.
 
-If no same-role prior rows exist:
-- fallback to the strictly-prior same-cell mean;
-- if no same-cell prior rows exist, fallback to 0.
+The named player's own prior rows are excluded from the role prior so the
+individual evidence is not partially embedded in its own baseline.
+
+If no other-player same-role prior rows exist:
+- fallback to the strictly-prior same-cell **other-player** mean;
+- if no same-cell other-player prior rows exist, fallback to 0.
 
 No outcome-selected archetype or clustering is allowed.
 
@@ -323,9 +327,10 @@ At this freeze:
 - OddsAPI calls: **0**;
 - production changed: **false**.
 
-Pre-score population amendment:
+Pre-score amendments:
 - canonical-positive primary population added before first signal scoring;
-- predictive signal results inspected before this amendment: **0**.
+- role/archetype prior explicitly excludes the target player's own prior rows;
+- predictive signal results inspected before these amendments: **0**.
 
 Disposition at freeze:
 
