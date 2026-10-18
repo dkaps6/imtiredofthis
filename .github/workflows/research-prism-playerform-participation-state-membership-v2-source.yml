@@ -1,0 +1,184 @@
+name: Research PRISM PlayerForm Participation State Membership V2 Source
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_PLAYERFORM_PARTICIPATION_STATE_MEMBERSHIP_V2_SOURCE_PLAN.md'
+      - 'scripts/research/audit_prism_playerform_participation_state_membership_v2.py'
+      - 'tests/test_prism_playerform_participation_state_membership_v2.py'
+      - '.github/workflows/research-prism-playerform-participation-state-membership-v2-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "a76f9508089d0b158752adf635dd7b4764150221"
+
+jobs:
+  membership-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install nflreadpy==0.1.5 pandas numpy pytest pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_PLAYERFORM_PARTICIPATION_STATE_MEMBERSHIP_V2_SOURCE_PLAN.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/audit_prism_playerform_participation_state_membership_v2.py" 2>/dev/null; then
+            echo "ERROR: V2 implementation existed at freeze"
+            exit 1
+          fi
+
+      - name: Verify exact PlayerForm blob
+        run: |
+          set -euo pipefail
+          ACTUAL="$(git hash-object scripts/player_form_v2.py)"
+          EXPECTED="9246e4daf19f3f01cf61de3ad036b07873fd9561"
+          echo "PLAYERFORM_BLOB=$ACTUAL"
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Verify immutable anomaly parent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          run=39160554692
+          aid=12147549966
+          name='prism-player-participation-anomaly-state-v1-source-39160554692'
+          digest='sha256:e7753e981f0ecaaf23289280830fd32b9d733402c02ab9aaa0116fc929450449'
+          repo=os.environ['GITHUB_REPOSITORY']
+          payload=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts']))
+          arts={int(a['id']):a for a in payload.get('artifacts',[])}
+          a=arts.get(aid)
+          assert a is not None,(run,aid)
+          assert not a.get('expired'),a
+          assert a.get('name')==name,a
+          assert a.get('digest')==digest,a
+          print('ANOMALY_PARENT_VERIFIED',run,aid,name,digest)
+          PY
+
+      - name: Download immutable anomaly parent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-playerform-membership-v2
+          mkdir -p /tmp/prism-playerform-membership-v2/{parent,out}
+          gh run download 39160554692 --repo "${{ github.repository }}" \
+            --name prism-player-participation-anomaly-state-v1-source-39160554692 \
+            --dir /tmp/prism-playerform-membership-v2/parent
+          test -s /tmp/prism-playerform-membership-v2/parent/player_participation_anomaly_state_rows.csv
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_playerform_participation_state_membership_v2.py
+          pytest -q tests/test_prism_playerform_participation_state_membership_v2.py
+
+      - name: Execute frozen membership audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/audit_prism_playerform_participation_state_membership_v2.py \
+            --anomaly-parent /tmp/prism-playerform-membership-v2/parent/player_participation_anomaly_state_rows.csv \
+            --player-form-code scripts/player_form_v2.py \
+            --out-dir /tmp/prism-playerform-membership-v2/out
+
+      - name: Certify source-only membership contract
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          p=json.load(open('/tmp/prism-playerform-membership-v2/out/playerform_participation_state_membership_v2_source_result.json'))
+          rows=pd.read_csv('/tmp/prism-playerform-membership-v2/out/playerform_participation_state_membership_v2_rows.csv')
+          assert p['version']=='PRISM_PLAYERFORM_PARTICIPATION_STATE_MEMBERSHIP_V2_SOURCE_AUDIT',p
+          assert p['freeze_commit']=='a76f9508089d0b158752adf635dd7b4764150221',p
+          assert p['anomaly_parent_run']==39160554692,p
+          assert p['anomaly_parent_artifact']==12147549966,p
+          assert p['anomaly_parent_digest']=='sha256:e7753e981f0ecaaf23289280830fd32b9d733402c02ab9aaa0116fc929450449',p
+          assert p['player_form_blob_sha']=='9246e4daf19f3f01cf61de3ad036b07873fd9561',p
+          assert p['disposition'] in {
+              'PRISM_PLAYERFORM_PARTICIPATION_STATE_MEMBERSHIP_V2_SOURCE_READY',
+              'PRISM_PLAYERFORM_PARTICIPATION_STATE_MEMBERSHIP_V2_SOURCE_BLOCKED',
+          },p
+          assert p['admitted_ledger_duplicate_keys']==0,p
+          assert p['code_audit']['state_aware_history_branch_absent'] is True,p
+          assert p['code_audit']['positive_usage_gate_present'] is True,p
+          assert p['future_player_outcomes_scored']==0,p
+          assert p['projections_generated']==0,p
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          assert len(rows)>0
+          assert rows['stable_id'].astype(str).str.strip().ne('').mean()>=0.99
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+          p=json.load(open('/tmp/prism-playerform-membership-v2/out/playerform_participation_state_membership_v2_source_result.json'))
+          print("### PRISM PlayerForm participation-state membership V2 — source audit")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          for s in p['season_summaries']:
+              print()
+              print(f"**{s['season']}**")
+              print(f"- anomaly rows={s['anomaly_rows']}; stable-ID={s['stable_id_coverage']:.2%}; admitted total={s['playerform_admitted_rows']}")
+              print(f"- injury-corroborated={s['injury_corroborated_rows']}; admitted={s['injury_corroborated_admitted_rows']}")
+              print(f"- unresolved={s['unresolved_rows']}; admitted={s['unresolved_admitted_rows']}")
+              failed=[k for k,v in s['gates'].items() if not v]
+              print(f"- failed gates: {failed or ['NONE']}")
+          print()
+          print("Membership only: exact stable player identity -> exact current PlayerForm history ledger. No future player outcome was scored and no projection was generated or changed.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-playerform-participation-state-membership-v2-source-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-playerform-membership-v2/out/**
