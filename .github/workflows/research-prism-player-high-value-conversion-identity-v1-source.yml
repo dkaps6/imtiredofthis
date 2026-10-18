@@ -1,0 +1,88 @@
+name: Research PRISM Player High Value Conversion Identity V1 Source
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - "docs/research/PRISM_PLAYER_HIGH_VALUE_CONVERSION_IDENTITY_V1_SOURCE_PLAN.md"
+      - "scripts/research/audit_prism_player_high_value_conversion_identity_v1_source.py"
+      - "tests/test_prism_player_high_value_conversion_identity_v1_source.py"
+      - ".github/workflows/research-prism-player-high-value-conversion-identity-v1-source.yml"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyarrow nflreadpy
+
+      - name: Safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_player_high_value_conversion_identity_v1_source.py
+          pytest -q tests/test_prism_player_high_value_conversion_identity_v1_source.py
+
+      - name: Run frozen source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/prism_hv_conversion_source_v1
+          mkdir -p /tmp/prism_hv_conversion_source_v1
+          python scripts/research/audit_prism_player_high_value_conversion_identity_v1_source.py \
+            --out-dir /tmp/prism_hv_conversion_source_v1
+
+      - name: Verify research boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/prism_hv_conversion_source_v1/source_result.json'))
+          assert p['version']=='PRISM_PLAYER_HIGH_VALUE_CONVERSION_IDENTITY_V1_SOURCE_AUDIT',p
+          assert p['disposition'] in {
+            'PRISM_PLAYER_HIGH_VALUE_CONVERSION_IDENTITY_SOURCE_READY_ALL',
+            'PRISM_PLAYER_HIGH_VALUE_CONVERSION_IDENTITY_SOURCE_READY_PARTIAL',
+            'PRISM_PLAYER_HIGH_VALUE_CONVERSION_IDENTITY_SOURCE_BLOCKED',
+          },p
+          assert p['predictive_candidates_scored']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          print('PRISM_HIGH_VALUE_CONVERSION_SOURCE_BOUNDARY_PASS')
+          PY
+
+      - name: Show result
+        if: always()
+        run: |
+          cat /tmp/prism_hv_conversion_source_v1/source_result.json 2>/dev/null || true
+          cat /tmp/prism_hv_conversion_source_v1/source_metrics.csv 2>/dev/null || true
+          cat /tmp/prism_hv_conversion_source_v1/support_metrics.csv 2>/dev/null || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-player-high-value-conversion-source-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/prism_hv_conversion_source_v1/**
+            docs/research/PRISM_PLAYER_HIGH_VALUE_CONVERSION_IDENTITY_V1_SOURCE_PLAN.md
