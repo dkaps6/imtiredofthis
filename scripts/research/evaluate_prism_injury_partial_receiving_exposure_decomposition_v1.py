@@ -185,7 +185,7 @@ def build_scored_rows(x: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 
     out=pd.DataFrame(rows)
     if out.empty:
-        raise RuntimeError("zero scored rows")
+        return out,audit
     return out.sort_values(
         ["season","week","team","stable_id"],kind="mergesort"
     ).reset_index(drop=True),audit
@@ -260,6 +260,8 @@ def main()->int:
 
     source=read_source(a.source)
     rows,audit=build_scored_rows(source)
+    if rows.empty:
+        raise RuntimeError("zero scored rows")
     dev=summarize(rows,2024,bootstrap=False)
     conf=summarize(rows,2025,bootstrap=True)
 
