@@ -1,0 +1,188 @@
+name: Research PRISM Return From Injury Role Restoration V1 Source
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_RETURN_FROM_INJURY_ROLE_RESTORATION_V1_SOURCE_PLAN.md'
+      - 'scripts/research/audit_prism_return_from_injury_role_restoration_v1.py'
+      - 'tests/test_prism_return_from_injury_role_restoration_v1.py'
+      - '.github/workflows/research-prism-return-from-injury-role-restoration-v1-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "3eafb971c0a842750fa5af31a77a8b17adf890b0"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_RETURN_FROM_INJURY_ROLE_RESTORATION_V1_SOURCE_PLAN.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/audit_prism_return_from_injury_role_restoration_v1.py" 2>/dev/null; then
+            echo "ERROR: implementation existed at source freeze"
+            exit 1
+          fi
+
+      - name: Verify immutable state parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          expected={
+            39154145666:(12146625382,'prism-player-observation-health-state-v1-source-39154145666','sha256:d74f2d3c37a88aa639527aedf719e7e08001d464c722613b46291cda0f74cbeb'),
+            39160554692:(12147549966,'prism-player-participation-anomaly-state-v1-source-39160554692','sha256:e7753e981f0ecaaf23289280830fd32b9d733402c02ab9aaa0116fc929450449'),
+          }
+          repo=os.environ['GITHUB_REPOSITORY']
+          for run,(aid,name,digest) in expected.items():
+              payload=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts']))
+              arts={int(a['id']):a for a in payload.get('artifacts',[])}
+              a=arts.get(aid)
+              assert a is not None,(run,aid)
+              assert not a.get('expired'),a
+              assert a.get('name')==name,a
+              assert a.get('digest')==digest,a
+              print('PARENT_VERIFIED',run,aid,name,digest)
+          PY
+
+      - name: Download immutable state parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-return-role
+          mkdir -p /tmp/prism-return-role/{health,anomaly,out}
+          gh run download 39154145666 --repo "${{ github.repository }}" \
+            --name prism-player-observation-health-state-v1-source-39154145666 \
+            --dir /tmp/prism-return-role/health
+          gh run download 39160554692 --repo "${{ github.repository }}" \
+            --name prism-player-participation-anomaly-state-v1-source-39160554692 \
+            --dir /tmp/prism-return-role/anomaly
+          test -s /tmp/prism-return-role/health/player_observation_health_state_rows.csv
+          test -s /tmp/prism-return-role/anomaly/player_participation_anomaly_state_rows.csv
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_return_from_injury_role_restoration_v1.py
+          pytest -q tests/test_prism_return_from_injury_role_restoration_v1.py
+
+      - name: Execute frozen state audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/audit_prism_return_from_injury_role_restoration_v1.py \
+            --health-parent /tmp/prism-return-role/health/player_observation_health_state_rows.csv \
+            --anomaly-parent /tmp/prism-return-role/anomaly/player_participation_anomaly_state_rows.csv \
+            --out-dir /tmp/prism-return-role/out
+
+      - name: Certify source-only state contract
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          p=json.load(open('/tmp/prism-return-role/out/return_from_injury_role_restoration_source_result.json'))
+          rows=pd.read_csv('/tmp/prism-return-role/out/return_from_injury_role_restoration_episodes.csv')
+          assert p['version']=='PRISM_RETURN_FROM_INJURY_ROLE_RESTORATION_V1_SOURCE_AUDIT',p
+          assert p['freeze_commit']=='3eafb971c0a842750fa5af31a77a8b17adf890b0',p
+          assert p['health_parent_run']==39154145666,p
+          assert p['health_parent_artifact']==12146625382,p
+          assert p['anomaly_parent_run']==39160554692,p
+          assert p['anomaly_parent_artifact']==12147549966,p
+          assert p['disposition'] in {
+              'PRISM_RETURN_FROM_INJURY_ROLE_RESTORATION_V1_SOURCE_READY',
+              'PRISM_RETURN_FROM_INJURY_ROLE_RESTORATION_V1_SOURCE_BLOCKED',
+          },p
+          assert p['prior_window_max']==4 and p['prior_window_min']==3,p
+          assert p['snap_retention_max']==0.65,p
+          assert p['absolute_snap_drop_min']==0.20,p
+          assert p['audit']['chronology_violations']==0,p
+          assert p['audit']['overlapping_episode_identity_violations']==0,p
+          assert p['audit']['baseline_crosscheck_max_abs_gap']<=1e-10,p
+          assert p['performance_fields_used']==0,p
+          assert p['predictive_relationships_scored']==0,p
+          assert p['projections_generated']==0,p
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          assert len(rows)>0
+          returned=rows.loc[rows['return_state'].ne('NO_RETURN_OBSERVED')]
+          assert (pd.to_numeric(returned['return_week']) > pd.to_numeric(returned['episode_start_week'])).all()
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 state result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+          p=json.load(open('/tmp/prism-return-role/out/return_from_injury_role_restoration_source_result.json'))
+          print("### PRISM return-from-injury role restoration V1 — source audit")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          for s in p['season_summaries']:
+              print()
+              print(f"**{s['season']}**")
+              print(f"- episodes={s['episodes']}; named players={s['players']}")
+              print(f"- restored={s['restored_return_episodes']} episodes / {s['restored_return_players']} players")
+              print(f"- still reduced={s['still_reduced_return_episodes']} / {s['still_reduced_return_players']}")
+              print(f"- no return={s['no_return_episodes']} / {s['no_return_players']}")
+              print(f"- median pre-episode snap pct={s['median_pre_episode_snap_pct']:.3f}; restored return pct={s['median_restored_return_snap_pct']:.3f}; reduced return pct={s['median_still_reduced_return_snap_pct']:.3f}")
+              failed=[k for k,v in s['gates'].items() if not v]
+              print(f"- failed gates: {failed or ['NONE']}")
+          print()
+          print("Player-state source only. No targets/carries/receptions/yards/TD relationships, no 2026 outcomes, no sportsbook/OddsAPI, no fitted coefficients/thresholds, no production mutation.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-return-from-injury-role-restoration-v1-source-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-return-role/out/**
