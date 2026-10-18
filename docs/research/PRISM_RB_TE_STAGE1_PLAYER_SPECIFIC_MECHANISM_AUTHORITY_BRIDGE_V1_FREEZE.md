@@ -234,6 +234,9 @@ A family qualifies only if all pass.
 16. pooled player-cluster CI lower bound >0;
 17. pooled game-cluster CI lower bound >0.
 
+For pooled inference, cluster keys are season-qualified exactly as in the
+original Stage-1 parent contract.
+
 No pooled result may rescue a failed 2025 gate.
 
 ## 11. If qualified
@@ -286,6 +289,10 @@ A new attempt must be materially distinct.
 - Week-6 outcomes used: **0**;
 - sportsbook/OddsAPI: **0**;
 - production changed: **false**.
+
+Pre-score implementation clarification:
+- pooled player/game bootstrap keys are season-qualified;
+- bridge performance inspected before this clarification: **0 rows**.
 
 Disposition:
 
