@@ -34,6 +34,17 @@ STATES = (
     STATE_UNRESOLVED_NO_SNAPS,
 )
 
+def json_default(value):
+    """Serialize numpy scalar types without changing audit semantics."""
+    if isinstance(value, np.bool_):
+        return bool(value)
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        return float(value)
+    raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
+
+
 
 def pdx(v) -> pd.DataFrame:
     if isinstance(v, pd.DataFrame):
@@ -606,9 +617,9 @@ def main()->int:
         for s in summaries for f in s["family_summary"]
     ]).to_csv(a.out_dir/"player_observation_health_state_family_summary.csv",index=False)
     (a.out_dir/"player_observation_health_state_source_result.json").write_text(
-        json.dumps(result,indent=2,sort_keys=True)+"\n",encoding="utf-8"
+        json.dumps(result,indent=2,sort_keys=True,default=json_default)+"\n",encoding="utf-8"
     )
-    print(json.dumps(result,indent=2,sort_keys=True))
+    print(json.dumps(result,indent=2,sort_keys=True,default=json_default))
     return 0
 
 
