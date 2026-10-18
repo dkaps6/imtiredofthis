@@ -1,5 +1,75 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — PRISM PLAYER-SPECIFIC RULE LEARNING DIRECTIVE
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-18_PRISM_PLAYER_SPECIFIC_RULE_LEARNING_DIRECTIVE.md`
+
+**Reusable next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-18_PRISM_PLAYER_SPECIFIC_RULE_LEARNING.md`
+
+### Most important new architecture directive
+
+PRISM is an **individual-player projection model**.
+
+> **The player should have the rules. The position should not have the player.**
+
+The next major frontier is hierarchical, market-specific player personalization:
+`league prior -> role/archetype prior -> individual player evidence -> current player state`.
+
+Position/role remains a prior, sparse-data fallback and QA grouping. It must not permanently dictate identical feature weights or mechanism behavior for every player at that position.
+
+Do not naively fit unconstrained per-player models. A player must earn deviation from broader priors through strictly-prior support and stability.
+
+Evaluation must include equal-player / player-cluster / named-player OOS protections so pooled position MAE cannot hide widespread player-level harm.
+
+Canonical Issue #535 directive: comment `6245756869`.
+
+### Immediate pre-handoff science
+
+RB short-yardage carry-type identity V1:
+- run `39097257642` — SUCCESS;
+- result `docs/research/PRISM_RB_SHORT_YARDAGE_CARRY_TYPE_IDENTITY_V1_RESULT.md`;
+- branch/result-doc head `cfbf688447b4747230d237fb20f2d2e213775d63`;
+- disposition `RB_SHORT_YARDAGE_CARRY_TYPE_IDENTITY_CLOSED`.
+
+Ten of eleven gates passed, but the frozen 2025 conditional-game player-cluster CI crossed zero. That player-stability failure is binding. Do not rescue.
+
+Player high-value conversion identity V1 is also CLOSED ALL. Do not encode generic persistent "finisher" memory.
+
+### Live state before this checkpoint write
+
+- main: `3bfa7fea55e84cf3284e4e4cebb90f85b1a0955e`;
+- research branch: `research-individual-opportunity-roadmap-2026-10-08`;
+- branch head: `cfbf688447b4747230d237fb20f2d2e213775d63`;
+- PR #672: OPEN / DRAFT;
+- exact-head PR-triggered workflow runs returned: none;
+- exact-head combined statuses returned: none.
+
+### Exact next action
+
+Reconcile live main / research branch / PR #672 / newest Issue #535 / exact-head Actions first.
+
+If nothing newer supersedes this checkpoint, begin the **player-specific rule-learning architecture** with anti-retest and source/support mapping before any fit.
+
+Do not restart a generic position-wide feature hunt.
+
+Preserve:
+- finite opportunity and conservation;
+- Week-6 locks ungraded;
+- Weeks 7-10 WR dual prospective protocol;
+- no paid OddsAPI without explicit authorization;
+- sportsbook downstream only;
+- no production mutation from research without authorization;
+- fail-closed gates;
+- one frozen mechanism before scoring.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-17 — PRISM EXTENDED PLAYER-FIRST REPLAY / QB-REGIME CLOSED / RB NGS SOURCE BLOCKED
 
 **Model:** PRISM — Player Role & Individual Situation Model
