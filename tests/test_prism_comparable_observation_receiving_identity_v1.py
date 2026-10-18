@@ -89,19 +89,29 @@ def test_construct_rows_removes_only_legally_corroborated_history():
 def test_abnormal_target_game_is_not_primary_role_evidence():
     ledger = pd.DataFrame([
         {"season":2023,"week":1,"team":"CAR","stable_id":"P1","family":"WR","targets":2.0,"team_targets":10.0},
+        {"season":2023,"week":1,"team":"ATL","stable_id":"P3","family":"WR","targets":2.0,"team_targets":10.0},
         {"season":2024,"week":1,"team":"CAR","stable_id":"P1","family":"WR","targets":4.0,"team_targets":10.0},
+        {"season":2024,"week":1,"team":"ATL","stable_id":"P3","family":"WR","targets":3.0,"team_targets":10.0},
         {"season":2024,"week":5,"team":"CAR","stable_id":"P1","family":"WR","targets":1.0,"team_targets":10.0},
         {"season":2024,"week":5,"team":"CAR","stable_id":"P2","family":"WR","targets":9.0,"team_targets":10.0},
+        {"season":2024,"week":5,"team":"ATL","stable_id":"P3","family":"WR","targets":3.0,"team_targets":10.0},
+        {"season":2024,"week":5,"team":"ATL","stable_id":"P4","family":"WR","targets":7.0,"team_targets":10.0},
     ])
     health = pd.DataFrame([
         {"season":2024,"week":5,"team":"CAR","stable_id":"P1","family":"WR","positive_participation":True},
+        {"season":2024,"week":5,"team":"ATL","stable_id":"P3","family":"WR","positive_participation":True},
     ])
     anomalies = {
         (2024,5,"CAR","P1"): {
             "state":"PARTICIPATION_COLLAPSE_INJURY_CORROBORATED",
             "corroboration_week":5,
-        }
+        },
+        (2024,5,"ATL","P3"): {
+            "state":"PARTICIPATION_NOT_COLLAPSED",
+            "corroboration_week":None,
+        },
     }
     rows,audit=construct_rows(health=health,ledger=ledger,anomalies=anomalies)
-    assert rows.empty
+    assert len(rows) == 1
+    assert rows.iloc[0]["stable_id"] == "P3"
     assert audit["abnormal_target_games_excluded"] == 1
