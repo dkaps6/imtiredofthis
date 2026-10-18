@@ -84,6 +84,10 @@ Role state:
 
 derived only from the existing canonical pregame `authority_q`.
 
+Role-prior history likewise uses only canonical-positive rows
+(`authority_q > 1e-12`), because canonical-zero parent rows are structural
+no-action ties rather than evidence about Stage-2 utility.
+
 For target row `t`:
 
 `role_prior_mean_t`
@@ -109,7 +113,9 @@ For target row `t`:
 `player_prior_mean_t`
 
 is the arithmetic mean of all strictly-prior same-player + same-cell
-`delta_crps` rows.
+`delta_crps` rows with `authority_q > 1e-12`.
+
+Structural canonical-zero rows do not count as player mechanism evidence.
 
 Minimum support for individual deviation:
 
@@ -330,6 +336,8 @@ At this freeze:
 Pre-score amendments:
 - canonical-positive primary population added before first signal scoring;
 - role/archetype prior explicitly excludes the target player's own prior rows;
+- both role and player mechanism-benefit histories exclude structural canonical-zero rows;
+- positive-entitlement source support was checked before scoring (RB rush: 2024 867/120, 2025 1,154/137; RB receiving: 952/126 and 1,278/142; TE: 936/121 and 1,215/127);
 - predictive signal results inspected before these amendments: **0**.
 
 Disposition at freeze:
