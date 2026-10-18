@@ -81,30 +81,54 @@ The result says only that **this exact PlayerForm-history exclusion intervention
 ### Current branch state after execution
 
 Research branch:
-`bcbeffa8dbebb869eadb004cde4a2032c417bf0f`
+`51a95b4b9f0135c471f0d20a374b63ca04a81be6`
 
 Commit:
-`Research: run comparable observation receiving identity`
+`Research: close comparable observation receiving identity`
+
+Canonical result document:
+`docs/research/PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_RESULT.md`
 
 PR #672:
 - OPEN / DRAFT;
-- head `bcbeffa8dbebb869eadb004cde4a2032c417bf0f`.
+- head `51a95b4b9f0135c471f0d20a374b63ca04a81be6`;
+- mergeable reported false at final reconciliation.
 
 Run `39161342922` is **completed/success**, not running.
 
+Exact-head Actions on `51a95b4...` had no legitimate research scorer queued/in_progress; only the two known unrelated immediate workflow failures.
+
 ### Exact next research boundary
 
-No successor predictive mechanism was frozen after this closure at the time of the handoff.
+The result document defines the next genuinely distinct player-first frontier.
 
-Therefore the next chat must **not improvise a rescue** and must **not jump to QB passing TD**.
+Do **not** rescue the closed “delete the partial game from PlayerForm identity” action.
 
-The next research move is:
+Instead separate two named-player football objects:
 
-1. reconcile whether the comparable-observation result document has been committed on the research branch;
-2. if absent, record the immutable result without changing the candidate;
-3. return to the core **CURRENT ROLE / STATE** layer and source-map one genuinely distinct named-player mechanism that explains current opportunity without simply deleting, reweighting or relabeling the same historical target-share rows;
-4. anti-retest all closed trajectory/history-exclusion/trust families before freezing anything;
-5. freeze source/chronology/action gates before outcome scoring.
+1. **participation exposure** — how much of the offense the named player was actually on the field for;
+2. **opportunity earning conditional on that exposure** — how often the named player earned targets while participating.
+
+Key insight:
+
+> A partial game can contain useful opportunity-earning information even when its full-game target total is small.
+
+This is the precise reason complete deletion failed for many players.
+
+The next lane is distinct from:
+- deleting the game;
+- target-share trajectory;
+- Stage-1 any-snap participation;
+- Stage-2 finite active-set allocation;
+- WR-R15 / TE-R5P snap features.
+
+**Exact next action: SOURCE AUDIT FIRST.**
+
+Before freezing or scoring any predictive formula, prove that exact named-player weekly target evidence can be paired with source-valid offensive participation exposure at sufficient historical coverage and correct chronology.
+
+Do not call raw snaps “routes” or imply route participation unless the source truly supplies routes.
+
+No predictive relationship is authorized until that source/semantic audit passes and a separate formula/gate contract is frozen.
 
 The user does not want another aggregate optimization exercise. Any next candidate must have a direct football explanation for why it changes **this named player's** projection.
 
