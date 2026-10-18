@@ -117,14 +117,22 @@ With:
 - exact historical WR/TE uncertainty integration source-blocked;
 - component-dominance routing now CLOSED ALL;
 
-the separate QB passing-TD market-specific source lane is a valid distinct
-frontier.
+the active queue remains the **core player-specific projection architecture**.
 
-Its source has already been certified:
+QB passing-TD is backlog-only unless the user explicitly promotes it.
 
-`PRISM_QB_PASS_TD_MARKET_SPECIFIC_SOURCE_READY`
+The next legal mechanism must be genuinely distinct from:
+- component dominance / instability / signed-bias summaries;
+- generic mechanism-utility on/off rules;
+- raw recent-share replacement;
+- already-blocked room/depth/vacancy sources.
 
-No downstream QB passing-TD predictive result is implied by this WR/TE closure.
+A high-value current-role/state frontier is to determine whether historical
+player observations can be source-validly labeled as healthy/full,
+injury-limited/partial, DNP/inactive, or return-from-injury **before** those
+observations are allowed to become trajectory/role evidence.
+
+This is a source/state-quality question first, not an automatic projection rule.
 
 ## Integrity
 
