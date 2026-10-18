@@ -1,0 +1,81 @@
+name: Research PRISM QB Regime Target Depth Source Child PR
+
+on:
+  pull_request:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/audit_prism_pass_catcher_qb_regime_target_depth_state_v1_source.py'
+      - 'tests/test_prism_pass_catcher_qb_regime_target_depth_state_v1_source.py'
+      - '.github/workflows/research-prism-qbreg-target-depth-source-child-pr.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pandas numpy pytest pyyaml 'pyarrow==18.1.0'
+      - name: Download frozen pregame universe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf /tmp/qbdepth && mkdir -p /tmp/qbdepth/source /tmp/qbdepth/out
+          gh run download 38895205962 --repo "${{ github.repository }}" --name player-active-role-participation-source-v1-38895205962 --dir /tmp/qbdepth/source
+          U="$(find /tmp/qbdepth/source -type f -name player_active_role_pregame_universe.csv -print -quit)"
+          test -s "$U"
+          echo "U=$U" >> "$GITHUB_ENV"
+      - name: Frozen safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_pass_catcher_qb_regime_target_depth_state_v1_source.py
+          pytest -q tests/test_prism_pass_catcher_qb_regime_target_depth_state_v1_source.py
+      - name: Execute frozen source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/audit_prism_pass_catcher_qb_regime_target_depth_state_v1_source.py --pregame-universe "$U" --out-dir /tmp/qbdepth/out
+      - name: Certify source-only boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/qbdepth/out/qb_regime_target_depth_source_result.json'))
+          assert len(p['metrics'])==4,p
+          i=p['integrity']
+          assert i['chronology_violations']==0,p
+          assert i['target_game_outcomes_used_in_predictor']==0 and i['predictive_candidates_scored']==0,p
+          assert i['receiving_yards_scored'] is False and i['receptions_scored'] is False and i['touchdowns_scored'] is False,p
+          assert i['market_translation_scored'] is False,p
+          assert i['coefficients_fit']==0 and i['thresholds_searched']==0,p
+          assert i['sportsbook_inputs_used']==0 and i['oddsapi_calls']==0 and i['outcomes_2026_used']==0,p
+          assert i['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-qbreg-target-depth-source-child-pr-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/qbdepth/out/**
