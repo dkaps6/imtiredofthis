@@ -413,7 +413,7 @@ def construct_states(roster: pd.DataFrame, snaps: pd.DataFrame, injuries: pd.Dat
         ],
         default=STATE_UNRESOLVED_NO_SNAPS,
     )
-    if ~y["observation_state"].isin(STATES).all():
+    if not y["observation_state"].isin(STATES).all():
         raise RuntimeError("observation-state construction emitted unknown state")
 
     y=y.sort_values(["season","team","history_key","week"],kind="stable").reset_index(drop=True)
@@ -484,7 +484,7 @@ def season_summary(
         "roster_post_dedup_duplicates_zero":not r.duplicated(["season","week","team","history_key"]).any(),
         "snap_explicit_season_week":True,
         "snap_stable_id_coverage_ge_098_if_present":(
-            True if not snap_audit["stable_id_field_present"] else float(snap_audit["stable_id_coverage"])>=0.98
+            True if not snap_audit["stable_id_field_present"] else float(sn["stable_id"].ne("").mean())>=0.98
         ),
         "positive_snap_roster_join_ge_098":snap_join>=0.98,
         "positive_snap_field_coverage_ge_099":snap_fields>=0.99,
