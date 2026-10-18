@@ -78,6 +78,17 @@ Latest branch message:
 
 Do not blindly rebase/merge. Reconcile live state first.
 
+### Final continuity verification
+
+At final verification after the continuity write:
+- `main` had advanced through continuity checkpoint commit `87950d79c7f79ce267e4e19c3a9e8bd3a1f7a7f4` (`Docs: advance PRISM post-RB-NGS checkpoint`);
+- research branch remained `9279975fd4ef9c207aced7c72dc31f7175311b90`;
+- PR #672 remained OPEN / DRAFT;
+- no exact-head workflow/status was attached to `9279975...` because it is a result/documentation head, not a new scientific execution;
+- the latest scientific execution represented by that head remains RB NGS source audit run `39068580334` — SUCCESS / SOURCE BLOCKED.
+
+The next chat must still reconcile live state because either branch may advance after this handoff.
+
 ---
 
 ## 3. WEEK-4 / WEEK-5 CHRONOLOGY — IMPORTANT
