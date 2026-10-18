@@ -138,7 +138,27 @@ For `n < 3`:
 No alternate shrinkage constant, nonlinear transform, window, recency weighting,
 or per-cell coefficient may be tried in V1.
 
-## 7. Frozen target
+## 7. Frozen primary population
+
+Primary signal scoring is restricted to rows with:
+
+`authority_q > 1e-12`.
+
+Reason:
+- Stage-2 can directly alter only canonical-positive named-player entitlement;
+- canonical-zero rows are deliberately unchanged by the parent scorer and would
+  create structural zero-benefit ties;
+- counting those ties in a mechanism-eligibility test would overstate apparent
+  predictability without testing a player rule.
+
+Canonical-zero rows may be disclosed as integrity diagnostics only. They are
+not part of V1 qualification.
+
+This population rule was added **before first signal scoring** after inspecting
+source support only. No relationship between prior benefit and target benefit
+was examined.
+
+## 8. Frozen target
 
 Target:
 
@@ -156,7 +176,7 @@ tie.
 This is not a sportsbook outcome and is not a new football target. It is the
 already-completed OOS utility of the qualified Stage-2 mechanism.
 
-## 8. Frozen baseline vs candidate
+## 9. Frozen baseline vs candidate
 
 Baseline meta-prediction:
 
@@ -184,30 +204,29 @@ Secondary diagnostics:
 
 No threshold other than the natural zero-benefit sign boundary is evaluated.
 
-## 9. Support gates
+## 10. Support gates
 
 Per cell / season require:
 
-2024 development:
-- >=900 evaluable target rows with >=3 same-player prior observations for RB;
-- >=900 for TE;
-- >=100 distinct evaluable players for RB;
-- >=95 for TE;
-- >=28 teams.
+2024 development, canonical-positive rows with >=3 prior player observations:
+- RB rushing: >=850 rows / >=115 players / >=28 teams;
+- RB receiving: >=900 rows / >=120 players / >=28 teams;
+- TE receiving: >=900 rows / >=115 players / >=28 teams.
 
-2025 confirmation:
-- >=1,200 evaluable target rows for RB;
-- >=1,100 for TE;
-- >=120 distinct evaluable players for RB;
-- >=110 for TE;
-- >=28 teams.
+2025 confirmation, canonical-positive rows with >=3 prior player observations:
+- RB rushing: >=1,100 rows / >=130 players / >=28 teams;
+- RB receiving: >=1,200 rows / >=135 players / >=28 teams;
+- TE receiving: >=1,100 rows / >=120 players / >=28 teams.
+
+These floors were frozen from the source-only inventory before any signal score.
+They may not be lowered after scoring.
 
 Chronology violations = 0.
 Duplicate player/cell/week identities = 0.
 
 Fail closed if a support gate misses.
 
-## 10. Player-aware inference
+## 11. Player-aware inference
 
 For `delta_meta_AE` use frozen 5,000-replicate bootstraps, seed `20261018`:
 
@@ -225,7 +244,7 @@ Report:
 - p10 / p25 / p50 / p75 / p90 named-player improvement;
 - worst named-player mean change for disclosure.
 
-## 11. Frozen qualification gates
+## 12. Frozen qualification gates
 
 A cell qualifies only if **all** pass.
 
@@ -256,7 +275,7 @@ one quarter of the role-prior baseline's equal-player absolute-error scale.
 
 No pooled result can override a failed cell gate.
 
-## 12. If qualified
+## 13. If qualified
 
 Qualification authorizes only the next research step:
 
@@ -271,7 +290,7 @@ Stage-1 active-role uncertainty while preserving:
 
 No projection change is authorized by this signal result alone.
 
-## 13. If closed
+## 14. If closed
 
 Close that cell's V1 mechanism-benefit persistence signal.
 
@@ -291,7 +310,7 @@ Do not rescue with:
 A future attempt would need a materially distinct player-specific mechanism
 family, not a parameter rescue.
 
-## 14. Integrity at freeze
+## 15. Integrity at freeze
 
 At this freeze:
 - signal outcomes scored: **0**;
@@ -303,6 +322,10 @@ At this freeze:
 - sportsbook inputs: **0**;
 - OddsAPI calls: **0**;
 - production changed: **false**.
+
+Pre-score population amendment:
+- canonical-positive primary population added before first signal scoring;
+- predictive signal results inspected before this amendment: **0**.
 
 Disposition at freeze:
 
