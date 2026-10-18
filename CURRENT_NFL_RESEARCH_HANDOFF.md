@@ -1,5 +1,81 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — RESEARCH RESUMED / QB PASS-TD SOURCE READY / COKER INJURY-STATE LESSON
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-18_PRISM_RESEARCH_RESUMED_QB_PASS_TD_SOURCE_READY_COKER_INJURY_LESSON.md`
+
+**Reusable next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-18_PRISM_QB_PASS_TD_SOURCE_READY_RESEARCH_CONTINUE.md`
+
+### Immediate mode
+
+Sunday bets are **LOCKED/CLOSED** unless the user explicitly reopens them.
+
+Return immediately to PRISM research.
+
+### Player-state correction that must persist
+
+Jalen Coker's Week-3 18-yard game was injury-affected, and the Week-4 apparent zero was a DNP rather than a healthy zero-yard performance.
+
+Do **not** treat `138 -> 66 -> 18 -> 0` as a role-decline trajectory.
+
+PRISM trajectory evidence must explicitly distinguish healthy full participation, injury-limited/partial observations, DNP/inactive state, and return-from-injury state.
+
+### Research that is already complete — do not repeat
+
+- WR-R15 exact authority recovery remains **FAIL-CLOSED**.
+- TE signed-opportunity bridge independent-path decision:
+  `PRISM_TE_SIGNED_OPPORTUNITY_CONSERVED_BRIDGE_EXECUTION_BLOCKED_BY_FROZEN_COMBINED_SOURCE_GATE`.
+- WR/TE opportunity-uncertainty historical integration:
+  `PRISM_WR_TE_PLAYER_OPPORTUNITY_UNCERTAINTY_HISTORICAL_INTEGRATION_SOURCE_BLOCKED__PROSPECTIVE_SHADOW_ONLY`.
+- QB passing-TD source audit:
+  - frozen source plan commit `af709a937f61c39240b73a1d6960ab47e60eb152`;
+  - exact research head observed `f150d6078e72ddce27a298f049c9aaa18c0150f7`;
+  - run `39152687318`;
+  - job `117749381414` **SUCCESS**;
+  - disposition `PRISM_QB_PASS_TD_MARKET_SPECIFIC_SOURCE_READY`.
+
+### Exact next action
+
+Do **not** rerun the QB passing-TD source audit.
+
+Freeze a separate predictive QB passing-TD mechanism **before scoring any TD relationship**.
+
+Required player-first decomposition:
+
+`QB PASS OPPORTUNITY -> TEAM PASS-TD CREATION / SCORING ACCESS -> NAMED QB OWNERSHIP -> QB-SPECIFIC PASS-TD CONVERSION -> PASS-TD COUNT DISTRIBUTION`.
+
+Before scoring:
+- anti-retest existing QB/TD/scoring families;
+- freeze chronology, source/data boundary, team-vs-player decomposition, baselines, candidate formula(s), shrinkage, named-player/equal-player guards, distribution scoring and pass/fail gates;
+- keep named-QB history strictly prior and shrunk;
+- keep scoring-area pass opportunity separate from conversion;
+- keep team creation separate from QB conversion;
+- keep passing TDs separate from passing yards, rushing TDs and generic ATD;
+- use no 2026 outcomes and no sportsbook predictors upstream.
+
+Only after that predictive contract is frozen should the historical test execute.
+
+### Hard boundaries
+
+- PRISM remains an individual-player model.
+- **The player should have the rules. The position should not have the player.**
+- Dobbins-style named-player football logic remains binding.
+- No paid OddsAPI without explicit authorization.
+- Sportsbook is downstream only.
+- No production mutation from research-only work.
+- Do not weaken fail-closed source/parity gates.
+- Do not claim a workflow is running unless live Actions says queued/in_progress.
+
+---
+
+# CURRENT NFL RESEARCH HANDOFF — READ FIRST
+
 ## TOP CHECKPOINT — 2026-10-18 — BETS LOCKED / RETURN TO RESEARCH / SIGNED OPPORTUNITY FRONTIER
 
 **Model:** PRISM — Player Role & Individual Situation Model
