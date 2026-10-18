@@ -1,0 +1,173 @@
+name: Research PRISM Target Share Trajectory Observation State Bridge V1 Source
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_TARGET_SHARE_TRAJECTORY_OBSERVATION_STATE_BRIDGE_V1_SOURCE_PLAN.md'
+      - 'scripts/research/audit_prism_target_share_trajectory_observation_state_bridge_v1.py'
+      - 'tests/test_prism_target_share_trajectory_observation_state_bridge_v1.py'
+      - '.github/workflows/research-prism-target-share-trajectory-observation-state-bridge-v1-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "cb4ec5210bc09b4eff265d0a032df1bed73d32e4"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_TARGET_SHARE_TRAJECTORY_OBSERVATION_STATE_BRIDGE_V1_SOURCE_PLAN.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/audit_prism_target_share_trajectory_observation_state_bridge_v1.py" 2>/dev/null; then
+            echo "ERROR: implementation existed at source-plan freeze"
+            exit 1
+          fi
+
+      - name: Verify immutable source artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          repo=os.environ['GITHUB_REPOSITORY']
+          expected=[
+            (37638269235,11490707699,'player-target-share-trajectory-v1-37638269235','sha256:2f032cb5e68f5e097e30ca56a2ebe30e505f90233bc60774e4318158fad3fafd'),
+            (39154145666,12146625382,'prism-player-observation-health-state-v1-source-39154145666','sha256:d74f2d3c37a88aa639527aedf719e7e08001d464c722613b46291cda0f74cbeb'),
+          ]
+          for run,aid,name,digest in expected:
+              payload=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts']))
+              arts={int(a['id']):a for a in payload.get('artifacts',[])}
+              a=arts.get(aid)
+              assert a is not None,(run,aid)
+              assert not a.get('expired'),a
+              assert a.get('name')==name,a
+              assert a.get('digest')==digest,a
+              print('SOURCE_VERIFIED',run,aid,name,digest)
+          PY
+
+      - name: Download immutable source artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-traj-health
+          mkdir -p /tmp/prism-traj-health/{trajectory,health,out}
+          gh run download 37638269235 --repo "${{ github.repository }}"             --name player-target-share-trajectory-v1-37638269235             --dir /tmp/prism-traj-health/trajectory
+          gh run download 39154145666 --repo "${{ github.repository }}"             --name prism-player-observation-health-state-v1-source-39154145666             --dir /tmp/prism-traj-health/health
+          test -s /tmp/prism-traj-health/trajectory/player_target_share_trajectory_rows.csv
+          test -s /tmp/prism-traj-health/health/player_observation_health_state_rows.csv
+
+      - name: Compile and test source bridge
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_target_share_trajectory_observation_state_bridge_v1.py
+          pytest -q tests/test_prism_target_share_trajectory_observation_state_bridge_v1.py
+
+      - name: Execute frozen source bridge
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/audit_prism_target_share_trajectory_observation_state_bridge_v1.py             --trajectory /tmp/prism-traj-health/trajectory/player_target_share_trajectory_rows.csv             --health /tmp/prism-traj-health/health/player_observation_health_state_rows.csv             --out-dir /tmp/prism-traj-health/out
+
+      - name: Certify source-only boundary
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          p=json.load(open('/tmp/prism-traj-health/out/trajectory_observation_state_bridge_source_result.json'))
+          rows=pd.read_csv('/tmp/prism-traj-health/out/trajectory_observation_state_bridge_rows.csv')
+          assert p['version']=='PRISM_TARGET_SHARE_TRAJECTORY_OBSERVATION_STATE_BRIDGE_V1_SOURCE_AUDIT',p
+          assert p['freeze_commit']=='cb4ec5210bc09b4eff265d0a032df1bed73d32e4',p
+          assert p['disposition'] in {
+              'PRISM_TARGET_SHARE_TRAJECTORY_OBSERVATION_STATE_BRIDGE_V1_SOURCE_READY',
+              'PRISM_TARGET_SHARE_TRAJECTORY_OBSERVATION_STATE_BRIDGE_V1_SOURCE_BLOCKED',
+          },p
+          assert p['trajectory_artifact_id']==11490707699,p
+          assert p['health_artifact_id']==12146625382,p
+          assert p['target_yard_outcomes_loaded']==0,p
+          assert p['predictive_relationships_scored']==0,p
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          assert len(rows)>0
+          assert (rows['recent2_older_week'] < rows['week']).all()
+          assert (rows['recent1_week'] < rows['week']).all()
+          assert (rows['recent1_week'] == rows['feature_max_week']).all()
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 source bridge
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json,os
+          p=json.load(open('/tmp/prism-traj-health/out/trajectory_observation_state_bridge_source_result.json'))
+          print("### PRISM target-share trajectory × observation-state V1 — source bridge")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          for c in p['cells']:
+              print(
+                  f"- {c['position']} {c['season']}: rows={c['rows']} players={c['players']} "
+                  f"clean={c['clean_recent2_rows']} contaminated={c['contaminated_recent2_rows']} "
+                  f"({c['contaminated_share']:.2%}); affected players={c['players_with_contamination']}; "
+                  f"reported-no-snap={c['reported_no_snap_rows']} unresolved-no-snap={c['unresolved_no_snap_rows']} "
+                  f"not-on-roster={c['not_on_scoped_roster_rows']}"
+              )
+          failed=[k for k,v in p['gates'].items() if not v]
+          print(f"- failed gates: {failed or ['NONE']}")
+          print()
+          print("Source bridge only. opportunity_error was not loaded; no target/yard performance score, no 2026 outcomes, no sportsbook/OddsAPI, no fit/threshold search, no production mutation.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload source bridge
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-target-share-trajectory-observation-state-bridge-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-traj-health/out/**
