@@ -93,6 +93,20 @@ Required semantics:
 - practice status;
 - injury/body-part field where exposed.
 
+### D. Regular-season schedule gate
+`nflreadpy.load_schedules(seasons=[2024, 2025])`
+
+Required semantics:
+- season;
+- week;
+- regular-season game type;
+- home team;
+- away team.
+
+The scoped weekly-roster universe must be restricted to team-weeks with an
+actual regular-season game. Bye-week roster rows are not player-game
+observations and must never be labeled as DNP/non-participation.
+
 No sportsbook.
 No OddsAPI.
 No 2026 rows.
@@ -186,43 +200,44 @@ A later mechanism must freeze any limited-game definition before predictive scor
 
 Adjudicate 2024 and 2025 separately.
 
-### Weekly roster
-1. nonempty Weeks 1-18;
+### Schedule / weekly roster
+1. schedule contains nonempty REG Weeks 1-18;
 2. all 32 teams represented across the regular season;
-3. stable player-ID coverage >= 98% in scoped skill-player rows;
-4. position-family mapping coverage >= 99%;
-5. duplicate season/week/team/player identities = 0 after deterministic deduplication.
+3. every scoped roster observation is an actual scheduled team-game; bye-week rows retained = 0;
+4. stable player-ID coverage >= 98% in scoped skill-player rows;
+5. position-family mapping coverage >= 99%;
+6. duplicate season/week/team/player identities = 0 after deterministic deduplication.
 
 ### Snap participation
-6. source explicitly contains season + week;
-7. stable identity coverage >= 98% where stable ID exists;
-8. positive-offensive-snap rows join uniquely to weekly roster >= 98%;
-9. offensive snap count/percentage has at least one finite field on >= 99% of positive-participation rows;
-10. duplicate season/week/team/player participation identities = 0 after deterministic deduplication.
+7. source explicitly contains season + week;
+8. stable identity coverage >= 98% where stable ID exists;
+9. positive-offensive-snap rows join uniquely to scheduled weekly roster >= 98%;
+10. offensive snap count/percentage has at least one finite field on >= 99% of positive-participation rows;
+11. duplicate season/week/team/player participation identities = 0 after deterministic deduplication.
 
 ### Injury report
-11. source explicitly contains season + week/report_week;
-12. injury rows join uniquely to weekly roster >= 95%;
-13. >=95% of joined injury rows contain at least one nonblank report-status, practice-status, or injury/body-part field;
-14. fallback identity ambiguity rows = 0.
+12. source explicitly contains season + week/report_week;
+13. injury rows join uniquely to scheduled weekly roster >= 95%;
+14. >=95% of joined injury rows contain at least one nonblank report-status, practice-status, or injury/body-part field;
+15. fallback identity ambiguity rows = 0.
 
 ### Constructed state
-15. every scoped weekly-roster row receives exactly one V1 observation state;
-16. state counts are nonzero for:
+16. every scoped scheduled weekly-roster row receives exactly one V1 observation state;
+17. state counts are nonzero for:
    - `NO_REPORT_PARTICIPATED`;
    - `REPORTED_INJURY_PARTICIPATED`;
    - `REPORTED_INJURY_NO_OFFENSIVE_SNAPS`;
-17. return-after-reported-nonparticipation rows > 0;
-18. chronology violations = 0.
+18. return-after-reported-nonparticipation rows > 0;
+19. chronology violations = 0.
 
 ### Integrity
-19. outcome production fields used for predictive scoring = 0;
-20. 2026 rows used = 0;
-21. sportsbook inputs = 0;
-22. OddsAPI calls = 0;
-23. predictive models fit = 0;
-24. thresholds searched = 0;
-25. production changed = false.
+20. outcome production fields used for predictive scoring = 0;
+21. 2026 rows used = 0;
+22. sportsbook inputs = 0;
+23. OddsAPI calls = 0;
+24. predictive models fit = 0;
+25. thresholds searched = 0;
+26. production changed = false.
 
 Do not lower gates after execution.
 
@@ -291,3 +306,11 @@ Do not:
 Disposition at freeze:
 
 `PRISM_PLAYER_OBSERVATION_HEALTH_STATE_V1_SOURCE_AUDIT_FROZEN`.
+
+## 13. Pre-implementation freeze amendment
+
+Before any source code was implemented or any source result observed, the V1
+contract was amended to add the regular-season schedule gate. This prevents
+bye-week weekly-roster rows from being misclassified as no-participation player
+games. No source values or candidate outcomes were inspected before this
+amendment.
