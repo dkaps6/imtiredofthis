@@ -114,16 +114,28 @@ Result-commit branch head:
 `51a95b4b9f0135c471f0d20a374b63ca04a81be6`
 
 Current research head at final handoff reconciliation:
-`42ff90db6202b783f7e97b73d0b3d629e9566bb3`
+`b20cd01038c2b4fcfbf6706aeec1d55f4a0f8974`
 
 Current commit:
-`Research: freeze receiving opportunity exposure source`
+`Research: run receiving opportunity exposure source`
 
-Current frozen source plan:
+Frozen source plan:
 `docs/research/PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_PLAN.md`
 
-Disposition at freeze:
-`PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_FROZEN`
+Freeze:
+`42ff90db6202b783f7e97b73d0b3d629e9566bb3`
+
+Authoritative source run:
+`39161711741`
+
+Source artifact:
+`12149181200`
+
+Source digest:
+`sha256:6cae427b667db4a120a1308747d00b82b6770fe0adbc46d3efc68fce3e1db240`
+
+Source disposition:
+`PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_READY`
 
 Artifact:
 `12148837679`
@@ -174,22 +186,22 @@ This is distinct from:
 EXACT NEXT ACTION:
 
 1. Reconcile live branch/head/PR/Actions.
-2. Treat `42ff90db6202b783f7e97b73d0b3d629e9566bb3` as the last reconciled research head unless live GitHub has advanced.
-3. Execute the already-frozen **SOURCE AUDIT ONLY**:
-   `PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_AUDIT`.
-4. Use the exact frozen source parents and PlayerForm weekly-stat semantics in the plan.
-5. Scope is named RB/WR/TE with positive offensive participation in 2024/2025.
-6. Preserve zero-target positive-participation rows correctly.
-7. Prove target/team-target/snap-count/snap-% coverage and stable identity under the frozen gates.
-8. Keep `targets_per_offensive_snap` explicitly what it is.
-9. **Do not call offensive snaps routes** and do not imply route participation/YPRR/first-read rate.
-10. Do not score any future-outcome relationship in this source audit.
-11. If SOURCE READY, THEN freeze a separate named-player predictive mechanism that models participation exposure and target-earning intensity as separate objects before scoring.
-12. Preserve teammate competition / finite team targets.
-13. Do not rescue the closed complete-deletion action with partial weighting/reweighting.
-14. Do not optimize position aggregates as the objective.
-15. No 2026 outcomes, sportsbook/OddsAPI predictors, or production mutation.
-16. QB passing TD remains backlog-only unless I explicitly change the queue.
+2. Treat `b20cd01038c2b4fcfbf6706aeec1d55f4a0f8974` as the last reconciled research head unless live GitHub has advanced.
+3. Confirm source run `39161711741` remains the authoritative SOURCE READY result and check whether its result document/predictive freeze has already landed.
+4. Do **not** rerun the source audit.
+5. If no predictive freeze has landed, freeze one new named-player predictive mechanism BEFORE scoring.
+6. The question must be whether separately modeling the named player's expected participation exposure and his own target-earning intensity conditional on that exposure improves his next-game target projection.
+7. Use only strictly-prior same-player evidence for the player's state.
+8. Keep participation exposure and opportunity earning as separate objects.
+9. Preserve teammate competition and finite team target opportunity.
+10. Use no position coefficient as the player's identity.
+11. Keep snaps explicitly labeled as snaps. **Do not call snaps routes.**
+12. Evaluate named players directly; family/position summaries are guardrails only.
+13. Fit/tune nothing after observing outcomes.
+14. Do not rescue the closed complete-deletion action with partial weighting/reweighting.
+15. Do not optimize position aggregates as the objective.
+16. No 2026 outcomes, sportsbook/OddsAPI predictors, or production mutation.
+17. QB passing TD remains backlog-only unless I explicitly change the queue.
 
 COMMUNICATION REQUIREMENT:
 
