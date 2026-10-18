@@ -93,10 +93,13 @@ PRESERVE THESE RESULTS:
 
 LATEST EXECUTED FRONTIER:
 
-The Comparable-Observation Receiving Opportunity Identity V1 has now executed.
+The Comparable-Observation Receiving Opportunity Identity V1 has executed and the immutable result is now committed.
 
 Frozen contract:
 `docs/research/PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_FREEZE.md`
+
+Result:
+`docs/research/PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_RESULT.md`
 
 Freeze:
 `43e1c81a177e47118415d02fc072758e22f50825`
@@ -104,8 +107,11 @@ Freeze:
 Authoritative run:
 `39161342922`
 
-Exact head:
+Exact scored head:
 `bcbeffa8dbebb869eadb004cde4a2032c417bf0f`
+
+Result-commit branch head at final handoff reconciliation:
+`51a95b4b9f0135c471f0d20a374b63ca04a81be6`
 
 Artifact:
 `12148837679`
@@ -136,26 +142,38 @@ Primary object was the affected named player.
 596 abnormal target games were excluded from ordinary-role scoring under the pre-frozen target-state gate.
 
 Close ONLY the exact action:
-prevent legally injury-corroborated partial-participation rows from updating ordinary current-season PlayerForm target-share identity via this exact exclusion/blend construction.
+prevent legally injury-corroborated partial-participation rows from updating ordinary current-season PlayerForm target-share identity via complete exclusion under this frozen construction.
 
 Do NOT conclude injury context is irrelevant.
 
-Do NOT rescue with a different drop rule, partial weight, extrapolation, anomaly threshold, current/prior blend, position coefficient, player subset or recency tuning.
+The result itself gives the next distinct player-first frontier:
+
+**separate participation exposure from opportunity earning conditional on that exposure.**
+
+A partial game can still contain useful evidence about how often the named player earns targets while he is actually on the field, even if his full-game target total is depressed by reduced participation.
+
+This is distinct from:
+- deleting the game;
+- target-share trajectory;
+- Stage-1 any-snap participation;
+- Stage-2 finite active-set allocation;
+- WR-R15 / TE-R5P snap features.
 
 EXACT NEXT ACTION:
 
 1. Reconcile live branch/head/PR/Actions.
-2. Confirm run `39161342922` remains the authoritative completed result and check whether a result document has already been committed.
-3. If the result document is absent, record the immutable result without changing science.
-4. Then return to the core CURRENT ROLE / STATE layer and source-map one genuinely distinct NAMED-PLAYER mechanism.
-5. The next mechanism must explain why the specific player's current opportunity should change. It cannot be another variant of deleting/reweighting the same historical target-share observations.
-6. Anti-retest all closed trajectory/history-exclusion/trust families before freezing anything.
-7. Freeze source, chronology, formula/action and named-player qualification gates before outcome scoring.
-8. Do not optimize a position aggregate as the objective.
-9. No 2026 outcomes for historical research.
-10. No sportsbook/OddsAPI predictors.
-11. No production mutation.
-12. QB passing TD remains backlog-only unless I explicitly change the queue.
+2. Treat `51a95b4b9f0135c471f0d20a374b63ca04a81be6` as the last reconciled research head unless live GitHub has advanced.
+3. Do **source audit only first** for a named-player participation-conditioned receiving-opportunity object.
+4. Prove exact weekly named-player target evidence can be paired with source-valid offensive participation exposure at sufficient historical coverage and strict chronology.
+5. Do not call snaps “routes” or imply route participation unless the source truly contains route data.
+6. Do not score a predictive formula until the source/semantic audit passes.
+7. If source-ready, freeze a separate predictive formula and player-level gates before scoring.
+8. Do not rescue the closed complete-deletion action with partial weighting or another history filter.
+9. Do not optimize position aggregates as the objective.
+10. No 2026 outcomes for historical research.
+11. No sportsbook/OddsAPI predictors.
+12. No production mutation.
+13. QB passing TD remains backlog-only unless I explicitly change the queue.
 
 COMMUNICATION REQUIREMENT:
 
