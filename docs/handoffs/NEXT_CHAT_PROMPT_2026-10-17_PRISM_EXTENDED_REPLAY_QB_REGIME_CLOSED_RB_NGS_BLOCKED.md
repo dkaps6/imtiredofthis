@@ -55,9 +55,11 @@ CURRENT STATE YOU MUST PRESERVE:
 - sportsbook stays downstream only.
 
 LIVE STATE AT HANDOFF:
-- main before continuity update: `dbb8d4d037a4b769a11afb0a7429a14c5ff9793c`
-- research branch head before continuity update: `9279975fd4ef9c207aced7c72dc31f7175311b90`
-- PR #672 OPEN / DRAFT.
+- the historical main SHA immediately before the continuity writes was `dbb8d4d037a4b769a11afb0a7429a14c5ff9793c`;
+- final continuity verification saw main through `87950d79c7f79ce267e4e19c3a9e8bd3a1f7a7f4` (`Docs: advance PRISM post-RB-NGS checkpoint`);
+- research branch head: `9279975fd4ef9c207aced7c72dc31f7175311b90`;
+- PR #672 OPEN / DRAFT;
+- `9279975...` has no exact-head Action/status because it is a result/docs head; latest scientific execution is RB NGS source audit run `39068580334` SUCCESS / SOURCE BLOCKED.
 
 EXACT NEXT ACTION:
 
