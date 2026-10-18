@@ -26,6 +26,11 @@ Do **not** treat `138 -> 66 -> 18 -> 0` as a role-decline trajectory.
 
 PRISM trajectory evidence must explicitly distinguish healthy full participation, injury-limited/partial observations, DNP/inactive state, and return-from-injury state.
 
+### Anomaly investigation gate — permanent operating rule
+
+**Anomalies are questions, not trends.** Any abrupt stat/usage discontinuity, zero/near-zero, missed/partial game, injury-limited observation, return from injury, or sudden opportunity change must be investigated before it becomes role/trajectory evidence. Reconcile source-valid injury/practice status, participation, DNP/active state, snaps/routes/carries/targets, early exits, QB/starter changes and teammate availability. State-label abnormal observations. If the cause remains unresolved, fail closed as uncertain and do not use it as affirmative betting/model evidence.
+
+
 ### Research that is already complete — do not repeat
 
 - WR-R15 exact authority recovery remains **FAIL-CLOSED**.
