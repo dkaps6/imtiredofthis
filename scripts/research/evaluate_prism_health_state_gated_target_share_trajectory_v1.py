@@ -22,6 +22,7 @@ BOOT_SEED = 20261018
 
 KEYS = ["season", "week", "team", "player_clean_key", "position_group"]
 ROOM_KEYS = ["season", "week", "event_id", "team", "position_group"]
+SHARE_ROOM_KEYS = ["season", "week", "event_id", "team"]
 
 INTEGRATION_COLS = [
     "season", "week", "event_id", "team", "player_clean_key", "player",
@@ -184,7 +185,10 @@ def apply_candidate(rows: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         })
 
     out["candidate_rec_yards"] = out["candidate_targets"] * out["baseline_ypt"]
-    base_pool = out.groupby(ROOM_KEYS)["baseline_targets"].transform("sum")
+    # Match the immutable parent room-share semantics exactly: the historical
+    # integration scores WR+TE shares over the combined receiver room, while
+    # allocation conservation remains position-specific above.
+    base_pool = out.groupby(SHARE_ROOM_KEYS)["baseline_targets"].transform("sum")
     out["candidate_room_share"] = np.where(
         base_pool.gt(0),
         out["candidate_targets"] / base_pool,
