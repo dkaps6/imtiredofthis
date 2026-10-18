@@ -37,7 +37,7 @@ jobs:
       - name: Install focused dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas numpy pytest nflreadpy pyyaml
+          pip install pandas numpy pytest nflreadpy pyyaml 'pyarrow==18.1.0'
 
       - name: Verify frozen-before-implementation boundary
         run: |
