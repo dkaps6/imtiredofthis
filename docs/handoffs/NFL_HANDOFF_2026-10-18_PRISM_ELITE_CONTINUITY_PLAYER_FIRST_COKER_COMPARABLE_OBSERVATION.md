@@ -81,93 +81,113 @@ The result says only that **this exact PlayerForm-history exclusion intervention
 ### Current branch state and exact next research boundary
 
 Research branch:
-`42ff90db6202b783f7e97b73d0b3d629e9566bb3`
+`b20cd01038c2b4fcfbf6706aeec1d55f4a0f8974`
 
 Commit:
-`Research: freeze receiving opportunity exposure source`
+`Research: run receiving opportunity exposure source`
 
 PR #672:
 - OPEN / DRAFT;
-- head `42ff90db6202b783f7e97b73d0b3d629e9566bb3`.
+- head `b20cd01038c2b4fcfbf6706aeec1d55f4a0f8974`.
 
-Exact-head Actions at final reconciliation:
-- no legitimate new source-audit workflow queued/in_progress;
-- only the two known unrelated immediate workflow failures.
-
-The comparable-observation result remains canonical:
-`docs/research/PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_RESULT.md`
-
-The next source plan is now frozen:
+The frozen source plan:
 
 `docs/research/PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_PLAN.md`
+
+Freeze:
+`42ff90db6202b783f7e97b73d0b3d629e9566bb3`
 
 Version:
 `PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_AUDIT`
 
-Status:
-**FROZEN SOURCE AUDIT ONLY / NO PREDICTIVE SCORING**
+The source audit has now executed successfully:
 
-Core player-first question:
+- run `39161711741` — SUCCESS;
+- exact scored head `b20cd01038c2b4fcfbf6706aeec1d55f4a0f8974`;
+- job `117776195579` — SUCCESS;
+- artifact `12149181200`;
+- artifact name `prism-receiving-opportunity-earning-participation-exposure-v1-source-39161711741`;
+- digest `sha256:6cae427b667db4a120a1308747d00b82b6770fe0adbc46d3efc68fce3e1db240`;
+- disposition:
+  `PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_READY`.
 
-> Can PRISM source-validly pair the named player's exact weekly receiving opportunity with his exact offensive participation exposure, so later research can distinguish “played less” from “earned less while playing”?
+Source coverage:
 
-This is the correct next step after complete deletion failed.
+2024:
+- player-games: 5,895;
+- named players: 536;
+- team-target coverage: 100%;
+- snap-count coverage: 100%;
+- snap-pct coverage: 100%;
+- zero-target positive-participation rows: 1,696;
+- injury-corroborated collapses: 125;
+- unresolved collapses: 162;
+- failed source gates: NONE.
 
-The source plan separates:
+2025:
+- player-games: 5,864;
+- named players: 538;
+- team-target coverage: 100%;
+- snap-count coverage: 100%;
+- snap-pct coverage: 100%;
+- zero-target positive-participation rows: 1,621;
+- injury-corroborated collapses: 132;
+- unresolved collapses: 177;
+- failed source gates: NONE.
 
-1. **participation exposure** — offensive snaps / offensive snap percentage;
-2. **opportunity earning** — targets earned conditional on that exposure.
+This is source-only evidence. No predictive outcome relationship was scored.
 
-Required descriptive fields include:
-- exact weekly targets;
-- exact team targets;
-- offensive snaps;
-- offense_pct;
-- targets per offensive snap;
-- target share;
-- participation-anomaly state.
+The source has now proven that PRISM can source-validly separate two named-player football objects:
 
-Critical semantic rule:
+1. **participation exposure** — how much offense the player actually participated in;
+2. **opportunity earning conditional on exposure** — how often he earned targets while participating.
+
+Critical semantic rule remains:
 
 > **Offensive snaps are NOT routes.**
 
-Never label targets per offensive snap as targets per route, route participation, first-read rate or route-based efficiency.
+`targets_per_offensive_snap` is exactly that and must never be relabeled as targets per route, route participation, first-read rate, YPRR or any route-based quantity.
 
-The source plan uses exact immutable parents:
-- observation-state run `39154145666`, artifact `12146625382`, digest `sha256:d74f2d3c37a88aa639527aedf719e7e08001d464c722613b46291cda0f74cbeb`;
-- participation-anomaly run `39160554692`, artifact `12147549966`, digest `sha256:e7753e981f0ecaaf23289280830fd32b9d733402c02ab9aaa0116fc929450449`;
-- exact current PlayerForm weekly-stat path via `nflreadpy.load_player_stats(..., summary_level="week")` + `scripts.player_form_v2._normalize_weekly`;
-- PlayerForm blob `9246e4daf19f3f01cf61de3ad036b07873fd9561`.
+The comparable-observation result remains canonical:
 
-Scope:
-- RB / WR / TE;
-- 2024 + 2025 regular season;
-- positive offensive participation;
-- stable identity.
+`docs/research/PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_RESULT.md`
 
-The source audit must include zero-target positive-participation rows correctly rather than treating source absence as missing identity.
+Its complete-deletion action remains CLOSED.
 
-**Exact next action: execute this frozen SOURCE AUDIT ONLY.**
+### Exact next action
 
-Do not score a predictive formula.
+The next step is now **not another source hunt** and not predictive scoring yet.
 
-If source-ready, THEN freeze one new named-player predictive mechanism asking whether separating expected participation exposure from the player's own target-earning intensity improves next-game target projection while preserving finite team opportunity.
+Because the source is READY, freeze one new named-player predictive mechanism **before scoring any outcome relationship**.
 
-The next mechanism must:
-- use strict-prior named-player history;
-- keep participation and earning separate;
-- preserve teammate competition / finite team targets;
-- use no position coefficient as identity;
+The permitted scientific question is:
+
+> Does separately modeling this named player's expected participation exposure and his own target-earning intensity conditional on that exposure produce a more faithful next-game target projection than treating all historical player-games as equal full-game exposure?
+
+The predictive contract must be frozen before scoring and must:
+
+- use the named player's own strictly-prior history;
+- keep participation exposure and opportunity earning as separate state objects;
+- preserve teammate competition and finite team target opportunity;
+- use no position coefficient as the player's identity;
+- keep snaps explicitly labeled as snaps;
 - evaluate named players directly;
-- use family summaries only as guardrails.
+- use family/position summaries only as guardrails;
+- use no 2026 outcomes;
+- use no sportsbook/OddsAPI predictors;
+- fit/tune nothing after observing outcomes;
+- preserve all closed-science anti-rescue rules.
 
-Do not rescue the closed complete-deletion action.
+Do not:
+- rescue the closed complete-deletion action with partial weighting/reweighting;
+- reopen target-share trajectory;
+- convert snaps into fake route metrics;
+- move to QB passing TD;
+- optimize position aggregate error as the objective.
 
-Do not call snaps routes.
+The next chat should first reconcile whether a predictive freeze has already landed after this handoff. If not, freeze that predictive mechanism before any scoring.
 
-Do not jump to QB passing TD.
-
-The user does not want another aggregate optimization exercise. Any future candidate must have a direct football explanation for why it changes **this named player's** projection.
+The user does not want another aggregate optimization exercise. Every formula must have a direct football explanation for why it changes **this named player's** projection.
 
 ---
 
