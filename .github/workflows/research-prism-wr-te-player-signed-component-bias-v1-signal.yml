@@ -1,0 +1,195 @@
+name: Research PRISM WR TE Player Signed Component Bias V1 Signal
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'scripts/research/evaluate_prism_wr_te_player_signed_component_bias_v1.py'
+      - 'tests/test_prism_wr_te_player_signed_component_bias_signal_v1.py'
+      - '.github/workflows/research-prism-wr-te-player-signed-component-bias-v1-signal.yml'
+      - 'docs/research/PRISM_WR_TE_PLAYER_SIGNED_COMPONENT_BIAS_V1_SIGNAL_FREEZE.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy scipy pytest pyyaml
+
+      - name: Verify immutable pre-score freeze and source authorities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git merge-base --is-ancestor dcf70236709d0f586c72bcaa4e3550dbefe31efb HEAD
+          git cat-file -e dcf70236709d0f586c72bcaa4e3550dbefe31efb:docs/research/PRISM_WR_TE_PLAYER_SIGNED_COMPONENT_BIAS_V1_SIGNAL_FREEZE.md
+          if git cat-file -e dcf70236709d0f586c72bcaa4e3550dbefe31efb:scripts/research/evaluate_prism_wr_te_player_signed_component_bias_v1.py 2>/dev/null; then
+            echo "ERROR: signed-bias evaluator existed at freeze commit"
+            exit 1
+          fi
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12111278777 --jq '.workflow_run.id')" = "39061606501"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12111278777 --jq '.digest')" = "sha256:f64c6e7efde9deaf91b7bc19076693a5106cb632338c461acc4d2cfe2ae37ea9"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12126685270 --jq '.workflow_run.id')" = "39100442923"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12126685270 --jq '.digest')" = "sha256:d29de06947a0b3aead1e20f05b66d5cdfacfa393d8b1c535808533ed3b0a0d7a"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-player-mechanism-instability-source-v1-39061606501
+          path: /tmp/component-parent
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39061606501
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-wr-te-player-signed-component-bias-v1-source-39100442923
+          path: /tmp/signed-bias-source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39100442923
+
+      - name: Resolve immutable source rows
+        run: |
+          WR_ROWS="$(find /tmp/component-parent -type f -name 'wr_mechanism_instability_source_rows.csv' -print -quit)"
+          TE_ROWS="$(find /tmp/component-parent -type f -name 'te_mechanism_instability_source_rows.csv' -print -quit)"
+          SOURCE_RESULT="$(find /tmp/signed-bias-source -type f -name 'wr_te_player_signed_component_bias_source_result.json' -print -quit)"
+          test -n "$WR_ROWS" && test -s "$WR_ROWS"
+          test -n "$TE_ROWS" && test -s "$TE_ROWS"
+          test -n "$SOURCE_RESULT" && test -s "$SOURCE_RESULT"
+          echo "WR_ROWS=$WR_ROWS" >> "$GITHUB_ENV"
+          echo "TE_ROWS=$TE_ROWS" >> "$GITHUB_ENV"
+          echo "SOURCE_RESULT=$SOURCE_RESULT" >> "$GITHUB_ENV"
+
+      - name: Run focused mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_prism_wr_te_player_signed_component_bias_v1.py
+          pytest -q tests/test_prism_wr_te_player_signed_component_bias_signal_v1.py
+
+      - name: Score frozen WR/TE signed component-bias signal
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/signed-component-bias-signal
+          mkdir -p /tmp/signed-component-bias-signal
+          python scripts/research/evaluate_prism_wr_te_player_signed_component_bias_v1.py \
+            --wr-parent-rows "$WR_ROWS" \
+            --te-parent-rows "$TE_ROWS" \
+            --source-result "$SOURCE_RESULT" \
+            --out-dir /tmp/signed-component-bias-signal
+
+      - name: Certify frozen contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/signed-component-bias-signal/wr_te_player_signed_component_bias_signal_result.json'))
+          assert p['version']=='PRISM_WR_TE_PLAYER_SIGNED_COMPONENT_BIAS_V1_SIGNAL',p
+          assert p['freeze_commit']=='dcf70236709d0f586c72bcaa4e3550dbefe31efb',p
+          assert p['parent_run']==39061606501,p
+          assert p['parent_artifact']==12111278777,p
+          assert p['source_run']==39100442923,p
+          assert p['source_artifact']==12126685270,p
+          assert p['pseudo_count']==4.0,p
+          assert p['minimum_player_prior']==4,p
+          assert p['maximum_player_prior']==8,p
+          assert p['position_prior_excludes_target_player'] is True,p
+          assert p['same_week_history_allowed'] is False,p
+          assert p['cells']==['WR_OPPORTUNITY','WR_EFFICIENCY','TE_OPPORTUNITY','TE_EFFICIENCY'],p
+          assert p['component_means_changed']==0,p
+          assert p['projection_means_changed']==0,p
+          assert p['coefficients_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['week6_outcomes_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+              'PRISM_WR_TE_PLAYER_SIGNED_COMPONENT_BIAS_SIGNAL_QUALIFIED_ALL',
+              'PRISM_WR_TE_PLAYER_SIGNED_COMPONENT_BIAS_SIGNAL_QUALIFIED_PARTIAL',
+              'PRISM_WR_TE_PLAYER_SIGNED_COMPONENT_BIAS_SIGNAL_CLOSED_ALL',
+          },p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Record Issue 535 result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/signed-component-bias-signal/wr_te_player_signed_component_bias_signal_result.json'))
+          lines=[
+              '### PRISM WR/TE player signed component-bias V1 — predictive signal',
+              '',
+              f"- Run: `{os.environ['RUN_ID']}`",
+              f"- Exact head: `{os.environ['HEAD_SHA']}`",
+              f"- Frozen-before-scoring commit: `{p['freeze_commit']}`",
+              f"- Disposition: `{p['disposition']}`",
+              '',
+          ]
+          windows={
+              'WR_OPPORTUNITY':(2023,2024),
+              'WR_EFFICIENCY':(2023,2024),
+              'TE_OPPORTUNITY':(2024,2025),
+              'TE_EFFICIENCY':(2024,2025),
+          }
+          for cell in p['cells']:
+              dev_s, conf_s=windows[cell]
+              d=p['metrics'][cell][str(dev_s)]
+              c=p['metrics'][cell][str(conf_s)]
+              failed=[k for k,v in p['qualification_gates'][cell].items() if k!='tail_floor' and not v]
+              lines += [
+                  f"- {cell}: `{p['cell_dispositions'][cell]}`",
+                  f"  - development {dev_s}: rows/players {d['rows']} / {d['players']}; meta-AE gain {d['mean_delta_meta_ae']:+.6f}; RMSE {d['baseline_meta_rmse']:.6f}->{d['candidate_meta_rmse']:.6f}; Spearman {d['baseline_spearman']:+.4f}->{d['candidate_spearman']:+.4f}",
+                  f"  - confirmation {conf_s}: rows/players {c['rows']} / {c['players']}; meta-AE gain {c['mean_delta_meta_ae']:+.6f}",
+                  f"  - player-CI low {c['player_cluster_bootstrap']['ci95_low']:+.6f}; team-week-CI low {c['team_week_cluster_bootstrap']['ci95_low']:+.6f}; equal-player CI low {c['equal_player_bootstrap']['ci95_low']:+.6f}",
+                  f"  - named-player improved share {c['equal_player_improved_share']:.2%}; median {c['equal_player_median_improvement']:+.6f}; p10 {c['equal_player_p10_improvement']:+.6f}",
+                  f"  - sign accuracy baseline->candidate {c['baseline_sign_accuracy']:.2%}->{c['candidate_sign_accuracy']:.2%}",
+                  f"  - failed gates: {failed if failed else 'none'}",
+              ]
+          lines += [
+              '',
+              'Signal-only: no opportunity/efficiency component mean changed; no projection correction, no coefficient/threshold search, no 2026/Week-6 outcomes, no sportsbook/OddsAPI, no production mutation.',
+          ]
+          open('/tmp/issue535_signed_component_bias_signal.md','w').write('\n'.join(lines)+'\n')
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/issue535_signed_component_bias_signal.md
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload immutable signal result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-wr-te-player-signed-component-bias-v1-signal-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/signed-component-bias-signal/**
