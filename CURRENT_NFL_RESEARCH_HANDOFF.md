@@ -1,6 +1,6 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-18 — PLAYER-FIRST RESET / COKER FAILURE LESSON / COMPARABLE-OBSERVATION FRONTIER
+## TOP CHECKPOINT — 2026-10-18 — PLAYER-FIRST RESET / COKER LESSON / COMPARABLE-OBSERVATION V1 CLOSED
 
 **Model:** PRISM — Player Role & Individual Situation Model
 
@@ -16,7 +16,7 @@
 
 PRISM is an **individual-player projection model**.
 
-The named player in his actual current football situation is the scientific unit.
+The named player in his actual current football situation is the unit of truth.
 
 **Position-level MAE/RMSE is NOT the objective.** It is a downstream diagnostic/QA report card that should improve because individual player projections improve.
 
@@ -27,7 +27,7 @@ Required reasoning:
 
 ### Permanent Coker lesson
 
-Jalen Coker must never again be treated as an example of ordinary box-score regression across the sequence:
+Do not interpret Jalen Coker's 2026 sequence as ordinary regression:
 - W1: 9 targets, 8-138-2;
 - W2: 9 targets, 8-66;
 - W3: 4 targets, 2-18, injury-affected / early exit;
@@ -43,7 +43,7 @@ The core failure was causal player-state interpretation.
 
 DNP is not zero performance. Injury-shortened games are not ordinary full-game role evidence. If context is unresolved, fail closed as uncertain.
 
-### Queue governance
+### Betting / queue governance
 
 - Sunday bets are **LOCKED/CLOSED** unless explicitly reopened.
 - No paid OddsAPI without explicit authorization.
@@ -53,56 +53,92 @@ DNP is not zero performance. Injury-shortened games are not ordinary full-game r
 - Preserve all closed science and anti-retest rules.
 - Do not claim a workflow is running unless live Actions says queued/in_progress.
 
-### Latest preserved research
+### Latest completed player-state frontier
+
+Comparable-Observation Receiving Opportunity Identity V1:
+
+- freeze `43e1c81a177e47118415d02fc072758e22f50825`;
+- run `39161342922` — SUCCESS;
+- exact head `bcbeffa8dbebb869eadb004cde4a2032c417bf0f`;
+- job `117775124356` — SUCCESS;
+- artifact `12148837679`;
+- digest `sha256:ac6272b41632389d4a5d996cef53ff7aae539e4ada034287bfbed57171ba24be`;
+- disposition:
+  `PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_CLOSED`.
+
+Primary object was the affected named player.
+
+2024:
+- 362 affected target games;
+- 64 named players;
+- equal-player improvement -0.000428;
+- median player -0.000867;
+- improved/tied/worsened 35.94% / 1.56% / 62.50%.
+
+2025:
+- 293 affected target games;
+- 62 named players;
+- equal-player improvement -0.000546;
+- median player -0.000483;
+- improved/tied/worsened 35.48% / 0.00% / 64.52%;
+- player-bootstrap 95% CI [-0.001321,+0.000259].
+
+596 abnormal target games were excluded from ordinary-role scoring under the pre-frozen target-state gate.
+
+### Scientific meaning of the closure
+
+Close ONLY the exact action:
+
+> exclude legally injury-corroborated partial-participation observations from ordinary current-season PlayerForm target-share identity under this frozen construction.
+
+Do **not** conclude injury context is irrelevant.
+
+The permanent anomaly-investigation rule remains binding.
+
+Do not rescue with:
+- different drop rule;
+- partial weights;
+- full-game extrapolation;
+- altered anomaly threshold;
+- changed PlayerForm blend;
+- position coefficient;
+- recency tuning;
+- star/WR1/lead-player subset.
+
+### Other preserved state
 
 - WR-R15 exact recovery: FAIL-CLOSED.
-- TE signed-opportunity conserved bridge: blocked by frozen combined source gate.
+- TE signed-opportunity bridge: blocked by frozen combined source gate.
 - WR/TE signed opportunity bias: QUALIFIED.
 - WR/TE signed efficiency bias: CLOSED.
 - WR/TE player opportunity uncertainty: CONFIRMED; historical exact integration source-blocked.
-- WR/TE component-dominance routing run `39153337388`: **CLOSED ALL**; no rescue.
+- WR/TE component-dominance routing run `39153337388`: CLOSED ALL; no rescue.
 - Player observation health-state V1: SOURCE READY.
-- Health-state-gated target-share trajectory V1 exact intervention: CLOSED after corrected evaluator semantics; this does **not** mean injury context is irrelevant.
-- Player participation-anomaly state V1: SOURCE READY, run `39160554692`, artifact `12147549966`, digest `sha256:e7753e981f0ecaaf23289280830fd32b9d733402c02ab9aaa0116fc929450449`.
-- PlayerForm participation-state bridge V1: SOURCE BLOCKED on provider reconciliation.
-- PlayerForm participation-state membership V2: SOURCE READY, run `39160972259`, head `d5043287e66500a891b3d5ada8ad1bb61683c4f2`.
-- QB passing-TD source audit is SOURCE READY but remains backlog-only.
-
-### Current active frontier
-
-Research branch at handoff reconciliation:
-
-`43e1c81a177e47118415d02fc072758e22f50825`
-
-Frozen contract:
-
-`docs/research/PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_FREEZE.md`
-
-Disposition at freeze:
-
-`PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_FROZEN`
-
-Core question:
-
-> For an affected named RB/WR/TE, is his next-game receiving-opportunity identity more faithful when an injury-corroborated partial-participation observation is prevented from updating ordinary current-season PlayerForm target-share identity?
-
-This is a **named-player target-share identity** test. Position is not the rule.
-
-The frozen branch-head amendment also excludes target games that are themselves major participation collapses from the primary role-fidelity cohort.
+- Player participation-anomaly state V1: SOURCE READY, run `39160554692`, artifact `12147549966`.
+- PlayerForm participation-state bridge V1: SOURCE BLOCKED.
+- PlayerForm participation-state membership V2: SOURCE READY, run `39160972259`.
+- QB passing-TD source audit: SOURCE READY but backlog-only.
 
 ### Exact next action
 
-Reconcile live state, then execute the already-frozen Comparable-Observation Receiving Opportunity Identity V1 exactly as written if no scorer/result has landed yet.
+No successor predictive mechanism had been frozen after the comparable-observation closure at handoff time.
+
+Next chat must:
+
+1. reconcile live branch/head/PR/Actions;
+2. confirm whether the immutable comparable-observation result document has already been committed;
+3. if absent, record the result without changing science;
+4. return to the core **CURRENT ROLE / STATE** layer;
+5. source-map one genuinely distinct **named-player** mechanism that explains current opportunity without merely deleting/reweighting the same historical target-share observations;
+6. anti-retest closed trajectory/history-exclusion/trust families before freezing anything;
+7. freeze source/chronology/action/named-player gates before outcome scoring.
 
 Do not:
 - move to QB TD;
-- retune the freeze;
-- chase position MAE;
-- use 2026 outcomes;
+- chase position MAE as the objective;
+- use 2026 outcomes for historical research;
 - use sportsbook/OddsAPI predictors;
 - mutate production.
-
-Primary interpretation must be at named-player level.
 
 ---
 
