@@ -1,0 +1,198 @@
+name: Research PRISM Comparable Observation Receiving Identity V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_FREEZE.md'
+      - 'scripts/research/evaluate_prism_comparable_observation_receiving_identity_v1.py'
+      - 'tests/test_prism_comparable_observation_receiving_identity_v1.py'
+      - '.github/workflows/research-prism-comparable-observation-receiving-identity-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "43e1c81a177e47118415d02fc072758e22f50825"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install nflreadpy==0.1.5 pandas numpy pytest pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/evaluate_prism_comparable_observation_receiving_identity_v1.py" 2>/dev/null; then
+            echo "ERROR: scorer existed at freeze"
+            exit 1
+          fi
+
+      - name: Verify exact PlayerForm blob
+        run: |
+          set -euo pipefail
+          ACTUAL="$(git hash-object scripts/player_form_v2.py)"
+          EXPECTED="9246e4daf19f3f01cf61de3ad036b07873fd9561"
+          echo "PLAYERFORM_BLOB=$ACTUAL"
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Verify immutable state parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          expected={
+            39160554692:(12147549966,'prism-player-participation-anomaly-state-v1-source-39160554692','sha256:e7753e981f0ecaaf23289280830fd32b9d733402c02ab9aaa0116fc929450449'),
+            39154145666:(12146625382,'prism-player-observation-health-state-v1-source-39154145666','sha256:d74f2d3c37a88aa639527aedf719e7e08001d464c722613b46291cda0f74cbeb'),
+          }
+          repo=os.environ['GITHUB_REPOSITORY']
+          for run,(aid,name,digest) in expected.items():
+              payload=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts']))
+              arts={int(a['id']):a for a in payload.get('artifacts',[])}
+              a=arts.get(aid)
+              assert a is not None,(run,aid)
+              assert not a.get('expired'),a
+              assert a.get('name')==name,a
+              assert a.get('digest')==digest,a
+              print('PARENT_VERIFIED',run,aid,name,digest)
+          PY
+
+      - name: Download immutable parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-comparable-identity
+          mkdir -p /tmp/prism-comparable-identity/{anomaly,health,out}
+          gh run download 39160554692 --repo "${{ github.repository }}" \
+            --name prism-player-participation-anomaly-state-v1-source-39160554692 \
+            --dir /tmp/prism-comparable-identity/anomaly
+          gh run download 39154145666 --repo "${{ github.repository }}" \
+            --name prism-player-observation-health-state-v1-source-39154145666 \
+            --dir /tmp/prism-comparable-identity/health
+          test -s /tmp/prism-comparable-identity/anomaly/player_participation_anomaly_state_rows.csv
+          test -s /tmp/prism-comparable-identity/health/player_observation_health_state_rows.csv
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_prism_comparable_observation_receiving_identity_v1.py
+          pytest -q tests/test_prism_comparable_observation_receiving_identity_v1.py
+
+      - name: Execute frozen named-player identity test
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/evaluate_prism_comparable_observation_receiving_identity_v1.py \
+            --anomaly-parent /tmp/prism-comparable-identity/anomaly/player_participation_anomaly_state_rows.csv \
+            --health-parent /tmp/prism-comparable-identity/health/player_observation_health_state_rows.csv \
+            --out-dir /tmp/prism-comparable-identity/out
+
+      - name: Certify frozen contract
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          p=json.load(open('/tmp/prism-comparable-identity/out/comparable_observation_receiving_identity_result.json'))
+          rows=pd.read_csv('/tmp/prism-comparable-identity/out/comparable_observation_receiving_identity_rows.csv')
+          assert p['version']=='PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1',p
+          assert p['freeze_commit']=='43e1c81a177e47118415d02fc072758e22f50825',p
+          assert p['disposition'] in {
+              'PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_QUALIFIED',
+              'PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_CLOSED',
+          },p
+          assert p['anomaly_parent_run']==39160554692,p
+          assert p['anomaly_parent_artifact']==12147549966,p
+          assert p['health_parent_run']==39154145666,p
+          assert p['health_parent_artifact']==12146625382,p
+          assert p['player_form_blob_sha']=='9246e4daf19f3f01cf61de3ad036b07873fd9561',p
+          assert p['audit']['chronology_violations']==0,p
+          assert p['development_2024']['clean_unaffected_max_drift']<=1e-12,p
+          assert p['confirmation_2025']['clean_unaffected_max_drift']<=1e-12,p
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          assert len(rows)>0
+          assert not rows['target_state'].isin([
+              'PARTICIPATION_COLLAPSE_INJURY_CORROBORATED',
+              'PARTICIPATION_COLLAPSE_UNRESOLVED',
+          ]).any()
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+          p=json.load(open('/tmp/prism-comparable-identity/out/comparable_observation_receiving_identity_result.json'))
+          print("### PRISM comparable-observation receiving opportunity identity V1")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          for label in ('development_2024','confirmation_2025'):
+              s=p[label]
+              print()
+              print(f"**{s['season']} affected named players**")
+              print(f"- target games={s['affected_target_games']}; named players={s['affected_named_players']}")
+              print(f"- equal-player improvement={s['equal_player_average_improvement']:+.6f}; median player={s['median_player_improvement']:+.6f}")
+              print(f"- improved/tied/worsened={s['improved_player_share']:.2%}/{s['tied_player_share']:.2%}/{s['worsened_player_share']:.2%}")
+              print(f"- player p10/p25/p75/p90={s['p10_player_improvement']:+.6f}/{s['p25_player_improvement']:+.6f}/{s['p75_player_improvement']:+.6f}/{s['p90_player_improvement']:+.6f}")
+              if 'player_cluster_bootstrap' in s:
+                  b=s['player_cluster_bootstrap']
+                  print(f"- player-bootstrap 95% CI=[{b['ci_low']:+.6f},{b['ci_high']:+.6f}]")
+          failed=[k for k,v in p['gates'].items() if not v]
+          print()
+          print(f"- failed gates: {failed or ['NONE']}")
+          print(f"- abnormal target games excluded from ordinary-role scoring: {p['audit']['abnormal_target_games_excluded']}")
+          print()
+          print("Primary object is the affected named player. Position/family summaries are diagnostics only. No 2026 outcomes, sportsbook/OddsAPI, fitted coefficient, threshold search, or production mutation.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-comparable-observation-receiving-identity-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-comparable-identity/out/**
