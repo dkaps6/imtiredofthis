@@ -122,6 +122,28 @@ Target player must:
 - have exact stable identity;
 - be on a team with positive target attempts in the weekly-stat source.
 
+### Comparable target-game gate
+
+The primary role-fidelity population must not treat a target game that is itself
+a major participation anomaly as an ordinary role outcome.
+
+Using only the already-frozen, performance-free participation-state labels:
+- exclude target games labeled
+  `PARTICIPATION_COLLAPSE_INJURY_CORROBORATED`;
+- exclude target games labeled
+  `PARTICIPATION_COLLAPSE_UNRESOLVED`.
+
+Target games labeled:
+- `PARTICIPATION_NOT_COLLAPSED`;
+- `PARTICIPATION_BASELINE_INSUFFICIENT`;
+
+remain eligible.
+
+Excluded abnormal target games must be counted and reported separately. Their
+targets/yards may not be used to decide the state label.
+
+This gate is frozen before candidate outcomes are scored.
+
 Only information strictly before target week may enter the predictor.
 
 ### Prior-season prior
@@ -277,25 +299,26 @@ The candidate qualifies only if all pass.
 3. stable identity coverage >=99%;
 4. target/predictor chronology violations = 0;
 5. clean/unaffected candidate-baseline drift = 0 within 1e-12;
-6. 2026 outcomes = 0;
-7. sportsbook/OddsAPI = 0;
-8. coefficients fit = 0;
-9. thresholds searched = 0.
+6. primary target games classified as major participation collapses = 0;
+7. 2026 outcomes = 0;
+8. sportsbook/OddsAPI = 0;
+9. coefficients fit = 0;
+10. thresholds searched = 0.
 
 ### Development — affected named players
-10. affected target games > 0;
-11. affected named players >= 20;
-12. equal-player average improvement > 0;
-13. median named-player improvement >= 0;
-14. improved-player share > worsened-player share.
+11. affected target games > 0;
+12. affected named players >= 20;
+13. equal-player average improvement > 0;
+14. median named-player improvement >= 0;
+15. improved-player share > worsened-player share.
 
 ### Independent confirmation — affected named players
-15. affected target games > 0;
-16. affected named players >= 20;
-17. equal-player average improvement > 0;
-18. median named-player improvement >= 0;
-19. improved-player share > worsened-player share;
-20. player-cluster bootstrap 95% lower bound > 0.
+16. affected target games > 0;
+17. affected named players >= 20;
+18. equal-player average improvement > 0;
+19. median named-player improvement >= 0;
+20. improved-player share > worsened-player share;
+21. player-cluster bootstrap 95% lower bound > 0.
 
 Bootstrap:
 - sample named players with replacement;
@@ -368,3 +391,17 @@ The permanent anomaly-investigation rule remains binding.
 Disposition at freeze:
 
 `PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_FROZEN`.
+
+
+## 17. Pre-implementation comparable-target amendment
+
+Before scorer implementation or candidate outcome inspection, the target-game
+population was tightened so the evaluation itself obeys the permanent anomaly
+rule.
+
+A target player-game that is independently state-labeled as a major
+participation collapse is not an ordinary role-fidelity observation and is
+excluded from the primary qualification cohort.
+
+This amendment uses only the already-frozen snap/injury state source. It does
+not inspect target share, yards, projection error, or candidate performance.
