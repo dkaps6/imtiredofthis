@@ -123,27 +123,56 @@ Do not rescue with:
 - PlayerForm participation-state membership V2: SOURCE READY, run `39160972259`.
 - QB passing-TD source audit: SOURCE READY but backlog-only.
 
+### Current frozen source frontier
+
+Research branch at final handoff reconciliation:
+
+`42ff90db6202b783f7e97b73d0b3d629e9566bb3`
+
+Commit:
+
+`Research: freeze receiving opportunity exposure source`
+
+Frozen plan:
+
+`docs/research/PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_PLAN.md`
+
+Disposition:
+
+`PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_FROZEN`
+
+Core question:
+
+> Can PRISM source-validly pair the named player's exact weekly receiving opportunity with his exact offensive participation exposure, so later research can distinguish **played less** from **earned less while playing**?
+
+The source plan separates:
+- participation exposure = offensive snaps / offense_pct;
+- opportunity earning = targets conditional on that exposure.
+
+Critical semantic boundary:
+**offensive snaps are NOT routes.**
+
 ### Exact next action
 
-The comparable-observation result document defines the next distinct player-first frontier:
-
-> separate **participation exposure** from **opportunity earning conditional on that exposure**.
-
-A partial game may still contain useful evidence about how often the named player earns targets while he is actually on the field, even when his full-game total is depressed by reduced participation.
+Execute the already-frozen **SOURCE AUDIT ONLY**.
 
 Next chat must:
 
 1. reconcile live branch/head/PR/Actions;
-2. treat `51a95b4b9f0135c471f0d20a374b63ca04a81be6` as the last reconciled research head unless live GitHub advanced;
-3. perform a **source/semantic audit first** for a named-player participation-conditioned receiving-opportunity object;
-4. prove exact weekly named-player target evidence can be paired with source-valid offensive participation exposure at sufficient historical coverage and strict chronology;
-5. do not call snaps “routes” or imply route participation unless the source truly supplies routes;
-6. do not score a predictive formula until the source audit passes;
-7. if source-ready, freeze a new predictive contract and named-player qualification gates before scoring;
-8. anti-retest the closed complete-deletion, trajectory, history-exclusion and trust families.
+2. treat `42ff90db6202b783f7e97b73d0b3d629e9566bb3` as the last reconciled research head unless GitHub advanced;
+3. execute `PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_AUDIT` exactly as frozen;
+4. use the exact observation-state, participation-anomaly and PlayerForm authorities in the plan;
+5. scope named RB/WR/TE positive-participation rows in 2024/2025;
+6. preserve zero-target positive-participation rows;
+7. prove stable identity, team-target, snap-count and snap-percentage coverage under the frozen gates;
+8. keep targets-per-offensive-snap explicitly labeled as targets per offensive snap;
+9. never call snaps routes or imply route/YPRR/first-read semantics;
+10. score no predictive future-outcome relationship in this source audit;
+11. if SOURCE READY, freeze a separate named-player predictive mechanism before scoring;
+12. preserve finite team opportunity / teammate competition;
+13. do not rescue the closed complete-deletion action.
 
 Do not:
-- rescue complete deletion with partial weighting/reweighting;
 - move to QB TD;
 - chase position MAE as the objective;
 - use 2026 outcomes for historical research;
