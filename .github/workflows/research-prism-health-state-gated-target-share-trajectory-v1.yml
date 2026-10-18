@@ -1,0 +1,173 @@
+name: Research PRISM Health State Gated Target Share Trajectory V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_HEALTH_STATE_GATED_TARGET_SHARE_TRAJECTORY_V1_FREEZE.md'
+      - 'scripts/research/evaluate_prism_health_state_gated_target_share_trajectory_v1.py'
+      - 'tests/test_prism_health_state_gated_target_share_trajectory_v1.py'
+      - '.github/workflows/research-prism-health-state-gated-target-share-trajectory-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "6c721623d14d8990aef5144c54dbbe48e2f2b434"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_HEALTH_STATE_GATED_TARGET_SHARE_TRAJECTORY_V1_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/evaluate_prism_health_state_gated_target_share_trajectory_v1.py" 2>/dev/null; then
+            echo "ERROR: scorer existed at frozen plan commit"
+            exit 1
+          fi
+
+      - name: Verify immutable parent artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          repo=os.environ['GITHUB_REPOSITORY']
+          expected=[
+            (37783801061,11552284671,'player-trajectory-oos-fold-integration-v1','sha256:6d4e9a2a87fc2b364a847e6328d201f42fa4bf63b10f87416001c4fec8de03d2'),
+            (39154571787,12146118822,'prism-target-share-trajectory-observation-state-bridge-v1-39154571787','sha256:76d60dc56adcce1ac640a0311419af937072b634ff5a0199d46308626641bb84'),
+          ]
+          for run,aid,name,digest in expected:
+              payload=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts']))
+              arts={int(a['id']):a for a in payload.get('artifacts',[])}
+              a=arts.get(aid)
+              assert a is not None,(run,aid)
+              assert not a.get('expired'),a
+              assert a.get('name')==name,a
+              assert a.get('digest')==digest,a
+              print('SOURCE_VERIFIED',run,aid,name,digest)
+          PY
+
+      - name: Download immutable parent artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-health-traj
+          mkdir -p /tmp/prism-health-traj/{integration,bridge,out}
+          gh run download 37783801061 --repo "${{ github.repository }}"             --name player-trajectory-oos-fold-integration-v1             --dir /tmp/prism-health-traj/integration
+          gh run download 39154571787 --repo "${{ github.repository }}"             --name prism-target-share-trajectory-observation-state-bridge-v1-39154571787             --dir /tmp/prism-health-traj/bridge
+          test -s /tmp/prism-health-traj/integration/trajectory_oos_fold_integration_rows.csv
+          test -s /tmp/prism-health-traj/bridge/trajectory_observation_state_bridge_rows.csv
+
+      - name: Compile and test frozen scorer
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_prism_health_state_gated_target_share_trajectory_v1.py
+          pytest -q tests/test_prism_health_state_gated_target_share_trajectory_v1.py
+
+      - name: Execute frozen health-state-gated trajectory test
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/evaluate_prism_health_state_gated_target_share_trajectory_v1.py             --integration-rows /tmp/prism-health-traj/integration/trajectory_oos_fold_integration_rows.csv             --bridge-rows /tmp/prism-health-traj/bridge/trajectory_observation_state_bridge_rows.csv             --out-dir /tmp/prism-health-traj/out
+
+      - name: Certify frozen contract
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          p=json.load(open('/tmp/prism-health-traj/out/health_state_gated_trajectory_result.json'))
+          rows=pd.read_csv('/tmp/prism-health-traj/out/health_state_gated_trajectory_rows.csv')
+          assert p['version']=='PRISM_HEALTH_STATE_GATED_TARGET_SHARE_TRAJECTORY_V1',p
+          assert p['freeze_commit']=='6c721623d14d8990aef5144c54dbbe48e2f2b434',p
+          assert p['disposition'] in {
+              'PRISM_HEALTH_STATE_GATED_TARGET_SHARE_TRAJECTORY_V1_QUALIFIED',
+              'PRISM_HEALTH_STATE_GATED_TARGET_SHARE_TRAJECTORY_V1_CLOSED',
+          },p
+          assert p['contamination_counts']=={'WR_2024':260,'TE_2024':100,'TE_2025':108},p
+          assert p['original_trajectory_formula_changed'] is False,p
+          assert p['recent_window_changed'] is False,p
+          assert p['efficiency_changed'] is False,p
+          assert p['distribution_changed'] is False,p
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['provider_rebuilds']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          assert p['max_wr1_abs_gap']<=1e-12,p
+          assert p['max_protected_pool_abs_gap']<=1e-12,p
+          assert p['max_room_pool_abs_gap']<=1e-12,p
+          assert len(rows)==3328
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json,os
+          p=json.load(open('/tmp/prism-health-traj/out/health_state_gated_trajectory_result.json'))
+          print("### PRISM health-state-gated target-share trajectory V1")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          a=p['primary_affected_2024']; ps=p['primary_affected_player_summary']
+          print(f"- 2024 affected rows: {a['rows']}; target-MAE gain vs original trajectory={a['target_mae_improvement']:+.6f}")
+          print(f"- affected equal-player={ps['equal_player_mean_improvement']:+.6f}; median={ps['median_player_improvement']:+.6f}; improved/worsened={ps['player_improved_share']:.2%}/{ps['player_worsened_share']:.2%}; bootstrap P>0={ps['bootstrap']['p_improvement_gt_0']:.4f}")
+          for label,key in [('2024 all','primary_all_2024'),('2024 WR','primary_wr_2024'),('2024 TE','primary_te_2024'),('2024 clean','primary_clean_2024'),('2025 TE','secondary_te_2025'),('2025 TE affected','secondary_te_2025_affected')]:
+              m=p[key]
+              print(f"- {label}: target gain={m['target_mae_improvement']:+.6f}; rec-yard gain={m['rec_yards_mae_improvement']:+.6f}; room-share gain={m['room_share_mae_improvement']:+.6f}")
+          failed=[k for k,v in p['gates'].items() if not v]
+          print(f"- failed gates: {failed or ['NONE']}")
+          print()
+          print("No formula/window/efficiency/width change; no fresh provider rebuild; no 2026 outcomes; no sportsbook/OddsAPI; no fitted coefficient/threshold; production unchanged.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-health-state-gated-target-share-trajectory-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-health-traj/out/**
