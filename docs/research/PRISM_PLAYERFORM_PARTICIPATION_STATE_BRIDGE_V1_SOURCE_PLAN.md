@@ -153,8 +153,8 @@ Adjudicate 2024 and 2025 separately.
 4. PlayerForm weekly admitted-row duplicate
    `season/week/team/player_id` identities = 0;
 5. stable-ID coverage on anomaly rows >=99%;
-6. stable-ID join coverage from anomaly rows to the PlayerForm weekly ledger
-   >=98%;
+6. stable-ID identity reconciliation from anomaly rows to the raw weekly-stat
+   provider ledger >=98%;
 7. injury-corroborated collapse rows admitted into PlayerForm > 0;
 8. unresolved collapse rows admitted into PlayerForm > 0;
 9. no anomaly row is joined across season/week/team mismatch;
@@ -212,3 +212,27 @@ That future mechanism must:
 Disposition at freeze:
 
 `PRISM_PLAYERFORM_PARTICIPATION_STATE_BRIDGE_V1_SOURCE_FROZEN`.
+
+
+## 12. Pre-implementation source-gate amendment
+
+Before implementation or source execution, gate 6 was clarified.
+
+The bridge has two different questions:
+- can the anomaly row be identity-reconciled to the raw weekly-stat provider?
+- does the exact PlayerForm usage gate admit that row?
+
+A positive-snap skill player may legitimately have zero targets, rushes and pass
+attempts, so absence from the **admitted** PlayerForm ledger is not an identity
+failure.
+
+Therefore:
+- identity coverage is measured against the raw provider ledger;
+- PlayerForm admission remains an audited boolean outcome of the exact
+  `_normalize_weekly` usage gate;
+- no minimum overall admission percentage is imposed;
+- the frozen requirement that both injury-corroborated and unresolved anomaly
+  classes have admitted rows remains unchanged.
+
+No provider values, bridge counts, or performance outcomes were inspected before
+this clarification.
