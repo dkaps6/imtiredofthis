@@ -47,9 +47,11 @@ def load_pbp(seasons: list[int]) -> pd.DataFrame:
         q = lower(to_pd(nfl.load_pbp(seasons=[int(season)])))
         if q.empty:
             raise RuntimeError(f"nflreadpy returned zero PBP rows for {season}")
-        if "season_type" in q.columns:
-            st = q["season_type"].astype("string").str.upper()
-            q = q.loc[st.eq("REG")].copy()
+        season_type_col = pick(q.columns, "season_type", "game_type")
+        if not season_type_col:
+            raise RuntimeError("required PBP semantic season_type missing; tried ('season_type', 'game_type')")
+        st = q[season_type_col].astype("string").str.upper()
+        q = q.loc[st.eq("REG")].copy()
         if q.empty:
             raise RuntimeError(f"zero REG PBP rows for {season}")
         frames.append(q)
@@ -60,6 +62,7 @@ def resolve_schema(x: pd.DataFrame) -> dict[str, str]:
     aliases = {
         "season": ("season",),
         "week": ("week",),
+        "season_type": ("season_type", "game_type"),
         "team": ("posteam", "offense_team", "team"),
         "pass_attempt": ("pass_attempt",),
         "pass_td": ("pass_touchdown", "passing_touchdown", "pass_td"),
@@ -194,8 +197,7 @@ def add_prior_counts(rows: pd.DataFrame) -> pd.DataFrame:
 
 def audit_season(raw: pd.DataFrame, rows: pd.DataFrame, season: int, schema: dict[str,str]) -> dict:
     rs = raw.loc[num(raw[schema["season"]]).eq(season)].copy()
-    if "season_type" in rs.columns:
-        rs = rs.loc[rs["season_type"].astype("string").str.upper().eq("REG")].copy()
+    rs = rs.loc[rs[schema["season_type"]].astype("string").str.upper().eq("REG")].copy()
     attempt = num(rs[schema["pass_attempt"]]).eq(1)
     ra = rs.loc[attempt].copy()
     pass_td = num(ra[schema["pass_td"]])
