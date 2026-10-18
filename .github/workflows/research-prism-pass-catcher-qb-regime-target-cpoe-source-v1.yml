@@ -1,0 +1,111 @@
+name: Research PRISM Pass Catcher QB Regime Target CPOE Source V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_PASS_CATCHER_QB_REGIME_TARGET_CPOE_STATE_V1_SOURCE_PLAN.md'
+      - 'scripts/research/audit_prism_pass_catcher_qb_regime_target_cpoe_state_v1_source.py'
+      - 'tests/test_prism_pass_catcher_qb_regime_target_cpoe_state_v1_source.py'
+      - '.github/workflows/research-prism-pass-catcher-qb-regime-target-cpoe-source-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Record start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 535 --repo "${{ github.repository }}" --body "PRISM pass-catcher x QB-regime target-CPOE source audit started: run ${{ github.run_id }}, exact head ${{ github.sha }}. Source/chronology only; target entitlement/depth unchanged; no predictive scoring, yards/receptions/TD translation, sportsbook/OddsAPI, 2026 outcomes, fit, or production mutation."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pandas numpy pytest pyyaml 'pyarrow==18.1.0'
+      - name: Download frozen pregame universe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf /tmp/qbcpoe && mkdir -p /tmp/qbcpoe/source /tmp/qbcpoe/out
+          gh run download 38895205962 --repo "${{ github.repository }}" --name player-active-role-participation-source-v1-38895205962 --dir /tmp/qbcpoe/source
+          U="$(find /tmp/qbcpoe/source -type f -name player_active_role_pregame_universe.csv -print -quit)"
+          test -s "$U"
+          echo "U=$U" >> "$GITHUB_ENV"
+      - name: Frozen safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_pass_catcher_qb_regime_target_cpoe_state_v1_source.py
+          pytest -q tests/test_prism_pass_catcher_qb_regime_target_cpoe_state_v1_source.py
+      - name: Execute source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/audit_prism_pass_catcher_qb_regime_target_cpoe_state_v1_source.py --pregame-universe "$U" --out-dir /tmp/qbcpoe/out
+      - name: Certify source-only boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/qbcpoe/out/qb_regime_target_cpoe_source_result.json'))
+          assert len(p['metrics'])==4,p
+          assert p['disposition'] in {
+            'PRISM_PASS_CATCHER_QB_REGIME_TARGET_CPOE_STATE_V1_SOURCE_READY_ALL',
+            'PRISM_PASS_CATCHER_QB_REGIME_TARGET_CPOE_STATE_V1_SOURCE_READY_PARTIAL',
+            'PRISM_PASS_CATCHER_QB_REGIME_TARGET_CPOE_STATE_V1_SOURCE_BLOCKED',
+          },p
+          i=p['integrity']
+          assert i['chronology_violations']==0,p
+          assert i['target_game_outcomes_used_in_predictor']==0,p
+          assert i['predictive_candidates_scored']==0,p
+          assert i['receiving_yards_scored'] is False and i['receptions_scored'] is False and i['touchdowns_scored'] is False,p
+          assert i['market_translation_scored'] is False,p
+          assert i['coefficients_fit']==0 and i['thresholds_searched']==0,p
+          assert i['sportsbook_inputs_used']==0 and i['oddsapi_calls']==0 and i['outcomes_2026_used']==0,p
+          assert i['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+      - name: Record result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY' > /tmp/qbcpoe-comment.md
+          import json,os
+          p=json.load(open('/tmp/qbcpoe/out/qb_regime_target_cpoe_source_result.json'))
+          print("## PRISM pass-catcher × QB-regime target-CPOE state V1 source result")
+          print(f"Run: {os.environ['GITHUB_RUN_ID']} / exact head {os.environ['GITHUB_SHA']}.")
+          print(f"Disposition: {p['disposition']}.")
+          for r in p['metrics']:
+              print(f"{r['family']} {r['season']}: state={r['mechanism_source_ready_rows']} rows/{r['mechanism_source_ready_players']} players, QB-regime={r['qb_regime_source_valid_teamweek_rate']:.3%}, receiver-ID={r['pbp_target_receiver_id_rate']:.3%}, passer-ID={r['pbp_target_passer_id_rate']:.3%}, native-CPOE={r['pbp_target_native_cpoe_rate']:.3%}, ready={r['source_ready']}.")
+          print("Integrity: chronology 0; candidate scoring 0; entitlement/depth unchanged; receiving yards/receptions/TDs unscored; sportsbook/OddsAPI/2026 outcomes 0; fits/thresholds 0; production unchanged.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/qbcpoe-comment.md
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-pass-catcher-qb-regime-target-cpoe-source-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/qbcpoe/out/**
