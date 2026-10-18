@@ -1,5 +1,80 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — STAGE-1 PLAYER AUTHORITY CLOSED / SIGNED COMPONENT-BIAS FRONTIER
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-18_PRISM_STAGE1_PERSONALIZATION_CLOSED_COMPONENT_BIAS_NEXT.md`
+
+**Reusable next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-18_PRISM_STAGE1_PERSONALIZATION_CLOSED_COMPONENT_BIAS_NEXT.md`
+
+### Current player-specific science
+
+Preserve:
+- RB receiving Stage-2 player-specific authority bridge **QUALIFIED**;
+- RB rushing Stage-2 hard authority bridge **CLOSED**;
+- TE Stage-2 player-specific utility signal **CLOSED**.
+
+Stage-1 source:
+- run `39099745136` — same-player mechanism-benefit history **SOURCE READY ALL**.
+
+Stage-1 hierarchical future-utility signal:
+- run `39099930673`;
+- RB **QUALIFIED**;
+- TE **QUALIFIED**;
+- QB **CLOSED**;
+- WR **CLOSED**.
+
+Direct Stage-1 player-specific family-fallback bridge:
+- run `39100106463`;
+- RB **CLOSED**;
+- TE **CLOSED**.
+
+Do not rescue the closed Stage-1 bridge with soft blends, threshold changes,
+support changes, recency or player subsets.
+
+### Architecture lesson
+
+A player-specific mechanism-utility signal can be real without implying the
+correct projection intervention.
+
+Keep utility prediction and projection action as separate frozen scientific
+objects.
+
+### Exact next action
+
+Open a genuinely distinct player-specific feature-sensitivity lane:
+
+**signed opportunity / efficiency component bias** for named WR/TE.
+
+Canonical source authority:
+- mechanism-instability source run `39061606501`;
+- artifact `12111278777`;
+- digest `sha256:f64c6e7efde9deaf91b7bc19076693a5106cb632338c461acc4d2cfe2ae37ea9`.
+
+Anti-retest boundary:
+- CLOSED mechanism-instability trust used switch-rate/dominant-state instability
+  to predict total-error fragility;
+- the new lane may only proceed if it predicts **signed component error itself**
+  from strictly-prior same-player signed component bias;
+- no switch-rate trust rescue;
+- no absolute-error volatility rescue;
+- no automatic mean correction before a separate bridge.
+
+Source/support audit first, then freeze any predictive signal before scoring.
+
+Preserve Week-6 locks, Week-7 source-readiness fail-close, Weeks 7-10 WR dual
+prospective protocol, finite opportunity conservation, sportsbook downstream
+only, no paid OddsAPI without explicit authorization, no production mutation.
+
+---
+
+# CURRENT NFL RESEARCH HANDOFF — READ FIRST
+
 ## TOP CHECKPOINT — 2026-10-18 — PRISM PLAYER-SPECIFIC RULE LEARNING FIRST BREAKTHROUGH
 
 **Model:** PRISM — Player Role & Individual Situation Model
