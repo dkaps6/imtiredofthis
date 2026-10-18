@@ -1,5 +1,113 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — PLAYER-FIRST RESET / COKER FAILURE LESSON / COMPARABLE-OBSERVATION FRONTIER
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-18_PRISM_ELITE_CONTINUITY_PLAYER_FIRST_COKER_COMPARABLE_OBSERVATION.md`
+
+**Reusable next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-18_PRISM_PLAYER_FIRST_COMPARABLE_OBSERVATION_CONTINUE.md`
+
+### Non-negotiable assignment
+
+PRISM is an **individual-player projection model**.
+
+The named player in his actual current football situation is the scientific unit.
+
+**Position-level MAE/RMSE is NOT the objective.** It is a downstream diagnostic/QA report card that should improve because individual player projections improve.
+
+Do not make the user repeat this again.
+
+Required reasoning:
+`PLAYER IDENTITY/HISTORY -> CURRENT ROLE/STATE -> EXPLAIN ANOMALIES -> TEAMMATE COMPETITION / FINITE OPPORTUNITY -> OPPORTUNITY TYPE/QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> MARKET-SPECIFIC OUTCOME -> RELIABILITY`.
+
+### Permanent Coker lesson
+
+Jalen Coker must never again be treated as an example of ordinary box-score regression across the sequence:
+- W1: 9 targets, 8-138-2;
+- W2: 9 targets, 8-66;
+- W3: 4 targets, 2-18, injury-affected / early exit;
+- W4: DNP;
+- W5: bye;
+- W6: 12 targets, 6-97.
+
+The prior model/chat incorrectly allowed W3 + W4 to become “regression” evidence and produced roughly a 38-yard projection against roughly a 55.5 market. User reported Coker had already reached about 60 yards in the first half.
+
+The core failure was causal player-state interpretation.
+
+**Anomalies are questions, not trends.**
+
+DNP is not zero performance. Injury-shortened games are not ordinary full-game role evidence. If context is unresolved, fail closed as uncertain.
+
+### Queue governance
+
+- Sunday bets are **LOCKED/CLOSED** unless explicitly reopened.
+- No paid OddsAPI without explicit authorization.
+- Sportsbook is downstream only.
+- Do not change research lanes on your own.
+- QB passing TD is **BACKLOG ONLY** unless the user explicitly promotes it.
+- Preserve all closed science and anti-retest rules.
+- Do not claim a workflow is running unless live Actions says queued/in_progress.
+
+### Latest preserved research
+
+- WR-R15 exact recovery: FAIL-CLOSED.
+- TE signed-opportunity conserved bridge: blocked by frozen combined source gate.
+- WR/TE signed opportunity bias: QUALIFIED.
+- WR/TE signed efficiency bias: CLOSED.
+- WR/TE player opportunity uncertainty: CONFIRMED; historical exact integration source-blocked.
+- WR/TE component-dominance routing run `39153337388`: **CLOSED ALL**; no rescue.
+- Player observation health-state V1: SOURCE READY.
+- Health-state-gated target-share trajectory V1 exact intervention: CLOSED after corrected evaluator semantics; this does **not** mean injury context is irrelevant.
+- Player participation-anomaly state V1: SOURCE READY, run `39160554692`, artifact `12147549966`, digest `sha256:e7753e981f0ecaaf23289280830fd32b9d733402c02ab9aaa0116fc929450449`.
+- PlayerForm participation-state bridge V1: SOURCE BLOCKED on provider reconciliation.
+- PlayerForm participation-state membership V2: SOURCE READY, run `39160972259`, head `d5043287e66500a891b3d5ada8ad1bb61683c4f2`.
+- QB passing-TD source audit is SOURCE READY but remains backlog-only.
+
+### Current active frontier
+
+Research branch at handoff reconciliation:
+
+`43e1c81a177e47118415d02fc072758e22f50825`
+
+Frozen contract:
+
+`docs/research/PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_FREEZE.md`
+
+Disposition at freeze:
+
+`PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_FROZEN`
+
+Core question:
+
+> For an affected named RB/WR/TE, is his next-game receiving-opportunity identity more faithful when an injury-corroborated partial-participation observation is prevented from updating ordinary current-season PlayerForm target-share identity?
+
+This is a **named-player target-share identity** test. Position is not the rule.
+
+The frozen branch-head amendment also excludes target games that are themselves major participation collapses from the primary role-fidelity cohort.
+
+### Exact next action
+
+Reconcile live state, then execute the already-frozen Comparable-Observation Receiving Opportunity Identity V1 exactly as written if no scorer/result has landed yet.
+
+Do not:
+- move to QB TD;
+- retune the freeze;
+- chase position MAE;
+- use 2026 outcomes;
+- use sportsbook/OddsAPI predictors;
+- mutate production.
+
+Primary interpretation must be at named-player level.
+
+---
+
+# CURRENT NFL RESEARCH HANDOFF — READ FIRST
+
 ## TOP CHECKPOINT — 2026-10-18 — RESEARCH RESUMED / QB PASS-TD SOURCE READY / COKER INJURY-STATE LESSON
 
 **Model:** PRISM — Player Role & Individual Situation Model
