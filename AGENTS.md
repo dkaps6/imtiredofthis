@@ -44,6 +44,43 @@ This principle is additive to the validated production stack. Do not kill or rew
 
 ---
 
+
+## PLAYER-STATE ANOMALY INVESTIGATION GATE — NON-NEGOTIABLE
+
+**Anomalies are questions, not trends.**
+
+Before any recent game, streak, split, or box-score sequence is allowed to become evidence of a named player's role, trajectory, efficiency, reliability, or market-specific expectation, explain materially abnormal observations first.
+
+A mandatory investigation is triggered by things such as:
+- abrupt stat/usage discontinuity versus the player's baseline or adjacent games;
+- zeroes or near-zeroes after normal production;
+- missed games / DNPs / inactive states;
+- sudden snap, route, carry, target or opportunity changes;
+- partial games / early exits;
+- return from injury;
+- quarterback, starter, coaching or teammate-context changes;
+- other obvious game-state/context discontinuities that could explain the observation.
+
+At minimum reconcile, when source-valid:
+- injury/practice/game designation and whether the player was limited;
+- active/inactive/DNP status;
+- snaps, routes, carries, targets and participation;
+- early exit / partial-game state;
+- QB/starter and meaningful teammate availability changes;
+- return-from-injury state;
+- relevant game environment when it plausibly caused the anomaly.
+
+Every abnormal observation should be state-labeled before it enters trajectory logic, e.g.:
+`HEALTHY_FULL`, `INJURY_LIMITED`, `PARTIAL_GAME`, `DNP_INACTIVE`, `RETURN_FROM_INJURY`, or `UNRESOLVED_CONTEXT`.
+
+Do **not** turn a contaminated observation into a recent-trend signal merely because it appears in a game log.
+
+If the cause cannot be resolved, fail closed: mark the player-state/trajectory inference uncertain and do not use that observation as affirmative evidence for a bet, model adjustment, or role-decline/role-growth claim.
+
+The required question is not only **"what happened?"** but **"why did this look different?"** before PRISM learns from it.
+
+---
+
 ## 0) Canonical production authority
 
 The only canonical production orchestration path is:
