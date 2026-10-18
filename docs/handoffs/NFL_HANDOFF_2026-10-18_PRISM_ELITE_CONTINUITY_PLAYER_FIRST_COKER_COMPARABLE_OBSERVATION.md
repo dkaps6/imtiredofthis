@@ -6,6 +6,110 @@ Repository: `dkaps6/imtiredofthis`
 
 Purpose: **This is the authoritative deep handoff for the next chat.** The next assistant must continue seamlessly, must not ask the user to re-teach the project, and must be materially better at enforcing the player-first assignment than the chat that produced this handoff.
 
+
+## FINAL LIVE UPDATE — COMPARABLE-OBSERVATION V1 EXECUTED AND CLOSED
+
+This supersedes any later section below that still describes the comparable-observation scorer as not yet executed.
+
+After the handoff draft was first written, the frozen experiment executed successfully:
+
+- run: `39161342922`;
+- exact head: `bcbeffa8dbebb869eadb004cde4a2032c417bf0f`;
+- job: `117775124356` — SUCCESS;
+- artifact: `12148837679`;
+- artifact name: `prism-comparable-observation-receiving-identity-v1-39161342922`;
+- digest: `sha256:ac6272b41632389d4a5d996cef53ff7aae539e4ada034287bfbed57171ba24be`;
+- disposition:
+  `PRISM_COMPARABLE_OBSERVATION_RECEIVING_OPPORTUNITY_IDENTITY_V1_CLOSED`.
+
+Primary object was the **affected named player**, not a pooled position score.
+
+2024:
+- affected target games: 362;
+- affected named players: 64;
+- equal-player improvement: -0.000428;
+- median named-player improvement: -0.000867;
+- improved / tied / worsened named players: 35.94% / 1.56% / 62.50%.
+
+2025 independent confirmation:
+- affected target games: 293;
+- affected named players: 62;
+- equal-player improvement: -0.000546;
+- median named-player improvement: -0.000483;
+- improved / tied / worsened named players: 35.48% / 0.00% / 64.52%;
+- player-bootstrap 95% CI: [-0.001321, +0.000259].
+
+The exact candidate therefore failed its frozen named-player gates.
+
+Also:
+- 596 abnormal target games were correctly excluded from ordinary-role scoring by the pre-frozen comparable-target gate;
+- no 2026 outcomes;
+- no sportsbook/OddsAPI;
+- no fitted coefficient;
+- no threshold search;
+- no production mutation.
+
+### What this closure means
+
+Close ONLY this exact action:
+
+> remove legally injury-corroborated partial-participation rows from ordinary current-season PlayerForm target-share identity and rebuild the existing PlayerForm blend.
+
+Do not rescue it with:
+- a different drop rule;
+- partial weights;
+- extrapolated full-game targets;
+- another anomaly threshold;
+- another current/prior blend;
+- position coefficients;
+- star/WR1/lead-player subsets;
+- recency tuning.
+
+### What this closure does NOT mean
+
+It does **not** mean:
+- injury context is irrelevant;
+- the Coker reasoning failure was acceptable;
+- partial games should be treated like healthy full games;
+- DNPs should be treated as zeroes;
+- PRISM may return to raw box-score trend reading.
+
+The permanent anomaly-investigation rule remains binding.
+
+The result says only that **this exact PlayerForm-history exclusion intervention is not a reliable general projection fix**.
+
+### Current branch state after execution
+
+Research branch:
+`bcbeffa8dbebb869eadb004cde4a2032c417bf0f`
+
+Commit:
+`Research: run comparable observation receiving identity`
+
+PR #672:
+- OPEN / DRAFT;
+- head `bcbeffa8dbebb869eadb004cde4a2032c417bf0f`.
+
+Run `39161342922` is **completed/success**, not running.
+
+### Exact next research boundary
+
+No successor predictive mechanism was frozen after this closure at the time of the handoff.
+
+Therefore the next chat must **not improvise a rescue** and must **not jump to QB passing TD**.
+
+The next research move is:
+
+1. reconcile whether the comparable-observation result document has been committed on the research branch;
+2. if absent, record the immutable result without changing the candidate;
+3. return to the core **CURRENT ROLE / STATE** layer and source-map one genuinely distinct named-player mechanism that explains current opportunity without simply deleting, reweighting or relabeling the same historical target-share rows;
+4. anti-retest all closed trajectory/history-exclusion/trust families before freezing anything;
+5. freeze source/chronology/action gates before outcome scoring.
+
+The user does not want another aggregate optimization exercise. Any next candidate must have a direct football explanation for why it changes **this named player's** projection.
+
+QB passing TD remains backlog-only unless the user explicitly changes the queue.
+
 ---
 
 ## 0. READ ORDER FOR THE NEXT CHAT
