@@ -123,53 +123,79 @@ Do not rescue with:
 - PlayerForm participation-state membership V2: SOURCE READY, run `39160972259`.
 - QB passing-TD source audit: SOURCE READY but backlog-only.
 
-### Current frozen source frontier
+### Current source-ready frontier
 
 Research branch at final handoff reconciliation:
 
-`42ff90db6202b783f7e97b73d0b3d629e9566bb3`
+`b20cd01038c2b4fcfbf6706aeec1d55f4a0f8974`
 
 Commit:
 
-`Research: freeze receiving opportunity exposure source`
+`Research: run receiving opportunity exposure source`
 
 Frozen plan:
 
 `docs/research/PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_PLAN.md`
 
+Freeze:
+
+`42ff90db6202b783f7e97b73d0b3d629e9566bb3`
+
+Authoritative source run:
+
+`39161711741` — SUCCESS
+
+Artifact:
+
+`12149181200`
+
+Digest:
+
+`sha256:6cae427b667db4a120a1308747d00b82b6770fe0adbc46d3efc68fce3e1db240`
+
 Disposition:
 
-`PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_FROZEN`
+`PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_READY`
 
-Core question:
+2024:
+- 5,895 player-games / 536 named players;
+- team-target, snap-count and snap-% coverage: 100%;
+- 1,696 zero-target positive-participation rows;
+- 125 injury-corroborated collapses;
+- 162 unresolved collapses.
 
-> Can PRISM source-validly pair the named player's exact weekly receiving opportunity with his exact offensive participation exposure, so later research can distinguish **played less** from **earned less while playing**?
+2025:
+- 5,864 player-games / 538 named players;
+- team-target, snap-count and snap-% coverage: 100%;
+- 1,621 zero-target positive-participation rows;
+- 132 injury-corroborated collapses;
+- 177 unresolved collapses.
 
-The source plan separates:
+The source now validly separates:
 - participation exposure = offensive snaps / offense_pct;
-- opportunity earning = targets conditional on that exposure.
+- opportunity earning = targets conditional on exposure.
 
 Critical semantic boundary:
 **offensive snaps are NOT routes.**
 
 ### Exact next action
 
-Execute the already-frozen **SOURCE AUDIT ONLY**.
+Do **not** rerun the source audit.
 
 Next chat must:
 
 1. reconcile live branch/head/PR/Actions;
-2. treat `42ff90db6202b783f7e97b73d0b3d629e9566bb3` as the last reconciled research head unless GitHub advanced;
-3. execute `PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_AUDIT` exactly as frozen;
-4. use the exact observation-state, participation-anomaly and PlayerForm authorities in the plan;
-5. scope named RB/WR/TE positive-participation rows in 2024/2025;
-6. preserve zero-target positive-participation rows;
-7. prove stable identity, team-target, snap-count and snap-percentage coverage under the frozen gates;
-8. keep targets-per-offensive-snap explicitly labeled as targets per offensive snap;
-9. never call snaps routes or imply route/YPRR/first-read semantics;
-10. score no predictive future-outcome relationship in this source audit;
-11. if SOURCE READY, freeze a separate named-player predictive mechanism before scoring;
-12. preserve finite team opportunity / teammate competition;
+2. treat `b20cd01038c2b4fcfbf6706aeec1d55f4a0f8974` as the last reconciled research head unless GitHub advanced;
+3. confirm whether a source result doc and/or predictive freeze landed after the handoff;
+4. if no predictive freeze exists, freeze one new named-player predictive mechanism **before scoring**;
+5. the question must be whether separately modeling this named player's expected participation exposure and his own target-earning intensity conditional on that exposure produces a more faithful next-game target projection;
+6. use strictly-prior named-player history;
+7. keep participation exposure and opportunity earning separate;
+8. preserve teammate competition / finite team targets;
+9. use no position coefficient as the player's identity;
+10. keep snaps explicitly labeled as snaps and never imply route/YPRR/first-read semantics;
+11. evaluate named players directly; family/position summaries are guardrails only;
+12. fit/tune nothing after observing outcomes;
 13. do not rescue the closed complete-deletion action.
 
 Do not:
