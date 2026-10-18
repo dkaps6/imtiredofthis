@@ -86,3 +86,25 @@ def test_metrics_compare_candidate_to_existing_trajectory_not_raw_parent():
     assert "original_target_mae" in m
     assert "candidate_target_mae" in m
     assert m["rows"] == 3
+
+
+def test_candidate_room_share_uses_combined_wr_te_parent_denominator():
+    rows = _rows()
+    te = pd.DataFrame([{
+        "season": 2024, "week": 5, "event_id": "AAA|BBB", "team": "AAA",
+        "player_clean_key": "tightend", "player": "Tight End", "is_wr1": False,
+        "position_group": "TE", "trajectory_delta": 0.0, "feature_max_week": 4,
+        "baseline_targets": 4.0, "baseline_ypt": 5.0,
+        "shadow_targets": 4.0, "actual_targets": 4.0, "actual_rec_yards": 20.0,
+        "shadow_rec_yards": 20.0, "shadow_room_share": 4.0/14.0,
+        "actual_room_share": 4.0/14.0,
+        "recent2_observation_contaminated": False,
+        "recent2_participation_certified": True,
+    }])
+    rows = pd.concat([rows, te], ignore_index=True)
+    out, _ = apply_candidate(rows)
+    assert np.allclose(
+        out["candidate_room_share"].to_numpy(float),
+        out["candidate_targets"].to_numpy(float) / 14.0,
+        atol=1e-12,
+    )
