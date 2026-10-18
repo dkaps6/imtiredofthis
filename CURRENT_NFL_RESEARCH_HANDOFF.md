@@ -1,5 +1,200 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — INDIVIDUAL-PLAYER RESET / COKER CAUSAL-STATE LESSON / RETURN-FROM-INJURY SOURCE READY
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-18_PRISM_ELITE_CONTINUITY_INDIVIDUAL_PLAYER_RETURN_STATE_FRONTIER.md`
+
+**Reusable next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-18_PRISM_INDIVIDUAL_PLAYER_RETURN_STATE_CONTINUE.md`
+
+### NON-NEGOTIABLE ASSIGNMENT
+
+PRISM is an **INDIVIDUAL-PLAYER projection model**.
+
+The named player in his actual current football situation is the primary scientific unit.
+
+**Position-level MAE/RMSE is NOT the objective.** It is only a downstream diagnostic/report card that should improve because individual player projections improve.
+
+Do not make the user explain this again.
+
+Permanent rule:
+
+> **The player should have the rules. The position should not have the player.**
+
+Required reasoning:
+
+`PLAYER IDENTITY/HISTORY -> CURRENT ROLE/STATE -> EXPLAIN ABNORMAL OBSERVATIONS -> TEAMMATE COMPETITION / FINITE OPPORTUNITY -> OPPORTUNITY TYPE/QUALITY -> OPPONENT/ENVIRONMENT -> EFFICIENCY -> MARKET-SPECIFIC OUTCOME -> RELIABILITY`
+
+### Permanent anomaly rule
+
+**ANOMALIES ARE QUESTIONS, NOT TRENDS.**
+
+Before an abnormal game becomes role/trajectory evidence, investigate why it happened:
+- injury/practice state;
+- active/DNP;
+- participation/snaps;
+- routes only if actual route data exist;
+- carries/targets/receptions;
+- early exit/partial game;
+- return from injury;
+- QB/starter/coaching changes;
+- teammate availability;
+- plausible game context.
+
+DNP is not zero performance.
+An injury-shortened game is not an ordinary full-game observation.
+If unresolved, fail closed as uncertain.
+
+### Permanent Jalen Coker case
+
+Do not interpret this as ordinary regression:
+
+- W1: 9 targets, 8-138-2;
+- W2: 9 targets, 8-66;
+- W3: 4 targets, 2-18, injury-affected / left and did not return;
+- W4: DNP;
+- W5: bye;
+- W6: 12 targets, 6-97.
+
+The prior chat/model produced roughly a 38-yard projection against roughly 55.5 and used regression reasoning. The user reported Coker had roughly 60 yards in the first half.
+
+The important failure was **causal player-state interpretation**, not an aggregate metric miss.
+
+### Queue governance
+
+- Sunday bets are **LOCKED/CLOSED** unless explicitly reopened.
+- No paid OddsAPI without explicit authorization.
+- Sportsbook is downstream only.
+- Do not switch research lanes on your own.
+- QB passing TD is **BACKLOG ONLY** unless explicitly promoted.
+- Preserve closed science and anti-retest rules.
+- Never weaken byte identity/parity/source gates.
+- Never claim a workflow is running unless live Actions says queued/in_progress.
+
+### Latest completed player-state lineage
+
+Preserve:
+- Observation Health-State V1: SOURCE READY.
+- Participation-Anomaly State V1: SOURCE READY.
+- PlayerForm Participation-State Bridge V1: SOURCE BLOCKED.
+- PlayerForm Participation-State Membership V2: SOURCE READY.
+- Comparable-Observation Receiving Opportunity Identity V1: CLOSED.
+- Receiving Opportunity Earning / Participation Exposure V1: SOURCE READY.
+- Injury-Partial Receiving Exposure Decomposition V1: CLOSED.
+- Return-from-Injury Role Restoration V1: **SOURCE READY**.
+
+Injury-Partial Receiving Exposure Decomposition V1:
+- freeze `653eb5e4e46a49f0b575c119259d2b11eb845380`;
+- run `39162113968` — SUCCESS;
+- disposition `PRISM_INJURY_PARTIAL_RECEIVING_EXPOSURE_DECOMPOSITION_V1_CLOSED`.
+
+Do not rescue via another snap multiplier/window/position coefficient/partial weighting or route claims from snap data.
+
+### Current latest frontier — Return-from-Injury Role Restoration V1
+
+Frozen source plan:
+
+`docs/research/PRISM_RETURN_FROM_INJURY_ROLE_RESTORATION_V1_SOURCE_PLAN.md`
+
+Source result:
+
+`docs/research/PRISM_RETURN_FROM_INJURY_ROLE_RESTORATION_V1_SOURCE_RESULT.md`
+
+Freeze:
+
+`3eafb971c0a842750fa5af31a77a8b17adf890b0`
+
+Canonical source run:
+
+`39162437467` — **SUCCESS**
+
+Exact source-run head:
+
+`4e5edc98c95f25800f6f66633443aa79379a2944`
+
+Job:
+
+`117778377817` — SUCCESS
+
+Artifact:
+
+`12149417234`
+
+Digest:
+
+`sha256:7d69111925b7ad48f16b07150f5e5fbfac5e592bd01430d03efd907ca778c51e`
+
+Result commit on research branch:
+
+`a69386569a441176254ecc559cc7264612e34c26`
+
+Disposition:
+
+`PRISM_RETURN_FROM_INJURY_ROLE_RESTORATION_V1_SOURCE_READY`
+
+2024:
+- 309 supported episodes / 240 named players;
+- restored 162 / 146 players;
+- still reduced 46 / 42;
+- no return 101 / 100.
+
+2025:
+- 342 supported episodes / 257 named players;
+- restored 187 / 154;
+- still reduced 44 / 38;
+- no return 111 / 111.
+
+This is player-state source evidence only.
+
+No target/carry/reception/yard/TD predictive relationship has been scored from the return state.
+
+### Exact next action
+
+1. Reconcile live main / research branch / PR #672 / exact-head Actions.
+2. Do **not** rerun the return-state source audit.
+3. Freeze ONE new player-first predictive return-state mechanism **before scoring**.
+4. Ask whether a named player with source-certified `RETURN_PARTICIPATION_RESTORED` behaves in his next current-role/opportunity state more like his own pre-injury role than like a continued-decline state.
+5. Primary unit = named player.
+6. Use strictly-prior player state.
+7. Preserve teammate competition and finite opportunity.
+8. Separate participation restoration from target earning.
+9. Separate target earning from efficiency.
+10. Do not convert restored participation directly into a yards multiplier.
+11. Use no position coefficient as the player’s identity.
+12. Snaps remain snaps; never call them routes.
+13. Do not reuse/rescue the closed simple exposure × target-intensity formula.
+14. Do not rescue the closed complete-deletion/reweighting family.
+15. Anti-retest and freeze formula/chronology/support/player-level gates/failure disposition before scoring.
+16. No 2026 outcomes for historical mechanism construction.
+17. No sportsbook/OddsAPI predictors.
+18. No paid OddsAPI.
+19. No production mutation.
+
+### Communication requirement
+
+Do not tell the user the project is trying to lower position MAE.
+
+Do not lead with position averages.
+
+Lead with:
+- the actual named player;
+- why his prior games looked the way they did;
+- his current state;
+- which prior observations are comparable;
+- what football mechanism changes his projection;
+- the exact market.
+
+Aggregate metrics are guardrails only.
+
+The user should not have to teach this again.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-18 — PLAYER-FIRST RESET / COKER LESSON / COMPARABLE-OBSERVATION V1 CLOSED
 
 **Model:** PRISM — Player Role & Individual Situation Model
