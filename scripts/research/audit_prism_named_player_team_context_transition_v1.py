@@ -44,10 +44,12 @@ def json_default(value):
 def pdx(v) -> pd.DataFrame:
     if isinstance(v, pd.DataFrame):
         return v.copy()
-    if hasattr(v, "to_pandas"):
-        return v.to_pandas()
+    # Prefer record conversion for Polars-like frames. This preserves the
+    # frozen source semantics without requiring pyarrow solely for a bridge.
     if hasattr(v, "to_dicts"):
         return pd.DataFrame(v.to_dicts())
+    if hasattr(v, "to_pandas"):
+        return v.to_pandas()
     return pd.DataFrame(v)
 
 
