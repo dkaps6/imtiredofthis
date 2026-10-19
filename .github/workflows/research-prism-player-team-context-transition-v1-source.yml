@@ -1,0 +1,174 @@
+name: Research PRISM Player Team Context Transition V1 Source
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_PLAYER_TEAM_CONTEXT_TRANSITION_V1_SOURCE_PLAN.md'
+      - 'scripts/research/audit_prism_player_team_context_transition_v1.py'
+      - 'tests/test_prism_player_team_context_transition_v1.py'
+      - '.github/workflows/research-prism-player-team-context-transition-v1-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "bd254ec9435cd0a17e2c7d82d78532e67c2cd23e"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest pyyaml nflreadpy
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_PLAYER_TEAM_CONTEXT_TRANSITION_V1_SOURCE_PLAN.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/audit_prism_player_team_context_transition_v1.py" 2>/dev/null; then
+            echo "ERROR: implementation existed at canonical freeze"
+            exit 1
+          fi
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_player_team_context_transition_v1.py
+          pytest -q tests/test_prism_player_team_context_transition_v1.py
+
+      - name: Execute frozen source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/prism-player-team-context
+          mkdir -p /tmp/prism-player-team-context/out
+          python scripts/research/audit_prism_player_team_context_transition_v1.py             --out-dir /tmp/prism-player-team-context/out
+
+      - name: Certify source-only contract
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+
+          base='/tmp/prism-player-team-context/out'
+          p=json.load(open(f'{base}/player_team_context_source_result.json'))
+          states=pd.read_csv(f'{base}/player_team_context_states.csv')
+          transitions=pd.read_csv(f'{base}/player_team_context_transition_events.csv')
+
+          assert p['version']=='PRISM_PLAYER_TEAM_CONTEXT_TRANSITION_V1_SOURCE_AUDIT',p
+          assert p['freeze_commit']=='bd254ec9435cd0a17e2c7d82d78532e67c2cd23e',p
+          assert p['disposition'] in {
+              'PRISM_PLAYER_TEAM_CONTEXT_TRANSITION_V1_SOURCE_READY',
+              'PRISM_PLAYER_TEAM_CONTEXT_TRANSITION_V1_SOURCE_BLOCKED',
+          },p
+
+          assert set(states['team_context_state'].astype(str).unique()) <= {
+              'TEAM_CONTEXT_NO_PRIOR_ROSTER',
+              'TEAM_CONTEXT_CONTINUED',
+              'TEAM_CONTEXT_CHANGED',
+          }
+          if len(transitions):
+              assert transitions['stable_id'].astype(str).str.len().gt(0).all()
+              assert transitions['previous_rostered_team'].astype(str).ne(
+                  transitions['team'].astype(str)
+              ).all()
+              assert pd.to_numeric(
+                  transitions['previous_roster_ordinal'],errors='coerce'
+              ).lt(pd.to_numeric(transitions['ordinal'],errors='coerce')).all()
+              assert transitions['transition_kind'].isin({
+                  'OFFSEASON_TEAM_CHANGE','INSEASON_TEAM_CHANGE'
+              }).all()
+              assert transitions['same_family_competitor_stable_ids'].astype(str).str.startswith('[').all()
+
+          assert p['player_transition_outcomes_scored']==0,p
+          assert p['player_opportunity_relationships_scored']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['paid_oddsapi_calls']==0,p
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 source result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+          p=json.load(open('/tmp/prism-player-team-context/out/player_team_context_source_result.json'))
+          print("### PRISM player team-context transition V1 — canonical source audit")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          for s in p['historical_seasons']:
+              print()
+              print(f"**{s['season']} named-player source support**")
+              print(f"- admitted player-weeks={s['admitted_player_weeks']}; players={s['distinct_named_players']}")
+              print(f"- scheduled team-week roster coverage={s['scheduled_team_week_roster_coverage']:.2%}; stable ID={s['stable_id_coverage']:.2%}")
+              print(f"- transitions={s['transition_events']}; named players={s['transition_named_players']}; offseason/in-season={s['offseason_transition_events']}/{s['inseason_transition_events']}")
+              print(f"- prior-team >=4={s['prior_team_ge4_events']} ({s['prior_team_ge4_share']:.2%}); >=8={s['prior_team_ge8_events']} ({s['prior_team_ge8_share']:.2%})")
+              print(f"- competitor metadata coverage={s['competitor_metadata_coverage']:.2%}")
+              for f in s['family_summary']:
+                  print(f"  - {f['family']}: events={f['transition_events']} players={f['transition_named_players']} prior>=4={f['prior_team_ge4_share']:.2%} prior>=8={f['prior_team_ge8_share']:.2%}")
+              failed=[k for k,v in s['gates'].items() if not v]
+              print(f"- failed historical source gates: {failed or ['NONE']}")
+
+          q=p['prospective_2026']
+          print()
+          print("**2026 prospective parity**")
+          print(f"- latest complete observed roster week={q['latest_complete_observed_roster_week']}; coverage={q['latest_complete_week_coverage']:.2%}")
+          print(f"- stable ID coverage={q['stable_id_coverage']:.2%}")
+          print(f"- transitions={q['transition_events']}; players={q['transition_named_players']}; offseason/in-season={q['offseason_transition_events']}/{q['inseason_transition_events']}")
+          failed=[k for k,v in q['gates'].items() if not v]
+          print(f"- failed parity gates: {failed or ['NONE']}")
+          print()
+          print(f"- ambiguous multi-team player-weeks={p['state_audit']['ambiguous_multi_team_player_weeks']}")
+          print(f"- chronology violations={p['state_audit']['chronology_violations']}; skipped-prior violations={p['state_audit']['skipped_previous_roster_violations']}")
+          failed=[k for k,v in p['integrity_gates'].items() if not v]
+          print(f"- failed integrity gates: {failed or ['NONE']}")
+          print()
+          print("Source/lineage only. A team change is a named-player current-context boundary, not a boost or penalty. Competition metadata is descriptive only. No target-game snaps, targets, carries, receptions, yards, TDs, 2026 outcomes, sportsbook/OddsAPI, fitted coefficients/thresholds, or production mutation.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable source result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-player-team-context-transition-v1-source-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-player-team-context/out/**
