@@ -43,10 +43,10 @@ def json_default(v):
 def pdx(v):
     if isinstance(v, pd.DataFrame):
         return v.copy()
-    if hasattr(v, "to_pandas"):
-        return v.to_pandas()
     if hasattr(v, "to_dicts"):
         return pd.DataFrame(v.to_dicts())
+    if hasattr(v, "to_pandas"):
+        return v.to_pandas()
     return pd.DataFrame(v)
 
 
