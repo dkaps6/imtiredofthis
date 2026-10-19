@@ -19,7 +19,7 @@ permissions:
 env:
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  FREEZE_COMMIT: "3a2a51e5412ad83265700dbf088e2425bae359c3"
+  FREEZE_COMMIT: "930907dd91c1b4139f2aa6be52db23a730c7a96b"
 
 jobs:
   source-audit:
@@ -68,6 +68,11 @@ jobs:
                   'prism-receiving-opportunity-earning-participation-exposure-v1-source-39161711741',
                   'sha256:6cae427b667db4a120a1308747d00b82b6770fe0adbc46d3efc68fce3e1db240',
               ),
+              39154145666: (
+                  12146625382,
+                  'prism-player-observation-health-state-v1-source-39154145666',
+                  'sha256:d74f2d3c37a88aa639527aedf719e7e08001d464c722613b46291cda0f74cbeb',
+              ),
           }
           repo = os.environ['GITHUB_REPOSITORY']
           for run, (aid, name, digest) in expected.items():
@@ -89,14 +94,17 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf /tmp/prism-return-receiving-source
-          mkdir -p /tmp/prism-return-receiving-source/{return_parent,receiving_parent,out}
+          mkdir -p /tmp/prism-return-receiving-source/{return_parent,receiving_parent,health_parent,out}
 
           gh run download 39162437467 --repo "${{ github.repository }}"             --name prism-return-from-injury-role-restoration-v1-source-39162437467             --dir /tmp/prism-return-receiving-source/return_parent
 
           gh run download 39161711741 --repo "${{ github.repository }}"             --name prism-receiving-opportunity-earning-participation-exposure-v1-source-39161711741             --dir /tmp/prism-return-receiving-source/receiving_parent
 
+          gh run download 39154145666 --repo "${{ github.repository }}"             --name prism-player-observation-health-state-v1-source-39154145666             --dir /tmp/prism-return-receiving-source/health_parent
+
           test -s /tmp/prism-return-receiving-source/return_parent/return_from_injury_role_restoration_episodes.csv
           test -s /tmp/prism-return-receiving-source/receiving_parent/receiving_opportunity_earning_participation_exposure_rows.csv
+          test -s /tmp/prism-return-receiving-source/health_parent/player_observation_health_state_rows.csv
 
       - name: Compile and run focused tests
         env:
@@ -109,7 +117,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/research/audit_prism_return_state_receiving_opportunity_v1.py             --episodes /tmp/prism-return-receiving-source/return_parent/return_from_injury_role_restoration_episodes.csv             --receiving /tmp/prism-return-receiving-source/receiving_parent/receiving_opportunity_earning_participation_exposure_rows.csv             --out-dir /tmp/prism-return-receiving-source/out
+          python scripts/research/audit_prism_return_state_receiving_opportunity_v1.py             --episodes /tmp/prism-return-receiving-source/return_parent/return_from_injury_role_restoration_episodes.csv             --receiving /tmp/prism-return-receiving-source/receiving_parent/receiving_opportunity_earning_participation_exposure_rows.csv             --health /tmp/prism-return-receiving-source/health_parent/player_observation_health_state_rows.csv             --out-dir /tmp/prism-return-receiving-source/out
 
       - name: Certify source-only contract
         run: |
@@ -124,11 +132,13 @@ jobs:
           fin=pd.read_csv(f'{base}/return_state_receiving_opportunity_finite_team_audit.csv')
 
           assert p['version']=='PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_AUDIT',p
-          assert p['freeze_commit']=='3a2a51e5412ad83265700dbf088e2425bae359c3',p
+          assert p['freeze_commit']=='930907dd91c1b4139f2aa6be52db23a730c7a96b',p
           assert p['return_parent_run']==39162437467,p
           assert p['return_parent_artifact']==12149417234,p
           assert p['receiving_parent_run']==39161711741,p
           assert p['receiving_parent_artifact']==12149181200,p
+          assert p['health_parent_run']==39154145666,p
+          assert p['health_parent_artifact']==12146625382,p
           assert p['disposition'] in {
               'PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_READY',
               'PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_BLOCKED',
