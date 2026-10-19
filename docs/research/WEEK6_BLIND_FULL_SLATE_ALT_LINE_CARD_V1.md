@@ -19,12 +19,55 @@ chat memory.
 - pricing provenance `PRESERVED_REPLAY`, `odds_api_refetched=false`
 - sportsbook snapshot frozen `2026-10-15T19:11:06Z`
 - screen: `scripts/operations/build_alt_line_candidate_pool_v1.py`
-- screen run: `39294938759` (26 gate tests green)
+- screen run: `39297764305` (29 gate tests green)
 
-Board 2,528 rows -> 408 kept -> 222 after book dedupe. Gate accounting
+Board 2,528 rows -> 396 kept -> 215 after book dedupe. Gate accounting
 reconciles exactly: 1,274 market_not_eligible, 627 non_positive_edge, 81
-insufficient_player_evidence, 79 degenerate_low_line, 48 rb_rush_under_cluster,
-7 not_a_playable_role, 4 gadget_market, + 408 kept = 2,528.
+insufficient_player_evidence, 70 degenerate_low_line, 48 rb_rush_under_cluster,
+28 not_a_playable_role, 4 gadget_market, + 396 kept = 2,528.
+
+## Correction, 2026-10-19 (pre-grading)
+
+The first version of this card listed Calvin Ridley as TEN's WR1. He is
+model_role WR4 on an 11.7% target share. The user caught it on the output; the
+gate did not.
+
+Two distinct role-semantics defects were behind it, failing in opposite
+directions by position.
+
+**Receivers, backs, tight ends.** Ourlads' WR1/WR2/WR3 name the alignment --
+LWR, SWR, RWR -- and depth_index marks starter against backup within a slot.
+player_form carries that label through as `depth_role` while computing the real
+usage hierarchy into `model_role`. The screen gated on `depth_role`, and since
+every rostered receiver has an alignment label in WR1-WR3, it admitted whole
+rooms: it rejected 7 rows out of 2,528, a number implausible enough that it
+should have been the tell. TEN shows the inversion both ways -- Ridley reads
+depth_role=WR1 at rank WR4, while the room's actual WR1 is Carnell Tate, who
+reads depth_role=WR3 because he lines up at RWR.
+
+**Quarterbacks.** Gating on `model_role` instead then dropped Cam Ward, TEN's
+starter with 22 games, because `model_role` ranks quarterbacks by descending
+`ypa`. In all three rooms where the fields disagree the model_role order is
+exactly the ypa order: TEN reads Trubisky QB1 on 8.94 over four games ahead of
+Ward on 5.82 over 22; CHI reads Bagent QB1 on 9.45 over five games ahead of
+Caleb Williams on 7.09 over 19; IND inverts Richardson and Leonard. Six of 37
+quarterback rows carry the swap, and JAX, KC and DEN hide it only because their
+ypa order happens to match their depth order.
+
+So rank is now read per position: `model_role` for RB/WR/TE, `depth_role` for
+QB, where a single-alignment position makes the depth label a true order. That
+raised `not_a_playable_role` from 7 rejections to 28.
+
+Three legs changed as a result:
+
+| was | now | why |
+|---|---|---|
+| Calvin Ridley 10+/30+ rec (WR4, tgt 11.7%) | Wan'Dale Robinson 20+/60+ rec (WR2, tgt 24.9%) | Ridley is the fourth target and the second body at LWR |
+| Kendre Miller 20+/50+ rush (RB2, rush 29.1%) | Alvin Kamara 15+/40+ rush (RB1, rush 39.0%) | same inversion in NO's backfield: Kamara is model RB1 carrying depth_role RB2 |
+| Cam Ward dropped by the model_role gate | Cam Ward 200+ pass restored | he is the certified starter; the ypa rank was wrong |
+
+This is a defect in `player_form` worth fixing upstream. The screen only stops
+it reaching a ticket.
 
 ## Stated limitation, declared before grading
 
@@ -64,44 +107,44 @@ All legs are OVER / + yardage, because FanDuel posts alt ladders only for +
 yardages and the method's whole purpose is buying cushion. `P` is from the
 model mean and sd; see the calibration caveat below.
 
-### SAFE — 3 legs, P 0.651
+### SAFE — 3 legs, P 0.668
 
-| player | role | leg | model | cushion | P | game |
-|---|---|---|---|---|---|---|
-| Omarion Hampton | RB1 | 20+ rush yds | 39.8 | +19.8 | 0.882 | KC-LAC |
-| Kendre Miller | RB1 | 20+ rush yds | 42.6 | +22.6 | 0.873 | NO-NYG |
-| Dalton Schultz | TE1 | 20+ rec yds | 40.0 | +20.0 | 0.845 | HOU-JAX |
+| player | rank | usage | leg | model | cushion | P | game |
+|---|---|---|---|---|---|---|---|
+| Alvin Kamara | RB1 | rush 39.0% | 15+ rush yds | 31.0 | +16.0 | 0.896 | NO-NYG |
+| Omarion Hampton | RB1 | rush 50.5% | 20+ rush yds | 39.8 | +19.8 | 0.882 | KC-LAC |
+| Dalton Schultz | TE1 | tgt 18.6% | 20+ rec yds | 40.0 | +20.0 | 0.845 | HOU-JAX |
 
-### MODERATE — 4 legs, P 0.389
+### MODERATE — 4 legs, P 0.450
 
-| player | role | leg | model | cushion | P | game |
-|---|---|---|---|---|---|---|
-| Cooper Kupp | WR2 | 10+ rec yds | 28.1 | +18.1 | 0.855 | DEN-SEA |
-| Kyle Pitts | TE1 | 20+ rec yds | 34.6 | +14.6 | 0.798 | ATL-CHI |
-| Calvin Ridley | WR1 | 10+ rec yds | 21.8 | +11.8 | 0.777 | IND-TEN |
-| Bucky Irving | RB1 | 10+ rec yds | 17.5 | +7.5 | 0.734 | PIT-TB |
+| player | rank | usage | leg | model | cushion | P | game |
+|---|---|---|---|---|---|---|---|
+| Wan'Dale Robinson | WR2 | tgt 24.9% | 20+ rec yds | 46.8 | +26.8 | 0.899 | IND-TEN |
+| Cooper Kupp | WR3 | tgt 13.1% | 10+ rec yds | 28.1 | +18.1 | 0.855 | DEN-SEA |
+| Kyle Pitts | TE1 | tgt 16.7% | 20+ rec yds | 34.6 | +14.6 | 0.798 | ATL-CHI |
+| Bucky Irving | RB1 | rush 57.8% | 10+ rec yds | 17.5 | +7.5 | 0.734 | PIT-TB |
 
 ### HIGH — 5 legs, P 0.152
 
-| player | role | leg | model | cushion | P | game |
-|---|---|---|---|---|---|---|
-| Omarion Hampton | RB1 | 30+ rush yds | 39.8 | +9.8 | 0.721 | KC-LAC |
-| Trevor Lawrence | QB1 | 225+ pass yds | 256.3 | +31.3 | 0.691 | HOU-JAX |
-| Cade Otton | TE1 | 30+ rec yds | 39.4 | +9.4 | 0.691 | PIT-TB |
-| Cam Ward | QB1 | 200+ pass yds | 225.2 | +25.2 | 0.671 | IND-TEN |
-| Rome Odunze | WR1 | 40+ rec yds | 49.0 | +9.0 | 0.658 | ATL-CHI |
+| player | rank | usage | leg | model | cushion | P | game |
+|---|---|---|---|---|---|---|---|
+| Omarion Hampton | RB1 | rush 50.5% | 30+ rush yds | 39.8 | +9.8 | 0.721 | KC-LAC |
+| Trevor Lawrence | QB1 | starter | 225+ pass yds | 256.3 | +31.3 | 0.691 | HOU-JAX |
+| Cade Otton | TE1 | tgt 17.8% | 30+ rec yds | 39.4 | +9.4 | 0.691 | PIT-TB |
+| Cam Ward | QB1 | starter | 200+ pass yds | 225.2 | +25.2 | 0.671 | IND-TEN |
+| Rome Odunze | WR1 | tgt 20.5% | 40+ rec yds | 49.0 | +9.0 | 0.658 | ATL-CHI |
 
 Both QB legs carry the promoted M89/M90 synthesis with
 `model_proj == qb_synthesis_proj`.
 
-### LOTTERY — 4 legs, P 0.012
+### LOTTERY — 4 legs, P 0.007
 
-| player | role | leg | model | cushion | P | game |
+| player | rank | leg | model | cushion | P | game |
 |---|---|---|---|---|---|---|
 | Kyle Pitts | TE1 | 40+ rec yds | 34.6 | -5.4 | 0.379 | ATL-CHI |
-| Kendre Miller | RB1 | 50+ rush yds | 42.6 | -7.4 | 0.354 | NO-NYG |
 | Dalton Schultz | TE1 | 50+ rec yds | 40.0 | -10.0 | 0.306 | HOU-JAX |
-| Calvin Ridley | WR1 | 30+ rec yds | 21.8 | -8.2 | 0.298 | IND-TEN |
+| Wan'Dale Robinson | WR2 | 60+ rec yds | 46.8 | -13.2 | 0.265 | IND-TEN |
+| Alvin Kamara | RB1 | 40+ rush yds | 31.0 | -9.0 | 0.239 | NO-NYG |
 
 Probability shrinks through threshold distance on already-qualified players,
 not by adding longshots. No player appears on more than two tickets; every
