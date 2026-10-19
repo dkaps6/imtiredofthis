@@ -1,0 +1,207 @@
+name: Research PRISM Return State Receiving Opportunity V1 Source
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_PLAN.md'
+      - 'scripts/research/audit_prism_return_state_receiving_opportunity_v1.py'
+      - 'tests/test_prism_return_state_receiving_opportunity_v1.py'
+      - '.github/workflows/research-prism-return-state-receiving-opportunity-v1-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "3a2a51e5412ad83265700dbf088e2425bae359c3"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_PLAN.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/audit_prism_return_state_receiving_opportunity_v1.py" 2>/dev/null; then
+            echo "ERROR: source implementation existed at freeze"
+            exit 1
+          fi
+
+      - name: Verify immutable source parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+
+          expected = {
+              39162437467: (
+                  12149417234,
+                  'prism-return-from-injury-role-restoration-v1-source-39162437467',
+                  'sha256:7d69111925b7ad48f16b07150f5e5fbfac5e592bd01430d03efd907ca778c51e',
+              ),
+              39161711741: (
+                  12149181200,
+                  'prism-receiving-opportunity-earning-participation-exposure-v1-source-39161711741',
+                  'sha256:6cae427b667db4a120a1308747d00b82b6770fe0adbc46d3efc68fce3e1db240',
+              ),
+          }
+          repo = os.environ['GITHUB_REPOSITORY']
+          for run, (aid, name, digest) in expected.items():
+              payload = json.loads(subprocess.check_output(
+                  ['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts']
+              ))
+              arts = {int(a['id']): a for a in payload.get('artifacts', [])}
+              a = arts.get(aid)
+              assert a is not None, (run, aid)
+              assert not a.get('expired'), a
+              assert a.get('name') == name, a
+              assert a.get('digest') == digest, a
+              print('PARENT_VERIFIED', run, aid, name, digest)
+          PY
+
+      - name: Download immutable source parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-return-receiving-source
+          mkdir -p /tmp/prism-return-receiving-source/{return_parent,receiving_parent,out}
+
+          gh run download 39162437467 --repo "${{ github.repository }}"             --name prism-return-from-injury-role-restoration-v1-source-39162437467             --dir /tmp/prism-return-receiving-source/return_parent
+
+          gh run download 39161711741 --repo "${{ github.repository }}"             --name prism-receiving-opportunity-earning-participation-exposure-v1-source-39161711741             --dir /tmp/prism-return-receiving-source/receiving_parent
+
+          test -s /tmp/prism-return-receiving-source/return_parent/return_from_injury_role_restoration_episodes.csv
+          test -s /tmp/prism-return-receiving-source/receiving_parent/receiving_opportunity_earning_participation_exposure_rows.csv
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_return_state_receiving_opportunity_v1.py
+          pytest -q tests/test_prism_return_state_receiving_opportunity_v1.py
+
+      - name: Execute frozen source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/audit_prism_return_state_receiving_opportunity_v1.py             --episodes /tmp/prism-return-receiving-source/return_parent/return_from_injury_role_restoration_episodes.csv             --receiving /tmp/prism-return-receiving-source/receiving_parent/receiving_opportunity_earning_participation_exposure_rows.csv             --out-dir /tmp/prism-return-receiving-source/out
+
+      - name: Certify source-only contract
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+
+          base='/tmp/prism-return-receiving-source/out'
+          p=json.load(open(f'{base}/return_state_receiving_opportunity_source_result.json'))
+          mem=pd.read_csv(f'{base}/return_state_receiving_opportunity_membership.csv')
+          pri=pd.read_csv(f'{base}/return_state_receiving_opportunity_prior_rows.csv')
+          fin=pd.read_csv(f'{base}/return_state_receiving_opportunity_finite_team_audit.csv')
+
+          assert p['version']=='PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_AUDIT',p
+          assert p['freeze_commit']=='3a2a51e5412ad83265700dbf088e2425bae359c3',p
+          assert p['return_parent_run']==39162437467,p
+          assert p['return_parent_artifact']==12149417234,p
+          assert p['receiving_parent_run']==39161711741,p
+          assert p['receiving_parent_artifact']==12149181200,p
+          assert p['disposition'] in {
+              'PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_READY',
+              'PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_BLOCKED',
+          },p
+
+          assert len(mem)>0
+          assert mem['stable_id'].astype(str).str.len().gt(0).all()
+          assert (mem['return_week'] > mem['episode_start_week']).all()
+          if len(pri):
+              assert (pri['prior_week'] < pri['episode_start_week']).all()
+          assert len(fin)>0
+
+          assert p['predictive_target_relationships_scored']==0,p
+          assert p['target_restoration_labels_created']==0,p
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['routes_inferred_from_snaps'] is False,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 source result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+
+          p=json.load(open('/tmp/prism-return-receiving-source/out/return_state_receiving_opportunity_source_result.json'))
+          print("### PRISM return-state receiving opportunity V1 — source audit")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          print()
+          for s in p['season_summaries']:
+              print(f"**{s['season']} source support**")
+              print(f"- restored episodes={s['restored_episodes']}; named players={s['restored_named_players']}")
+              print(f"- prior support={s['prior_support_episodes']} ({s['prior_support_share']:.2%})")
+              print(f"- exact return row={s['exact_return_row_episodes']} ({s['exact_return_row_coverage']:.2%})")
+              print(f"- immediate next observed={s['immediate_next_observation_episodes']} ({s['immediate_next_observation_coverage']:.2%}); clean={s['immediate_next_clean_episodes']}")
+              print(f"- immediate next states={s['immediate_next_state_counts']}")
+              print(f"- represented finite team-weeks={s['represented_team_weeks']}")
+              for fam in s['family_summary']:
+                  print(f"  - {fam['family']}: restored={fam['restored_episodes']} players={fam['named_players']} prior-support={fam['prior_support_episodes']} return-valid={fam['return_valid_episodes']} next={fam['immediate_next_present']} clean-next={fam['immediate_next_clean']}")
+              failed=[k for k,v in s['gates'].items() if not v]
+              print(f"- failed source gates: {failed or ['NONE']}")
+              print()
+          failed_integrity=[k for k,v in p['integrity_gates'].items() if not v]
+          print(f"- failed integrity gates: {failed_integrity or ['NONE']}")
+          print(f"- finite-opportunity audit: {p['finite_opportunity_audit']}")
+          print()
+          print("Source/lineage only. Exact named-player targets and finite team target volume were mapped around restored-return episodes, but no target-restoration relationship was scored. Missing PlayerForm rows were not converted to zero-target evidence. Snaps are not routes. No 2026 outcomes, sportsbook/OddsAPI, fitted coefficients/thresholds, or production mutation.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable source result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-return-state-receiving-opportunity-v1-source-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-return-receiving-source/out/**
