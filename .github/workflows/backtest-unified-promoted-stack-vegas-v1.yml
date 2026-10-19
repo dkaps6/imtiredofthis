@@ -198,7 +198,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unified-promoted-stack-authority-exact-vegas-v1
-          retention-days: 14
+          retention-days: 90
           path: |
             /tmp/authority_exact/parity/authority_parity_audit.csv
             /tmp/authority_exact/parity/football_metric_summary.csv

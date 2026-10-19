@@ -61,4 +61,4 @@ jobs:
           name: rb-pd2-fresh-source-revalidation-v1
           path: evidence/rb_pd2_fresh_result/**
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90

@@ -160,6 +160,39 @@ Protect these schemas/meanings unless a migration explicitly versions them:
 
 Do not silently rename/drop required columns. Add explicit versioned migrations when semantics change.
 
+### 5a) Artifact durability — an artifact is transport, not storage
+
+GitHub Actions artifacts expire. For a public repository the maximum
+`retention-days` is **90**; there is no value that means "keep forever". Every
+upload in this repository is therefore pinned at 90, but that is a ceiling, not
+a solution.
+
+**Anything that must survive the season belongs in git.** A result that only
+exists as an artifact is a result with an expiry date on it.
+
+This is not hypothetical. The Weeks 3-5 2026 priced boards are **permanently
+lost**: `full-slate.yml` uploaded them with `retention-days: 7` while a
+research capture in the same job used 90, and the durable archive was not
+added until after those artifacts had already expired. Those slates can never
+be graded at row level again, and the sportsbook lines in them came from a
+one-time paid OddsAPI acquisition that cannot be refetched at any price.
+
+Rules:
+
+- a workflow that produces a result worth citing later must **commit** that
+  result, not merely upload it;
+- paid sportsbook boundaries (`outputs/props_raw.csv`, `outputs/odds_game.csv`,
+  `outputs/props_priced_clean.csv`) are unrepeatable and must be archived to
+  `data/market_track_record/` on every live-odds run;
+- research conclusions belong in `docs/research/` with the supporting rows in
+  `data/`, so a future season can reuse the finding without re-running the
+  study;
+- cite a run id for provenance, never as the place the evidence lives.
+
+If an output is genuinely too large to commit, say so explicitly in the
+handoff and record what regenerating it would cost. Do not leave the decision
+implicit in a retention setting.
+
 ---
 
 ## 6) Current Full Slate usage

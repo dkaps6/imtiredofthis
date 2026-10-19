@@ -98,4 +98,4 @@ jobs:
             /tmp/game_script/result/*.csv
             docs/research/MARKET_IMPLIED_GAME_SCRIPT_V1_PLAN.md
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90

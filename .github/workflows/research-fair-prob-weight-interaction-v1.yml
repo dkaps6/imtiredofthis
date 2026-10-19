@@ -101,4 +101,4 @@ jobs:
           name: fair-prob-weight-interaction-v1
           path: /tmp/interaction/out/*.csv
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90

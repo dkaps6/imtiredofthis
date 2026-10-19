@@ -232,4 +232,4 @@ jobs:
             outputs/props_pricing_offers.csv
             outputs/props_priced_clean.csv
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 90

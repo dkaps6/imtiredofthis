@@ -126,6 +126,6 @@ jobs:
         with:
           name: wr-room-regime-instability-audit-v1
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
           path: |
             /tmp/wr_regime/result/**
