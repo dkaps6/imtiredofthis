@@ -1,0 +1,214 @@
+name: Research PRISM RB Team Context Carry Count Identity Bridge V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_RB_TEAM_CONTEXT_CARRY_COUNT_IDENTITY_BRIDGE_V1_FREEZE.md'
+      - 'scripts/research/audit_prism_rb_team_context_carry_count_identity_bridge_v1.py'
+      - 'tests/test_prism_rb_team_context_carry_count_identity_bridge_v1.py'
+      - '.github/workflows/research-prism-rb-team-context-carry-count-identity-bridge-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "df01aa02659b3bd96ab9e215d939088a5925a576"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml 'pyarrow==18.1.0'
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_RB_TEAM_CONTEXT_CARRY_COUNT_IDENTITY_BRIDGE_V1_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/audit_prism_rb_team_context_carry_count_identity_bridge_v1.py" 2>/dev/null; then
+            echo "ERROR: source auditor existed at freeze"
+            exit 1
+          fi
+
+      - name: Verify immutable parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12156204035 --jq '.workflow_run.id')" = "39182076127"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12156204035 --jq '.digest')" = "sha256:abc2a5b9d3ea2a4d683e56626ea2d33495fa1e7cad2c36c56c01071ccc0339c8"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070806828 --jq '.workflow_run.id')" = "38955368643"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070806828 --jq '.digest')" = "sha256:e91a108495d7a2b6eb289e0618ab6af09e3d6cdf6895e534742a07340e4a2a83"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12044155086 --jq '.workflow_run.id')" = "38895205962"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12044155086 --jq '.digest')" = "sha256:a42322579aee682497223c7f53bce0b14a96dc6f466558e811770e681a035dad"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-player-team-context-transition-v1-source-39182076127
+          path: /tmp/team-context
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39182076127
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-participation-source-v1-38895205962
+          path: /tmp/stage1-source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38895205962
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-conditional-allocation-source-v1-38955368643
+          path: /tmp/stage2-source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38955368643
+
+      - name: Resolve immutable source files
+        run: |
+          set -euo pipefail
+          TEAM_CONTEXT_EVENTS="$(find /tmp/team-context -type f -name 'player_team_context_transition_events.csv' -print -quit)"
+          TEAM_CONTEXT_RESULT="$(find /tmp/team-context -type f -name 'player_team_context_source_result.json' -print -quit)"
+          STAGE1_UNIVERSE="$(find /tmp/stage1-source -type f -name 'player_active_role_pregame_universe.csv' -print -quit)"
+          STAGE2_DETAIL="$(find /tmp/stage2-source -type f -name 'active_role_conditional_allocation_source_join_detail.csv' -print -quit)"
+          test -n "$TEAM_CONTEXT_EVENTS" && test -s "$TEAM_CONTEXT_EVENTS"
+          test -n "$TEAM_CONTEXT_RESULT" && test -s "$TEAM_CONTEXT_RESULT"
+          test -n "$STAGE1_UNIVERSE" && test -s "$STAGE1_UNIVERSE"
+          test -n "$STAGE2_DETAIL" && test -s "$STAGE2_DETAIL"
+          echo "TEAM_CONTEXT_EVENTS=$TEAM_CONTEXT_EVENTS" >> "$GITHUB_ENV"
+          echo "TEAM_CONTEXT_RESULT=$TEAM_CONTEXT_RESULT" >> "$GITHUB_ENV"
+          echo "STAGE1_UNIVERSE=$STAGE1_UNIVERSE" >> "$GITHUB_ENV"
+          echo "STAGE2_DETAIL=$STAGE2_DETAIL" >> "$GITHUB_ENV"
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_rb_team_context_carry_count_identity_bridge_v1.py
+          pytest -q tests/test_prism_rb_team_context_carry_count_identity_bridge_v1.py
+
+      - name: Execute frozen source-only identity audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/rb-count-identity-bridge
+          mkdir -p /tmp/rb-count-identity-bridge/out
+          python scripts/research/audit_prism_rb_team_context_carry_count_identity_bridge_v1.py \
+            --team-context-events "$TEAM_CONTEXT_EVENTS" \
+            --team-context-result "$TEAM_CONTEXT_RESULT" \
+            --stage1-universe "$STAGE1_UNIVERSE" \
+            --stage2-detail "$STAGE2_DETAIL" \
+            --out-dir /tmp/rb-count-identity-bridge/out
+
+      - name: Certify source-only contract
+        run: |
+          python - <<'PY'
+          import json
+          import math
+          import pandas as pd
+
+          base='/tmp/rb-count-identity-bridge/out'
+          p=json.load(open(f'{base}/rb_team_context_carry_count_identity_bridge_result.json'))
+          rows=pd.read_csv(f'{base}/rb_team_context_carry_count_identity_bridge_rows.csv')
+
+          assert p['version']=='PRISM_RB_TEAM_CONTEXT_CARRY_COUNT_IDENTITY_BRIDGE_V1',p
+          assert p['freeze_commit']=='df01aa02659b3bd96ab9e215d939088a5925a576',p
+          assert p['disposition']=='PRISM_RB_TEAM_CONTEXT_CARRY_COUNT_IDENTITY_BRIDGE_V1_SOURCE_BLOCKED',p
+          assert p['source_ready'] is False,p
+
+          assert p['frozen_transition_events']==39,p
+          assert p['canonical_count_identity_link_attempts']==39,p
+          assert p['canonical_count_identity_link_hits']==10,p
+          assert math.isclose(p['canonical_count_identity_link_rate'],10/39,rel_tol=0,abs_tol=1e-12),p
+          assert p['transition_roster_status_counts']=={'ACT':8,'CUT':2,'DEV':27,'INA':2},p
+          assert p['stage2_event_identity_present']==8,p
+          assert p['stage2_event_identity_attempts']==39,p
+          assert p['stage2_to_stage1_exact_identity_rate']>=0.99,p
+          assert p['raw_to_count_identity_collisions']==0,p
+
+          failed=[k for k,v in p['source_gates'].items() if not v]
+          assert failed==['stable_count_link_rate_ge_099'],failed
+
+          assert rows['count_identity_key'].eq('gsis:'+rows['stable_id'].astype(str)).all()
+          assert rows['count_identity_roundtrip'].all()
+          expected_status=rows['roster_status'].astype(str).isin({'ACT','INA'})
+          assert rows['count_universe_status_eligible'].eq(expected_status).all()
+          assert rows['canonical_count_identity_linked'].eq(expected_status).all()
+          assert not any('player' in str(c).lower() or 'name' in str(c).lower() for c in rows.columns)
+
+          assert p['names_read_or_used']==0,p
+          assert p['predictive_outcomes_read']==0,p
+          assert p['target_game_opportunity_counts_read']==0,p
+          assert p['rushing_yards_read']==0,p
+          assert p['touchdowns_read']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 source result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+          p=json.load(open('/tmp/rb-count-identity-bridge/out/rb_team_context_carry_count_identity_bridge_result.json'))
+          print("### PRISM RB team-context carry count identity bridge V1")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          print(f"- Raw provider-ID representation: canonical `raw GSIS -> gsis:<raw GSIS>` round-trip exact")
+          print(f"- Frozen-scope count-universe linkage: {p['canonical_count_identity_link_hits']}/{p['canonical_count_identity_link_attempts']} ({p['canonical_count_identity_link_rate']:.2%})")
+          print(f"- Transition roster statuses: {p['transition_roster_status_counts']}")
+          print(f"- Stage-2 event identity availability: {p['stage2_event_identity_present']}/{p['stage2_event_identity_attempts']}")
+          print(f"- Stage-2 -> Stage-1 raw-ID lineage: {p['stage2_to_stage1_exact_identity_hits']}/{p['stage2_to_stage1_exact_identity_attempts']} ({p['stage2_to_stage1_exact_identity_rate']:.2%})")
+          print(f"- Failed source gates: {[k for k,v in p['source_gates'].items() if not v] or ['NONE']}")
+          print()
+          print("Interpretation: the provider-ID namespace itself is deterministic and clean, but the frozen RB seam cannot satisfy its >=99% exact count-link gate because the canonical historical count universe admits ACT/INA roster states while most frozen transition rows are DEV/CUT. This is SOURCE BLOCKED, not a predictive failure. No predictive outcomes, target-game carries, names, sportsbook/OddsAPI inputs, or production mutations were used.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable source result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-rb-team-context-carry-count-identity-bridge-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/rb-count-identity-bridge/out/**
