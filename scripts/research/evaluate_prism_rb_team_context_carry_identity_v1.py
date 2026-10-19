@@ -440,8 +440,21 @@ def score(
                 "count_ae_improvement": count_base - count_cand,
             })
 
-    scored_df = pd.DataFrame(scored)
-    rooms_df = pd.DataFrame(rooms)
+    scored_columns = [
+        "season", "week", "team", "stable_id", "previous_team",
+        "team_rushes", "rushes", "actual_share", "canonical_q_base",
+        "old_team_identity_q", "candidate_q", "share_ae_base",
+        "share_ae_candidate", "share_ae_improvement", "count_ae_base",
+        "count_ae_candidate", "count_ae_improvement",
+    ]
+    room_columns = [
+        "season", "week", "team", "transition_players",
+        "baseline_mass", "candidate_mass", "baseline_residual",
+        "candidate_residual", "room_baseline_log_score",
+        "room_candidate_log_score", "room_log_score_improvement",
+    ]
+    scored_df = pd.DataFrame(scored, columns=scored_columns)
+    rooms_df = pd.DataFrame(rooms, columns=room_columns)
     audit = {
         "transition_source_rows": int(len(transitions)),
         "stable_link_attempts": int(stable_link_attempts),
