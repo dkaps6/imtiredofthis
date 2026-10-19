@@ -1,5 +1,147 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — PLAYCALLER SOURCE BLOCKED / PLAYER TEAM-CONTEXT TRANSITION FRONTIER
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+PRISM remains an **INDIVIDUAL-PLAYER PROJECTION MODEL**.
+
+> **The player should have the rules. The position should not have the player.**
+
+> **Anomalies are questions, not trends.**
+
+Position-level MAE/RMSE is downstream QA only.
+
+### PRESERVE QUALIFIED RETURN-STATE SCIENCE
+
+Return-State Next-Role Persistence V1 remains:
+
+`PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1_QUALIFIED_STATE_ONLY`
+
+Authority:
+- freeze `c25d5f3d19cab3f68a0c0ad0482c79bf53a6730e`;
+- run `39179843306` SUCCESS;
+- artifact `12156195287`;
+- digest
+  `sha256:8a6ac90e3209f1ec8f53d859a2f7b2a64b84b682f033667512d99b16ddee3988`.
+
+Meaning remains participation-state only. No automatic target/carry/route/
+efficiency/yard/TD restoration.
+
+### RECEIVING-OPPORTUNITY RETURN BRIDGE
+
+Canonical corrected chronology authority:
+- freeze `930907dd91c1b4139f2aa6be52db23a730c7a96b`;
+- run `39180575868` SUCCESS;
+- disposition
+  `PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_BLOCKED`.
+
+Exact blocker:
+insufficient exact named-player PlayerForm weekly target membership.
+Missing target rows may not become zero target earning.
+
+### INJURY-REPORT FOLLOW-UP
+
+`PRISM_RESTORED_RETURN_INJURY_REPORT_STATE_PERSISTENCE_V1_CLOSED`
+
+- freeze `513a5e5ee29b909aeaff387396352e1a10d83633`;
+- run `39180544730` SUCCESS;
+- 2025 player-cluster 95% CI crossed zero.
+
+Stop extending the injury-specific lane.
+
+### OFFENSIVE PLAYCALLER REGIME TRANSITION V1
+
+Source result:
+
+`PRISM_OFFENSIVE_PLAYCALLER_REGIME_TRANSITION_V1_SOURCE_BLOCKED`
+
+Authority:
+- freeze `533e628c99359fbfddbb9f4d787a96d8dbfbc67c`;
+- run `39181153541` SUCCESS;
+- exact run head `f62d72df3a8b9ca0ce2491d58ac800504006d053`;
+- job `117833981762` SUCCESS;
+- artifact `12155618757`;
+- digest
+  `sha256:0bfcebc29d7ddeaf07c565afc6f1ac010d1974473a9475d966fb32ccac8ab5ec`;
+- result commit `053f7eb57c3dd5a2be1a60e3781fbbc0f2c1d81a`.
+
+The caller object itself was source-valid:
+- 2024: 19 caller-change events / 484 transition player-weeks;
+- 2025: 18 events / 438 transition player-weeks;
+- 2026 prospective caller/effective-week parity passed.
+
+Frozen blocker:
+- 2024 transition rows with >=3 strictly-prior same-team positive-participation
+  observations: **41 / 484 = 8.47%**;
+- frozen gate: **>=40%**;
+- 2025 passed at **42.24%**.
+
+Do not:
+- lower the history gate;
+- add a 2023 player-history parent to rescue the already-scored V1;
+- use only 2025;
+- exclude offseason transitions post hoc;
+- substitute team/position priors for the named player's own history.
+
+No skill-player predictive outcome was scored.
+
+### QUEUE GOVERNANCE
+
+- Betting remains LOCKED/CLOSED unless explicitly reopened.
+- No paid OddsAPI.
+- Sportsbook downstream only.
+- QB passing TD BACKLOG ONLY.
+- No production mutation.
+- Preserve all qualified/closed/source-blocked science.
+- No rescue variants of closed injury, same-QB, playcaller or target-membership
+  families.
+
+### EXACT NEXT ACTION
+
+Stay in:
+
+`PRISM_CURRENT_ROLE_STATE_ARBITRATION_FRONTIER_OPEN__SOURCE_AUDIT_ONLY`
+
+Source-map one genuinely distinct named-player regime transition:
+
+> **PLAYER TEAM-CONTEXT TRANSITION**
+>
+> Did this exact player change NFL teams before the target game, such that his
+> longer role identity was earned in a different teammate-competition and team
+> environment than the one he is entering now?
+
+Why this is distinct:
+- the player identity is unchanged;
+- the team/competition environment changed;
+- it is not raw recent share;
+- not teammate absence within the same room;
+- not active-set renormalization;
+- not depth chart;
+- not QB-pair history;
+- not playcaller;
+- not injury.
+
+Source/lineage audit first.
+
+Requirements:
+- exact stable player ID;
+- exact old team -> new team chronology;
+- historical 2023-2025 source support sufficient to evaluate 2024/2025
+  transitions without backfilling after results;
+- 2026 schema/parity only, no 2026 outcomes;
+- named-player + target-game grain;
+- no target-game snaps/opportunity/performance in state definition;
+- no position coefficient;
+- no sportsbook/OddsAPI;
+- no production mutation.
+
+Only after source support passes may a separately frozen market-specific role
+transfer mechanism be scored.
+
+---
+
+
 ## TOP CHECKPOINT — 2026-10-18 — CORRECTED RETURN-STATE LINEAGE / INJURY-SPECIFIC FOLLOW-UP CLOSED / BROADER PLAYER ROLE-STATE FRONTIER
 
 **Model:** PRISM — Player Role & Individual Situation Model
