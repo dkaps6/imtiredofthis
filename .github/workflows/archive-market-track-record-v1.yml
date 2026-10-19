@@ -77,13 +77,32 @@ jobs:
             --week "${WEEK_RESOLVED}" \
             --run-id "${SOURCE_RUN_ID}"
 
+          # The priced board is only half of what the OddsAPI purchase bought.
+          # odds_game.csv carries the game total, spread and implied team
+          # totals -- the pregame game-environment signal -- and props_raw.csv
+          # is the untransformed offer set. Both are unrepeatable once the
+          # lines move, and both were being dropped when the artifact expired,
+          # which is why Weeks 1-2 could be graded but their game environment
+          # could not be studied.
+          STEM="$(printf '%d_wk%02d' "${SEASON}" "${WEEK_RESOLVED}")"
+          for pair in "odds_game.csv:game_odds" "props_raw.csv:raw_props"; do
+            f="${pair%%:*}"; d="${pair##*:}"
+            if [ -s "/tmp/fs_artifact/outputs/$f" ]; then
+              mkdir -p "data/market_track_record/$d"
+              cp "/tmp/fs_artifact/outputs/$f" "data/market_track_record/$d/${STEM}.csv"
+              echo "preserved $d/${STEM}.csv"
+            else
+              echo "note: $f absent from this run's artifact"
+            fi
+          done
+
       - name: Snapshot recoverable ledger before git mutation
         run: |
           set -euo pipefail
           rm -rf /tmp/market_track_record_ledger
-          if [ -d data/market_track_record/boards ]; then
+          if [ -d data/market_track_record ]; then
             mkdir -p /tmp/market_track_record_ledger
-            cp -a data/market_track_record/boards/. /tmp/market_track_record_ledger/
+            cp -a data/market_track_record/. /tmp/market_track_record_ledger/
           fi
 
       - name: Commit archived board to the durable ledger
@@ -100,7 +119,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/market_track_record/boards/
+          git add data/market_track_record/
           if git diff --cached --quiet; then
             echo "no market track record changes to commit"
             exit 0
