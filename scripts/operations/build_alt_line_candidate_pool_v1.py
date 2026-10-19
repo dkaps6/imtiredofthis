@@ -20,10 +20,18 @@ import sys
 YARD_MARKETS = {"pass_yards", "rush_yards", "rec_yards", "receptions"}
 SYNTH_TOL = 1e-6
 
-# Depth roles that actually see meaningful offensive snaps. A TE3 or RB3 with a
-# positive edge on a tiny line is the sparse-player fallback talking, not role
-# evidence, and a QB2 priced for half a rushing yard is a book pricing someone
-# who is not expected to play.
+# Hierarchy ranks that actually see meaningful offensive usage. A TE3 or RB3
+# with a positive edge on a tiny line is the sparse-player fallback talking,
+# not role evidence, and a QB2 priced for half a rushing yard is a book pricing
+# someone who is not expected to play.
+#
+# This is matched against player_form's ``model_role``, the usage-derived
+# hierarchy -- NOT ``depth_role``, which carries the Ourlads alignment slot
+# (WR1=LWR, WR2=SWR, WR3=RWR) and says nothing about rank. Every rostered
+# receiver has an alignment label of WR1-WR3, so gating on depth_role admits
+# the entire room: TEN's Calvin Ridley reads depth_role=WR1 while being
+# model_role=WR4 at an 11.7% target share, because he is the second body at
+# the LWR slot.
 PLAYABLE_ROLES = {"QB1", "RB1", "RB2", "WR1", "WR2", "WR3", "TE1", "TE2", "FB1"}
 
 # Below these the market stops being a yardage distribution and becomes a
@@ -132,10 +140,11 @@ def screen(board, form_by_key, prop_q, board_q, min_games=10):
             reject(f"insufficient_player_evidence:games={games:g}")
             continue
 
-        # The player has to be someone the offense actually uses.
-        depth_role = (form.get("depth_role") or "").strip().upper()
-        if depth_role not in PLAYABLE_ROLES:
-            reject(f"not_a_playable_role:{depth_role or 'unknown'}")
+        # The player has to be someone the offense actually uses. Rank comes
+        # from model_role; a missing rank fails closed rather than passing.
+        model_role = (form.get("model_role") or "").strip().upper()
+        if model_role not in PLAYABLE_ROLES:
+            reject(f"not_a_playable_role:{model_role or 'unknown'}")
             continue
 
         if (market, pos_group) in GADGET:
@@ -151,7 +160,8 @@ def screen(board, form_by_key, prop_q, board_q, min_games=10):
         kept.append({
             **row,
             "position_group": pos_group,
-            "depth_role": form.get("depth_role") or "",
+            "model_role": model_role,
+            "alignment_slot": form.get("depth_role") or "",
             "tgt_share": form.get("tgt_share") or "",
             "rush_share": form.get("rush_share") or "",
             "player_games": f"{games:g}",
@@ -215,8 +225,8 @@ def main(argv=None):
 
     cols = ["market", "player", "team", "opponent", "side", "vegas_line",
             "model_proj", "model_sd", "cushion", "cushion_sd", "fair_prob",
-            "vegas_odds", "edge_pct", "book", "position_group", "depth_role",
-            "tgt_share", "rush_share", "player_games"]
+            "vegas_odds", "edge_pct", "book", "position_group", "model_role",
+            "alignment_slot", "tgt_share", "rush_share", "player_games"]
     print("\n=== CANDIDATE POOL (ranked by cushion in sd) ===")
     print("\t".join(cols))
     for r in pool:

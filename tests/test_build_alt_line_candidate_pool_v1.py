@@ -31,8 +31,10 @@ def board_row(**kw):
 
 
 WR_FORM = {"p": {"position_group": "WR", "prior_games": "10", "current_games": "5",
-                 "depth_role": "WR1", "tgt_share": "0.25", "rush_share": "0"}}
-RB_FORM = {"p": {**WR_FORM["p"], "position_group": "RB", "depth_role": "RB1"}}
+                 "depth_role": "WR1", "model_role": "WR1",
+                 "tgt_share": "0.25", "rush_share": "0"}}
+RB_FORM = {"p": {**WR_FORM["p"], "position_group": "RB",
+                 "depth_role": "RB1", "model_role": "RB1"}}
 
 
 def screen_one(row, form=None, prop_q=(), board_q=(), min_games=None):
@@ -79,7 +81,8 @@ def test_pass_yards_must_carry_the_promoted_synthesis():
 
 
 QB_FORM = {"p": {"position_group": "QB", "prior_games": "17", "current_games": "5",
-                 "depth_role": "QB1", "tgt_share": "0", "rush_share": "0.1"}}
+                 "depth_role": "QB1", "model_role": "QB1",
+                 "tgt_share": "0", "rush_share": "0.1"}}
 
 
 def test_pass_yards_projection_must_equal_the_synthesis_mean():
@@ -142,7 +145,8 @@ def test_book_dedupe_prefers_the_book_that_posts_alt_lines():
 
 def test_backup_quarterback_is_not_a_playable_role():
     qb2 = {"p": {"position_group": "QB", "prior_games": "8", "current_games": "3",
-                 "depth_role": "QB2", "tgt_share": "0", "rush_share": "0.12"}}
+                 "depth_role": "QB2", "model_role": "QB2",
+                 "tgt_share": "0", "rush_share": "0.12"}}
     _, reason = screen_one(
         board_row(market="rush_yards", vegas_line="12", model_proj="20"), form=qb2)
     assert reason == "not_a_playable_role:QB2"
@@ -151,7 +155,8 @@ def test_backup_quarterback_is_not_a_playable_role():
 @pytest.mark.parametrize("role", ["TE3", "RB3", "WR4", "WR5"])
 def test_deep_backups_are_rejected(role):
     form = {"p": {"position_group": "TE", "prior_games": "15", "current_games": "5",
-                  "depth_role": role, "tgt_share": "0.05", "rush_share": "0"}}
+                  "depth_role": role, "model_role": role,
+                  "tgt_share": "0.05", "rush_share": "0"}}
     _, reason = screen_one(board_row(vegas_line="12", model_proj="20"), form=form)
     assert reason == f"not_a_playable_role:{role}"
 
@@ -167,12 +172,13 @@ def test_receiver_rushing_prop_is_a_gadget_market():
 ])
 def test_lines_below_the_floor_are_degenerate(market, line):
     form = {"p": {"position_group": "RB", "prior_games": "15", "current_games": "5",
-                  "depth_role": "RB1", "tgt_share": "0.1", "rush_share": "0.5"}}
+                  "depth_role": "RB1", "model_role": "RB1",
+                  "tgt_share": "0.1", "rush_share": "0.5"}}
     kw = dict(market=market, vegas_line=line, model_proj="999")
     if market == "pass_yards":
         kw.update(qb_synthesis_applied="1", qb_synthesis_proj="999")
         form["p"]["position_group"] = "QB"
-        form["p"]["depth_role"] = "QB1"
+        form["p"]["model_role"] = "QB1"
     _, reason = screen_one(board_row(**kw), form=form)
     assert reason.startswith("degenerate_low_line")
 
@@ -181,3 +187,35 @@ def test_evidence_floor_defaults_to_ten_games():
     form = {"p": {**WR_FORM["p"], "prior_games": "4", "current_games": "4"}}
     _, reason = screen_one(board_row(vegas_line="12", model_proj="20"), form=form)
     assert reason.startswith("insufficient_player_evidence")
+
+
+def test_rank_comes_from_model_role_not_the_alignment_slot():
+    """The bug this pins: Ourlads' WR1/WR2/WR3 name the LWR/SWR/RWR alignment,
+    not the target hierarchy, so the second body at a slot still reads WR1.
+
+    TEN's Calvin Ridley was depth_role=WR1 (Player 2 at LWR) while being
+    model_role=WR4 on an 11.7% target share. Gating on depth_role admitted the
+    whole receiver room, because every rostered receiver has an alignment label
+    in WR1-WR3.
+    """
+    ridley = {"p": {"position_group": "WR", "prior_games": "6", "current_games": "5",
+                    "depth_role": "WR1", "model_role": "WR4",
+                    "tgt_share": "0.1166", "rush_share": "0"}}
+    _, reason = screen_one(board_row(vegas_line="12.5", model_proj="21.8"), form=ridley)
+    assert reason == "not_a_playable_role:WR4"
+
+    # The reverse case has to pass: TEN's actual WR1 is Carnell Tate, whose
+    # alignment slot is RWR and so reads depth_role=WR3.
+    tate = {"p": {"position_group": "WR", "prior_games": "12", "current_games": "5",
+                  "depth_role": "WR3", "model_role": "WR1",
+                  "tgt_share": "0.2587", "rush_share": "0"}}
+    kept, _ = screen_one(board_row(vegas_line="12.5", model_proj="21.8"), form=tate)
+    assert kept is not None, "the room's real WR1 must not be filtered by its alignment slot"
+    assert kept["model_role"] == "WR1"
+    assert kept["alignment_slot"] == "WR3"
+
+
+def test_missing_rank_fails_closed():
+    form = {"p": {**WR_FORM["p"], "model_role": ""}}
+    _, reason = screen_one(board_row(vegas_line="12", model_proj="20"), form=form)
+    assert reason == "not_a_playable_role:unknown"
