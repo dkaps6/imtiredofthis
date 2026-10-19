@@ -1,5 +1,118 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — RECEIVING OPPORTUNITY BRIDGE SOURCE BLOCKED / RETURN HEALTH-STATE FRONTIER
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+### NON-NEGOTIABLE ASSIGNMENT
+
+PRISM is an **INDIVIDUAL-PLAYER PROJECTION MODEL**.
+
+Named player + actual current football state is the unit of truth.
+Position-level MAE/RMSE is downstream QA only.
+
+> **The player should have the rules. The position should not have the player.**
+
+> **Anomalies are questions, not trends.**
+
+### QUALIFIED UPSTREAM STATE
+
+Return-State Next-Role Persistence V1 remains:
+`PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1_QUALIFIED_STATE_ONLY`.
+
+Authority:
+- freeze `c25d5f3d19cab3f68a0c0ad0482c79bf53a6730e`;
+- run `39179843306` SUCCESS;
+- artifact `12156195287`;
+- digest `sha256:8a6ac90e3209f1ec8f53d859a2f7b2a64b84b682f033667512d99b16ddee3988`;
+- research result commit `594a749f4c7793796b4aa40b42d8aadad64a1134`.
+
+Interpretation remains state-only:
+once restored participation is source-certified, the named player's own
+pre-injury participation role is more faithful for the next clean participation
+observation than carrying the injury interruption forward as decline.
+
+No target/carry/route/efficiency/yard/TD restoration follows automatically.
+
+### NEW SOURCE-BLOCKED RESULT
+
+Return-State Receiving Opportunity Source V1:
+
+- freeze `3a2a51e5412ad83265700dbf088e2425bae359c3`;
+- run `39180266614` SUCCESS;
+- exact head `bd76fc9d123ed11d9049ce9b93660a25d60f0de6`;
+- job `117831326382` SUCCESS;
+- artifact `12156245630`;
+- digest `sha256:bd6a65e9cd7639aa8fb52a2f6d8ac60146d10aab20f64cb4d966a3bdc7b693c3`;
+- result commit `b959f25a64a55f7e21c02d4755a7c293a8184fb3`;
+- disposition
+  `PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_BLOCKED`.
+
+2024:
+- restored RB/WR/TE episodes 147 / 133 named players;
+- exact return identity 100%;
+- immediate-next observation 86.39%;
+- exact >=3-row strictly-prior target support only 68.71%.
+
+2025:
+- restored episodes 173 / 142 named players;
+- exact return identity 100%;
+- immediate-next observation 85.55%;
+- exact >=3-row strictly-prior target support only 69.94%.
+
+Finite team opportunity PASSED:
+- 862 represented team-weeks;
+- 0 team-target uniqueness violations;
+- 0 nonfinite/nonpositive team-target weeks;
+- 0 RB+WR+TE target sums above team targets;
+- 0 negative residuals.
+
+Exact blocker:
+the immutable PlayerForm-derived parent can contain
+`playerform_weekly_row_present=false` while carrying a filled numeric
+`targets=0`. For PRISM player-level opportunity work, missing exact target
+membership cannot be treated as true zero target earning.
+
+Do not lower the 95% gate and do not rescue with missing-row zeroes, fuzzy
+identity, family cherry-picks, deletion/reweighting, or the closed exposure x
+earning formula.
+
+### QUEUE GOVERNANCE
+
+- Betting remains LOCKED/CLOSED unless explicitly reopened.
+- No paid OddsAPI.
+- Sportsbook downstream only.
+- QB passing TD BACKLOG ONLY.
+- No production mutation.
+- Preserve qualified/closed science and exact artifact/digest/chronology gates.
+
+### EXACT NEXT ACTION
+
+Per the source-block fallback, move only to a genuinely distinct named-player
+CURRENT ROLE / STATE mechanism.
+
+Freeze before scoring:
+
+> Once this named player's participation is
+> `RETURN_PARTICIPATION_RESTORED`, does the weekly injury-report state at the
+> return observation distinguish whether the player's immediately next
+> scheduled observation is a clean no-report participation state versus another
+> reported/unresolved participation state?
+
+Use only source-certified return + observation-health state.
+
+Do not call no-report medically healthy.
+
+Do not change the player's snap projection automatically.
+
+This mechanism may qualify only as current health-state / reliability evidence.
+
+No targets/carries/receptions/yards/TDs, no routes, no 2026 outcomes, no
+sportsbook/OddsAPI, no position coefficient, no production mutation.
+
+---
+
+
 ## TOP CHECKPOINT — 2026-10-18 — RETURN-STATE NEXT-ROLE PERSISTENCE QUALIFIED / PLAYER-FIRST FRONTIER
 
 **Model:** PRISM — Player Role & Individual Situation Model
