@@ -123,6 +123,32 @@ jobs:
           dump("outputs/odds_game.csv")
           PY
 
+      - name: Screen the whole slate into the alt-line candidate pool
+        run: |
+          set -euo pipefail
+          # This branch is behind main, so its checked-out quarantine files are
+          # stale. The screen must apply the quarantines production would, so
+          # fetch them from main rather than trusting the local copies.
+          mkdir -p /tmp/q
+          for f in manual_prop_quarantine manual_final_board_quarantine; do
+            curl -fsSL -o "/tmp/q/${f}.csv" \
+              "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/data/${f}.csv"
+            echo "fetched ${f}.csv ($(wc -l < "/tmp/q/${f}.csv") lines)"
+          done
+          python scripts/operations/build_alt_line_candidate_pool_v1.py \
+            --board /tmp/src_artifact/outputs/props_priced_clean.csv \
+            --player-form /tmp/src_artifact/data/player_form.csv \
+            --prop-quarantine /tmp/q/manual_prop_quarantine.csv \
+            --final-board-quarantine /tmp/q/manual_final_board_quarantine.csv \
+            --reject-summary
+
+      - name: Gate tests for the screen
+        run: |
+          set -euo pipefail
+          # The screen itself is stdlib-only; pytest is the only thing needed.
+          python -m pip install --quiet --disable-pip-version-check pytest
+          python -m pytest tests/test_build_alt_line_candidate_pool_v1.py -q
+
       - name: Player form and role context for the game
         run: |
           set -euo pipefail
