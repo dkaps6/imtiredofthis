@@ -40,8 +40,8 @@ REC_REQ = {
     "playerform_weekly_row_present","targets","team_targets","target_share_game",
 }
 HEALTH_REQ = {
-    "season","week","team","stable_id","family","positive_participation",
-    "observation_state",
+    "season","week","team","stable_id","family",
+    "positive_participation","observation_state",
 }
 
 
@@ -68,17 +68,13 @@ def load_episodes(path: Path) -> pd.DataFrame:
     miss = EP_REQ - set(x.columns)
     if miss:
         raise RuntimeError(f"episode parent missing {sorted(miss)}")
-
     for c in ("season","episode_number","episode_start_week","return_week"):
         x[c] = pd.to_numeric(x[c], errors="coerce")
-    x["pre_episode_snap_pct"] = pd.to_numeric(
-        x["pre_episode_snap_pct"], errors="coerce"
-    )
+    x["pre_episode_snap_pct"] = pd.to_numeric(x["pre_episode_snap_pct"], errors="coerce")
     x["stable_id"] = x["stable_id"].map(text)
     x["team"] = x["team"].astype("string").fillna("").str.strip()
     x["family"] = x["family"].astype("string").fillna("").str.upper().str.strip()
     x["return_state"] = x["return_state"].astype("string").fillna("").str.strip()
-
     x = x.loc[
         x["season"].isin(SEASONS)
         & x["family"].isin(FAMILIES)
@@ -88,11 +84,11 @@ def load_episodes(path: Path) -> pd.DataFrame:
     x["season"] = x["season"].astype(int)
     x["episode_number"] = x["episode_number"].astype(int)
     x["episode_start_week"] = x["episode_start_week"].astype(int)
-
-    return x.sort_values(
-        ["season","team","stable_id","episode_start_week","episode_number"],
-        kind="mergesort",
-    ).reset_index(drop=True)
+    x["return_week"] = x["return_week"].astype(int)
+    keys = ["season","team","stable_id","episode_number"]
+    if x.duplicated(keys).any():
+        raise RuntimeError("duplicate restored episode identities")
+    return x.sort_values(keys, kind="mergesort").reset_index(drop=True)
 
 
 def load_receiving(path: Path) -> pd.DataFrame:
@@ -101,7 +97,6 @@ def load_receiving(path: Path) -> pd.DataFrame:
     miss = REC_REQ - set(x.columns)
     if miss:
         raise RuntimeError(f"receiving parent missing {sorted(miss)}")
-
     x["season"] = pd.to_numeric(x["season"], errors="coerce")
     x["week"] = pd.to_numeric(x["week"], errors="coerce")
     for c in ("offense_snaps","offense_pct","targets","team_targets","target_share_game"):
@@ -109,28 +104,16 @@ def load_receiving(path: Path) -> pd.DataFrame:
     x["stable_id"] = x["stable_id"].map(text)
     x["team"] = x["team"].astype("string").fillna("").str.strip()
     x["family"] = x["family"].astype("string").fillna("").str.upper().str.strip()
-    x["observation_state"] = (
-        x["observation_state"].astype("string").fillna("").str.strip()
-    )
+    x["observation_state"] = x["observation_state"].astype("string").fillna("").str.strip()
     x["positive_participation"] = as_bool(x["positive_participation"])
     x["playerform_weekly_row_present"] = as_bool(x["playerform_weekly_row_present"])
-
-    x = x.loc[
-        x["season"].isin(SEASONS)
-        & x["stable_id"].ne("")
-    ].copy()
+    x = x.loc[x["season"].isin(SEASONS) & x["stable_id"].ne("")].copy()
     x["season"] = x["season"].astype(int)
     x["week"] = x["week"].astype(int)
-
     keys = ["season","week","team","stable_id"]
     if x.duplicated(keys).any():
-        bad = x.loc[x.duplicated(keys, keep=False), keys].head(20).to_dict("records")
-        raise RuntimeError(f"duplicate receiving identities: {bad}")
-
-    return x.sort_values(
-        ["season","team","stable_id","week"], kind="mergesort"
-    ).reset_index(drop=True)
-
+        raise RuntimeError("duplicate receiving identities")
+    return x.sort_values(["season","team","stable_id","week"],kind="mergesort").reset_index(drop=True)
 
 
 def load_health(path: Path) -> pd.DataFrame:
@@ -139,44 +122,36 @@ def load_health(path: Path) -> pd.DataFrame:
     miss = HEALTH_REQ - set(x.columns)
     if miss:
         raise RuntimeError(f"health parent missing {sorted(miss)}")
-
     x["season"] = pd.to_numeric(x["season"], errors="coerce")
     x["week"] = pd.to_numeric(x["week"], errors="coerce")
     x["stable_id"] = x["stable_id"].map(text)
     x["team"] = x["team"].astype("string").fillna("").str.strip()
     x["family"] = x["family"].astype("string").fillna("").str.upper().str.strip()
-    x["observation_state"] = (
-        x["observation_state"].astype("string").fillna("").str.strip()
-    )
     x["positive_participation"] = as_bool(x["positive_participation"])
-
+    x["observation_state"] = x["observation_state"].astype("string").fillna("").str.strip()
     x = x.loc[
         x["season"].isin(SEASONS)
-        & x["stable_id"].ne("")
         & x["family"].isin(FAMILIES)
+        & x["stable_id"].ne("")
     ].copy()
     x["season"] = x["season"].astype(int)
     x["week"] = x["week"].astype(int)
-
     keys = ["season","week","team","stable_id"]
     if x.duplicated(keys).any():
-        bad = x.loc[x.duplicated(keys, keep=False), keys].head(20).to_dict("records")
-        raise RuntimeError(f"duplicate health identities: {bad}")
+        raise RuntimeError("duplicate health identities")
+    unknown = set(x["observation_state"]) - ALLOWED_STATES
+    if unknown:
+        raise RuntimeError(f"unexpected health states {sorted(unknown)}")
+    return x.sort_values(["season","team","stable_id","week"],kind="mergesort").reset_index(drop=True)
 
-    return x.sort_values(
-        ["season","team","stable_id","week"], kind="mergesort"
-    ).reset_index(drop=True)
 
 def valid_opportunity_row(r: pd.Series) -> bool:
     return bool(
         r["positive_participation"]
         and r["playerform_weekly_row_present"]
-        and pd.notna(r["targets"])
-        and float(r["targets"]) >= 0
-        and pd.notna(r["team_targets"])
-        and float(r["team_targets"]) > 0
-        and pd.notna(r["target_share_game"])
-        and np.isfinite(float(r["target_share_game"]))
+        and pd.notna(r["targets"]) and float(r["targets"]) >= 0
+        and pd.notna(r["team_targets"]) and float(r["team_targets"]) > 0
+        and pd.notna(r["target_share_game"]) and np.isfinite(float(r["target_share_game"]))
     )
 
 
@@ -186,68 +161,47 @@ def build_membership(
     health: pd.DataFrame,
 ) -> tuple[pd.DataFrame,pd.DataFrame,set[tuple[int,int,str]],dict]:
     rec_groups = {
-        (int(s),str(t),str(pid)): g.sort_values("week", kind="mergesort").reset_index(drop=True)
-        for (s,t,pid),g in receiving.groupby(["season","team","stable_id"], sort=False)
+        (int(s),str(t),str(pid)): g.sort_values("week",kind="mergesort").reset_index(drop=True)
+        for (s,t,pid),g in receiving.groupby(["season","team","stable_id"],sort=False)
     }
     health_groups = {
-        (int(s),str(t),str(pid)): g.sort_values("week", kind="mergesort").reset_index(drop=True)
-        for (s,t,pid),g in health.groupby(["season","team","stable_id"], sort=False)
+        (int(s),str(t),str(pid)): g.sort_values("week",kind="mergesort").reset_index(drop=True)
+        for (s,t,pid),g in health.groupby(["season","team","stable_id"],sort=False)
+    }
+    rec_map = {
+        (int(r.season),int(r.week),str(r.team),str(r.stable_id)): r
+        for r in receiving.itertuples(index=False)
     }
 
-    membership = []
-    prior_rows = []
+    membership, prior_rows = [], []
     team_weeks: set[tuple[int,int,str]] = set()
     chronology_violations = 0
     skipped_next_violations = 0
 
     for e in episodes.to_dict("records"):
-        season = int(e["season"])
-        team = str(e["team"])
-        pid = str(e["stable_id"])
+        season, team, pid = int(e["season"]), str(e["team"]), str(e["stable_id"])
         family = str(e["family"])
-        start_week = int(e["episode_start_week"])
-        return_week = int(e["return_week"]) if pd.notna(e["return_week"]) else -1
-        pre_snap = float(e["pre_episode_snap_pct"])
-
+        start_week, return_week = int(e["episode_start_week"]), int(e["return_week"])
         if return_week <= start_week:
             chronology_violations += 1
 
-        g = rec_groups.get((season,team,pid))
-        if g is None:
-            g = pd.DataFrame(columns=receiving.columns)
-        hg = health_groups.get((season,team,pid))
-        if hg is None:
-            hg = pd.DataFrame(columns=health.columns)
+        rg = rec_groups.get((season,team,pid), receiving.iloc[0:0])
+        hg = health_groups.get((season,team,pid), health.iloc[0:0])
 
-        prior = g.loc[
-            (g["week"] < start_week)
-            & g["positive_participation"]
-        ].tail(MAX_PRIOR).copy()
-
-        prior_chron_ok = bool(
-            len(prior) == 0 or prior["week"].lt(start_week).all()
-        )
-        if not prior_chron_ok:
+        prior = rg.loc[rg["week"].lt(start_week)].tail(MAX_PRIOR).copy()
+        if len(prior) and not prior["week"].lt(start_week).all():
             chronology_violations += 1
-
-        prior_rows_valid = [
-            valid_opportunity_row(r) for _,r in prior.iterrows()
-        ]
         prior_support_ok = bool(
             len(prior) >= MIN_PRIOR
-            and all(prior_rows_valid)
+            and all(valid_opportunity_row(r) for _,r in prior.iterrows())
         )
 
         for _,r in prior.iterrows():
             team_weeks.add((season,int(r["week"]),team))
             prior_rows.append({
-                "season":season,
-                "team":team,
-                "stable_id":pid,
-                "family":family,
+                "season":season,"team":team,"stable_id":pid,"family":family,
                 "episode_number":int(e["episode_number"]),
-                "episode_start_week":start_week,
-                "return_week":return_week,
+                "episode_start_week":start_week,"return_week":return_week,
                 "prior_week":int(r["week"]),
                 "targets":float(r["targets"]) if pd.notna(r["targets"]) else np.nan,
                 "team_targets":float(r["team_targets"]) if pd.notna(r["team_targets"]) else np.nan,
@@ -259,172 +213,111 @@ def build_membership(
                 "opportunity_row_valid":bool(valid_opportunity_row(r)),
             })
 
-        ret = g.loc[g["week"].eq(return_week)].copy()
-        return_unique = len(ret) == 1
+        rr = rec_map.get((season,return_week,team,pid))
+        return_row_present = rr is not None
         return_valid = False
-        return_targets = np.nan
-        return_team_targets = np.nan
-        return_share = np.nan
-        return_state = ""
-        return_pf = False
-        if return_unique:
-            rr = ret.iloc[0]
-            return_valid = valid_opportunity_row(rr)
-            return_targets = float(rr["targets"]) if pd.notna(rr["targets"]) else np.nan
-            return_team_targets = float(rr["team_targets"]) if pd.notna(rr["team_targets"]) else np.nan
-            return_share = float(rr["target_share_game"]) if pd.notna(rr["target_share_game"]) else np.nan
-            return_state = str(rr["observation_state"])
-            return_pf = bool(rr["playerform_weekly_row_present"])
+        if rr is not None:
+            rs = pd.Series(rr._asdict())
+            return_valid = valid_opportunity_row(rs)
             team_weeks.add((season,return_week,team))
 
-        # The immutable health-state parent—not the positive-participation
-        # receiving panel—defines the exact immediately next scheduled same-team
-        # observation after the restored return.
-        hnext = hg.loc[hg["week"] > return_week].sort_values("week", kind="mergesort")
-        next_present = len(hnext) > 0
-        next_week = np.nan
-        next_state = ""
-        next_positive = False
-        next_pf = False
-        next_targets = np.nan
-        next_team_targets = np.nan
-        next_share = np.nan
-        next_receiving_row_present = False
-        next_valid_if_positive = True
-        if next_present:
-            hr = hnext.iloc[0]
-            next_week = int(hr["week"])
+        later_health = hg.loc[hg["week"].gt(return_week)].sort_values("week",kind="mergesort")
+        nh = later_health.iloc[0] if len(later_health) else None
+        next_present = nh is not None
+        next_week = int(nh["week"]) if nh is not None else np.nan
+        next_state = str(nh["observation_state"]) if nh is not None else ""
+        next_positive = bool(nh["positive_participation"]) if nh is not None else False
+        if nh is not None:
             if next_week <= return_week:
                 chronology_violations += 1
-            next_state = str(hr["observation_state"])
-            next_positive = bool(hr["positive_participation"])
-
-            first_later_week = int(hg.loc[hg["week"] > return_week, "week"].min())
-            if next_week != first_later_week:
+            between = hg.loc[hg["week"].gt(return_week) & hg["week"].lt(next_week)]
+            if len(between):
                 skipped_next_violations += 1
 
-            exact = g.loc[g["week"].eq(next_week)].copy()
-            next_receiving_row_present = len(exact) == 1
-            if next_receiving_row_present:
-                nr = exact.iloc[0]
-                next_pf = bool(nr["playerform_weekly_row_present"])
-                next_targets = float(nr["targets"]) if pd.notna(nr["targets"]) else np.nan
-                next_team_targets = float(nr["team_targets"]) if pd.notna(nr["team_targets"]) else np.nan
-                next_share = float(nr["target_share_game"]) if pd.notna(nr["target_share_game"]) else np.nan
-                team_weeks.add((season,next_week,team))
-                if next_positive:
-                    next_valid_if_positive = valid_opportunity_row(nr)
-            elif next_positive:
-                next_valid_if_positive = False
+        nr = rec_map.get((season,int(next_week),team,pid)) if nh is not None else None
+        next_pf = bool(nr.playerform_weekly_row_present) if nr is not None else False
+        next_valid_if_positive = True
+        if next_positive:
+            next_valid_if_positive = bool(
+                nr is not None and valid_opportunity_row(pd.Series(nr._asdict()))
+            )
+        if nr is not None:
+            team_weeks.add((season,int(next_week),team))
 
         membership.append({
-            "season":season,
-            "team":team,
-            "stable_id":pid,
-            "family":family,
+            "season":season,"team":team,"stable_id":pid,"family":family,
             "episode_number":int(e["episode_number"]),
-            "episode_start_week":start_week,
-            "return_week":return_week,
-            "pre_episode_snap_pct":pre_snap,
+            "episode_start_week":start_week,"return_week":return_week,
+            "pre_episode_snap_pct":float(e["pre_episode_snap_pct"]),
             "prior_rows":int(len(prior)),
             "prior_support_ok":prior_support_ok,
-            "return_row_unique":return_unique,
+            "return_row_present":return_row_present,
             "return_opportunity_valid":bool(return_valid),
-            "return_observation_state":return_state,
-            "return_playerform_weekly_row_present":return_pf,
-            "return_targets":return_targets,
-            "return_team_targets":return_team_targets,
-            "return_target_share_game":return_share,
+            "return_observation_state":str(rr.observation_state) if rr is not None else "",
+            "return_playerform_weekly_row_present":bool(rr.playerform_weekly_row_present) if rr is not None else False,
+            "return_targets":float(rr.targets) if rr is not None and pd.notna(rr.targets) else np.nan,
+            "return_team_targets":float(rr.team_targets) if rr is not None and pd.notna(rr.team_targets) else np.nan,
+            "return_target_share_game":float(rr.target_share_game) if rr is not None and pd.notna(rr.target_share_game) else np.nan,
             "immediate_next_present":next_present,
             "immediate_next_week":next_week,
             "immediate_next_state":next_state,
             "immediate_next_positive_participation":next_positive,
-            "immediate_next_receiving_row_present":next_receiving_row_present,
+            "immediate_next_receiving_row_present":nr is not None,
             "immediate_next_playerform_weekly_row_present":next_pf,
             "immediate_next_opportunity_valid_if_positive":bool(next_valid_if_positive),
-            "immediate_next_targets":next_targets,
-            "immediate_next_team_targets":next_team_targets,
-            "immediate_next_target_share_game":next_share,
+            "immediate_next_targets":float(nr.targets) if nr is not None and pd.notna(nr.targets) else np.nan,
+            "immediate_next_team_targets":float(nr.team_targets) if nr is not None and pd.notna(nr.team_targets) else np.nan,
+            "immediate_next_target_share_game":float(nr.target_share_game) if nr is not None and pd.notna(nr.target_share_game) else np.nan,
             "immediate_next_clean":bool(next_state == CLEAN_STATE),
         })
 
-    mem = pd.DataFrame(membership)
-    pri = pd.DataFrame(prior_rows)
-    audit = {
-        "chronology_violations":int(chronology_violations),
-        "skipped_immediate_next_violations":int(skipped_next_violations),
-    }
-    return mem,pri,team_weeks,audit
+    return (
+        pd.DataFrame(membership),
+        pd.DataFrame(prior_rows),
+        team_weeks,
+        {
+            "chronology_violations":int(chronology_violations),
+            "skipped_immediate_next_violations":int(skipped_next_violations),
+        },
+    )
+
 
 def finite_opportunity_audit(
     receiving: pd.DataFrame,
     represented: set[tuple[int,int,str]],
 ) -> tuple[pd.DataFrame,dict]:
-    rows = []
-    unique_violations = 0
-    nonfinite_team_weeks = 0
-    target_sum_violations = 0
-    negative_residual_violations = 0
-
+    rows=[]
     for season,week,team in sorted(represented):
-        g = receiving.loc[
+        g=receiving.loc[
             receiving["season"].eq(season)
             & receiving["week"].eq(week)
             & receiving["team"].eq(team)
         ].copy()
-        vals = pd.to_numeric(g["team_targets"], errors="coerce").dropna().unique()
-        unique_ok = len(vals) == 1
-        if not unique_ok:
-            unique_violations += 1
-            team_targets = np.nan
-        else:
-            team_targets = float(vals[0])
-
-        finite_positive = bool(np.isfinite(team_targets) and team_targets > 0)
-        if not finite_positive:
-            nonfinite_team_weeks += 1
-
-        skill = g.loc[g["family"].isin(FAMILIES)].copy()
-        skill_targets = float(
-            pd.to_numeric(skill["targets"], errors="coerce").fillna(0).sum()
+        vals=pd.to_numeric(g["team_targets"],errors="coerce").dropna().unique()
+        team_targets=float(vals[0]) if len(vals)==1 else np.nan
+        skill_targets=float(
+            pd.to_numeric(g.loc[g["family"].isin(FAMILIES),"targets"],errors="coerce")
+            .fillna(0).sum()
         )
-        residual = (
-            float(team_targets - skill_targets)
-            if finite_positive else np.nan
-        )
-        sum_ok = bool(
-            finite_positive and skill_targets <= team_targets + TOL
-        )
-        residual_ok = bool(
-            finite_positive and residual >= -TOL
-        )
-        if not sum_ok:
-            target_sum_violations += 1
-        if not residual_ok:
-            negative_residual_violations += 1
-
+        residual=team_targets-skill_targets if np.isfinite(team_targets) else np.nan
         rows.append({
-            "season":season,
-            "week":week,
-            "team":team,
+            "season":season,"week":week,"team":team,
             "team_targets":team_targets,
             "rb_wr_te_targets":skill_targets,
             "residual_team_targets":residual,
-            "team_targets_unique":unique_ok,
-            "team_targets_finite_positive":finite_positive,
-            "target_sum_within_team_total":sum_ok,
-            "residual_nonnegative":residual_ok,
+            "team_targets_unique":len(vals)==1,
+            "team_targets_finite_positive":bool(np.isfinite(team_targets) and team_targets>0),
+            "target_sum_within_team_total":bool(np.isfinite(team_targets) and skill_targets<=team_targets+TOL),
+            "residual_nonnegative":bool(np.isfinite(residual) and residual>=-TOL),
         })
-
-    out = pd.DataFrame(rows)
-    audit = {
+    out=pd.DataFrame(rows)
+    return out,{
         "represented_team_weeks":int(len(out)),
-        "team_target_unique_violations":int(unique_violations),
-        "nonfinite_or_nonpositive_team_target_weeks":int(nonfinite_team_weeks),
-        "rb_wr_te_target_sum_exceeds_team_total_weeks":int(target_sum_violations),
-        "negative_residual_team_target_weeks":int(negative_residual_violations),
+        "team_target_unique_violations":int((~out["team_targets_unique"]).sum()) if len(out) else 0,
+        "nonfinite_or_nonpositive_team_target_weeks":int((~out["team_targets_finite_positive"]).sum()) if len(out) else 0,
+        "rb_wr_te_target_sum_exceeds_team_total_weeks":int((~out["target_sum_within_team_total"]).sum()) if len(out) else 0,
+        "negative_residual_team_target_weeks":int((~out["residual_nonnegative"]).sum()) if len(out) else 0,
     }
-    return out,audit
 
 
 def summarize(
@@ -432,27 +325,57 @@ def summarize(
     pri: pd.DataFrame,
     finite: pd.DataFrame,
     season: int,
-    duplicate_episode_identities: int,
-    duplicate_receiving_identities: int,
     audit: dict,
 ) -> dict:
-    s = mem.loc[mem["season"].eq(season)].copy()
-    p = pri.loc[pri["season"].eq(season)].copy()
-    f = finite.loc[finite["season"].eq(season)].copy()
+    s=mem.loc[mem["season"].eq(season)].copy()
+    p=pri.loc[pri["season"].eq(season)].copy() if len(pri) else pri
+    f=finite.loc[finite["season"].eq(season)].copy() if len(finite) else finite
 
-    next_states = (
-        s.loc[s["immediate_next_present"], "immediate_next_state"]
-        .value_counts(dropna=False)
-        .to_dict()
+    restored=len(s)
+    players=int(s["stable_id"].nunique()) if len(s) else 0
+    prior_support=float(s["prior_support_ok"].mean()) if len(s) else 0.0
+    return_coverage=float(s["return_row_present"].mean()) if len(s) else 0.0
+    next_coverage=float(s["immediate_next_present"].mean()) if len(s) else 0.0
+    next_states=(
+        s.loc[s["immediate_next_present"],"immediate_next_state"]
+        .value_counts().sort_index().to_dict()
+        if len(s) else {}
     )
+    pos_next=s.loc[s["immediate_next_positive_participation"]].copy()
 
-    positive_next = s.loc[
-        s["immediate_next_present"]
-        & s["immediate_next_positive_participation"]
-    ].copy()
+    admitted_ids=set(
+        tuple(v) for v in s.loc[s["prior_support_ok"],[
+            "season","team","stable_id","episode_number"
+        ]].to_records(index=False)
+    )
+    if len(p):
+        p["_episode_key"]=list(zip(p["season"],p["team"],p["stable_id"],p["episode_number"]))
+        admitted=p.loc[p["_episode_key"].isin(admitted_ids)].copy()
+    else:
+        admitted=p.copy()
 
-    families = []
-    for fam,g in s.groupby("family", sort=True):
+    prior_fields_ok=bool(
+        len(admitted)>0
+        and admitted["playerform_weekly_row_present"].all()
+        and admitted["targets"].notna().all()
+        and admitted["targets"].ge(0).all()
+        and admitted["team_targets"].notna().all()
+        and admitted["team_targets"].gt(0).all()
+        and admitted["target_share_game"].notna().all()
+    )
+    return_admitted=s.loc[s["return_row_present"]].copy()
+    return_fields_ok=bool(
+        len(return_admitted)>0
+        and return_admitted["return_opportunity_valid"].all()
+    )
+    pos_next_ok=bool(
+        len(pos_next)==0
+        or pos_next["immediate_next_opportunity_valid_if_positive"].all()
+    )
+    state_vocab_ok=set(next_states)<=ALLOWED_STATES
+
+    families=[]
+    for fam,g in s.groupby("family",sort=True):
         families.append({
             "family":str(fam),
             "restored_episodes":int(len(g)),
@@ -463,102 +386,49 @@ def summarize(
             "immediate_next_clean":int(g["immediate_next_clean"].sum()),
         })
 
-    restored = int(len(s))
-    players = int(s["stable_id"].nunique())
-    prior_support_share = float(s["prior_support_ok"].mean()) if restored else 0.0
-    return_coverage = float(s["return_row_unique"].mean()) if restored else 0.0
-    next_coverage = float(s["immediate_next_present"].mean()) if restored else 0.0
-
-    prior_valid = bool(
-        len(p) == 0
-        or (
-            p["playerform_weekly_row_present"].all()
-            and p["targets"].notna().all()
-            and p["targets"].ge(0).all()
-            and p["team_targets"].notna().all()
-            and p["team_targets"].gt(0).all()
-            and p["target_share_game"].notna().all()
-        )
-    )
-
-    ret_admitted = s.loc[s["return_row_unique"]].copy()
-    ret_valid_fields = bool(
-        len(ret_admitted) > 0
-        and ret_admitted["return_opportunity_valid"].all()
-    )
-
-    next_positive_valid = bool(
-        len(positive_next) == 0
-        or positive_next["immediate_next_opportunity_valid_if_positive"].all()
-    )
-
-    state_vocab_ok = bool(
-        set(str(v) for v in next_states.keys() if str(v))
-        <= ALLOWED_STATES
-    )
-
-    gates = {
-        "restored_episodes_ge_100":restored >= 100,
-        "restored_named_players_ge_90":players >= 90,
+    gates={
+        "restored_episodes_ge_100":restored>=100,
+        "restored_named_players_ge_90":players>=90,
         "stable_id_coverage_eq_100":bool(s["stable_id"].ne("").all()),
-        "duplicate_episode_identities_zero":duplicate_episode_identities == 0,
-        "duplicate_receiving_identities_zero":duplicate_receiving_identities == 0,
-        "return_after_episode_start_all":bool((s["return_week"] > s["episode_start_week"]).all()),
-        "prior_rows_strictly_before_start_all":bool(
-            len(p) == 0 or (p["prior_week"] < p["episode_start_week"]).all()
-        ),
+        "duplicate_episode_identities_zero":not s.duplicated(["season","team","stable_id","episode_number"]).any(),
+        "return_after_episode_start_all":bool((s["return_week"]>s["episode_start_week"]).all()),
+        "prior_rows_strictly_before_start_all":bool(len(p)==0 or (p["prior_week"]<p["episode_start_week"]).all()),
         "immediate_next_after_return_all":bool(
-            (
-                ~s["immediate_next_present"]
-                | (pd.to_numeric(s["immediate_next_week"], errors="coerce") > s["return_week"])
-            ).all()
+            (~s["immediate_next_present"] | (pd.to_numeric(s["immediate_next_week"],errors="coerce")>s["return_week"])).all()
         ),
-        "skipped_immediate_next_zero":audit["skipped_immediate_next_violations"] == 0,
-        "prior_support_share_ge_095":prior_support_share >= 0.95,
-        "admitted_prior_playerform_present_all":prior_valid,
-        "admitted_prior_targets_finite_nonnegative_all":prior_valid,
-        "admitted_prior_team_targets_finite_positive_all":prior_valid,
-        "admitted_prior_target_share_finite_all":prior_valid,
-        "return_row_coverage_ge_099":return_coverage >= 0.99,
-        "return_rows_positive_participation_all":ret_valid_fields,
-        "return_rows_playerform_present_all":ret_valid_fields,
-        "return_targets_finite_nonnegative_all":ret_valid_fields,
-        "return_team_targets_finite_positive_all":ret_valid_fields,
-        "return_target_share_finite_all":ret_valid_fields,
-        "immediate_next_coverage_ge_075":next_coverage >= 0.75,
+        "skipped_immediate_next_zero":audit["skipped_immediate_next_violations"]==0,
+        "prior_support_share_ge_095":prior_support>=0.95,
+        "admitted_prior_playerform_present_all":prior_fields_ok,
+        "admitted_prior_targets_finite_nonnegative_all":prior_fields_ok,
+        "admitted_prior_team_targets_finite_positive_all":prior_fields_ok,
+        "admitted_prior_target_share_finite_all":prior_fields_ok,
+        "return_row_coverage_ge_099":return_coverage>=0.99,
+        "return_rows_positive_participation_all":return_fields_ok,
+        "return_rows_playerform_present_all":return_fields_ok,
+        "return_targets_finite_nonnegative_all":return_fields_ok,
+        "return_team_targets_finite_positive_all":return_fields_ok,
+        "return_target_share_finite_all":return_fields_ok,
+        "immediate_next_coverage_ge_075":next_coverage>=0.75,
         "immediate_next_state_vocab_source_certified":state_vocab_ok,
-        "immediate_next_clean_nonzero":bool(s["immediate_next_clean"].sum() > 0),
-        "positive_immediate_next_playerform_present_all":next_positive_valid,
-        "team_target_unique_all":bool(
-            len(f) > 0 and f["team_targets_unique"].all()
-        ),
-        "represented_team_targets_finite_positive_all":bool(
-            len(f) > 0 and f["team_targets_finite_positive"].all()
-        ),
-        "rb_wr_te_target_sum_within_team_total_all":bool(
-            len(f) > 0 and f["target_sum_within_team_total"].all()
-        ),
-        "residual_team_targets_nonnegative_all":bool(
-            len(f) > 0 and f["residual_nonnegative"].all()
-        ),
+        "immediate_next_clean_nonzero":bool(s["immediate_next_clean"].sum()>0),
+        "positive_immediate_next_playerform_present_all":pos_next_ok,
+        "team_target_unique_all":bool(len(f)>0 and f["team_targets_unique"].all()),
+        "represented_team_targets_finite_positive_all":bool(len(f)>0 and f["team_targets_finite_positive"].all()),
+        "rb_wr_te_target_sum_within_team_total_all":bool(len(f)>0 and f["target_sum_within_team_total"].all()),
+        "residual_team_targets_nonnegative_all":bool(len(f)>0 and f["residual_nonnegative"].all()),
     }
-
     return {
-        "season":season,
-        "restored_episodes":restored,
-        "restored_named_players":players,
+        "season":int(season),
+        "restored_episodes":int(restored),
+        "restored_named_players":int(players),
         "prior_support_episodes":int(s["prior_support_ok"].sum()),
-        "prior_support_share":prior_support_share,
-        "exact_return_row_episodes":int(s["return_row_unique"].sum()),
+        "prior_support_share":prior_support,
+        "exact_return_row_episodes":int(s["return_row_present"].sum()),
         "exact_return_row_coverage":return_coverage,
         "immediate_next_observation_episodes":int(s["immediate_next_present"].sum()),
         "immediate_next_observation_coverage":next_coverage,
         "immediate_next_clean_episodes":int(s["immediate_next_clean"].sum()),
         "immediate_next_state_counts":{str(k):int(v) for k,v in next_states.items()},
-        "positive_immediate_next_rows":int(len(positive_next)),
-        "positive_immediate_next_valid_rows":int(
-            positive_next["immediate_next_opportunity_valid_if_positive"].sum()
-        ) if len(positive_next) else 0,
         "represented_team_weeks":int(len(f)),
         "family_summary":families,
         "gates":gates,
@@ -567,35 +437,26 @@ def summarize(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--episodes", type=Path, required=True)
-    ap.add_argument("--receiving", type=Path, required=True)
-    ap.add_argument("--health", type=Path, required=True)
-    ap.add_argument("--out-dir", type=Path, required=True)
-    a = ap.parse_args()
-    a.out_dir.mkdir(parents=True, exist_ok=True)
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--episodes",type=Path,required=True)
+    ap.add_argument("--receiving",type=Path,required=True)
+    ap.add_argument("--health",type=Path,required=True)
+    ap.add_argument("--out-dir",type=Path,required=True)
+    a=ap.parse_args()
+    a.out_dir.mkdir(parents=True,exist_ok=True)
 
-    episodes = load_episodes(a.episodes)
-    receiving = load_receiving(a.receiving)
-    health = load_health(a.health)
+    episodes=load_episodes(a.episodes)
+    receiving=load_receiving(a.receiving)
+    health=load_health(a.health)
 
-    ep_dup = int(
-        episodes.duplicated(["season","team","stable_id","episode_number"]).sum()
-    )
-    rec_dup = int(
-        receiving.duplicated(["season","week","team","stable_id"]).sum()
-    )
+    mem,pri,represented,audit=build_membership(episodes,receiving,health)
+    finite,finite_audit=finite_opportunity_audit(receiving,represented)
+    summaries=[summarize(mem,pri,finite,s,audit) for s in SEASONS]
 
-    mem,pri,represented,audit = build_membership(episodes,receiving,health)
-    finite,finite_audit = finite_opportunity_audit(receiving,represented)
-
-    summaries = [
-        summarize(mem,pri,finite,s,ep_dup,rec_dup,audit)
-        for s in SEASONS
-    ]
-
-    integrity = {
-        "chronology_violations_zero":audit["chronology_violations"] == 0,
+    integrity={
+        "duplicate_receiving_identities_zero":not receiving.duplicated(["season","week","team","stable_id"]).any(),
+        "chronology_violations_zero":audit["chronology_violations"]==0,
+        "skipped_immediate_next_violations_zero":audit["skipped_immediate_next_violations"]==0,
         "predictive_target_relationships_scored_zero":True,
         "target_restoration_labels_created_zero":True,
         "coefficients_fit_zero":True,
@@ -605,13 +466,9 @@ def main() -> int:
         "sportsbook_oddsapi_zero":True,
         "production_changed_false":True,
     }
+    ready=bool(all(s["source_ready"] for s in summaries) and all(integrity.values()))
 
-    ready = bool(
-        all(s["source_ready"] for s in summaries)
-        and all(integrity.values())
-    )
-
-    result = {
+    result={
         "version":VERSION,
         "freeze_commit":FREEZE_COMMIT,
         "return_parent_run":39162437467,
@@ -644,32 +501,19 @@ def main() -> int:
         "production_changed":False,
     }
 
-    mem.to_csv(
-        a.out_dir/"return_state_receiving_opportunity_membership.csv",
-        index=False,float_format="%.12f"
-    )
-    pri.to_csv(
-        a.out_dir/"return_state_receiving_opportunity_prior_rows.csv",
-        index=False,float_format="%.12f"
-    )
-    finite.to_csv(
-        a.out_dir/"return_state_receiving_opportunity_finite_team_audit.csv",
-        index=False,float_format="%.12f"
-    )
+    mem.to_csv(a.out_dir/"return_state_receiving_opportunity_membership.csv",index=False,float_format="%.12f")
+    pri.to_csv(a.out_dir/"return_state_receiving_opportunity_prior_rows.csv",index=False,float_format="%.12f")
+    finite.to_csv(a.out_dir/"return_state_receiving_opportunity_finite_team_audit.csv",index=False,float_format="%.12f")
     pd.DataFrame([
-        dict(season=s["season"], **f)
-        for s in summaries for f in s["family_summary"]
-    ]).to_csv(
-        a.out_dir/"return_state_receiving_opportunity_family_summary.csv",
-        index=False
-    )
+        dict(season=s["season"],**fam)
+        for s in summaries for fam in s["family_summary"]
+    ]).to_csv(a.out_dir/"return_state_receiving_opportunity_family_summary.csv",index=False)
     (a.out_dir/"return_state_receiving_opportunity_source_result.json").write_text(
-        json.dumps(result,indent=2,sort_keys=True)+"\n",
-        encoding="utf-8",
+        json.dumps(result,indent=2,sort_keys=True)+"\n",encoding="utf-8"
     )
     print(json.dumps(result,indent=2,sort_keys=True))
     return 0
 
 
-if __name__ == "__main__":
+if __name__=="__main__":
     raise SystemExit(main())
