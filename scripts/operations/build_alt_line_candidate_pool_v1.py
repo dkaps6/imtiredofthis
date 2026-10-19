@@ -140,11 +140,25 @@ def screen(board, form_by_key, prop_q, board_q, min_games=10):
             reject(f"insufficient_player_evidence:games={games:g}")
             continue
 
-        # The player has to be someone the offense actually uses. Rank comes
-        # from model_role; a missing rank fails closed rather than passing.
+        # The player has to be someone the offense actually uses, and which
+        # field carries that rank depends on the position -- the two fields
+        # fail in opposite directions.
+        #
+        # Receivers, backs and tight ends: model_role, the usage-derived
+        # hierarchy. depth_role is the Ourlads alignment slot, and because
+        # receivers split across LWR/SWR/RWR the second body at a slot still
+        # reads WR1.
+        #
+        # Quarterbacks: depth_role, which for a single-alignment position is
+        # the real depth order. model_role ranks quarterbacks by descending
+        # ypa, so a backup with four games and a fluky average outranks the
+        # starter -- TEN reads Trubisky (ypa 8.94, 4 games) as QB1 over Ward
+        # (ypa 5.82, 22 games), and CHI reads Bagent over Caleb Williams.
         model_role = (form.get("model_role") or "").strip().upper()
-        if model_role not in PLAYABLE_ROLES:
-            reject(f"not_a_playable_role:{model_role or 'unknown'}")
+        depth_role = (form.get("depth_role") or "").strip().upper()
+        rank = depth_role if pos_group == "QB" else model_role
+        if rank not in PLAYABLE_ROLES:
+            reject(f"not_a_playable_role:{rank or 'unknown'}")
             continue
 
         if (market, pos_group) in GADGET:
@@ -160,8 +174,9 @@ def screen(board, form_by_key, prop_q, board_q, min_games=10):
         kept.append({
             **row,
             "position_group": pos_group,
+            "rank_used": rank,
             "model_role": model_role,
-            "alignment_slot": form.get("depth_role") or "",
+            "depth_role": depth_role,
             "tgt_share": form.get("tgt_share") or "",
             "rush_share": form.get("rush_share") or "",
             "player_games": f"{games:g}",
@@ -225,8 +240,9 @@ def main(argv=None):
 
     cols = ["market", "player", "team", "opponent", "side", "vegas_line",
             "model_proj", "model_sd", "cushion", "cushion_sd", "fair_prob",
-            "vegas_odds", "edge_pct", "book", "position_group", "model_role",
-            "alignment_slot", "tgt_share", "rush_share", "player_games"]
+            "vegas_odds", "edge_pct", "book", "position_group", "rank_used",
+            "model_role", "depth_role", "tgt_share", "rush_share",
+            "player_games"]
     print("\n=== CANDIDATE POOL (ranked by cushion in sd) ===")
     print("\t".join(cols))
     for r in pool:

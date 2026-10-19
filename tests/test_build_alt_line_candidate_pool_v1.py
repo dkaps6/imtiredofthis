@@ -179,6 +179,7 @@ def test_lines_below_the_floor_are_degenerate(market, line):
         kw.update(qb_synthesis_applied="1", qb_synthesis_proj="999")
         form["p"]["position_group"] = "QB"
         form["p"]["model_role"] = "QB1"
+        form["p"]["depth_role"] = "QB1"
     _, reason = screen_one(board_row(**kw), form=form)
     assert reason.startswith("degenerate_low_line")
 
@@ -211,11 +212,39 @@ def test_rank_comes_from_model_role_not_the_alignment_slot():
                   "tgt_share": "0.2587", "rush_share": "0"}}
     kept, _ = screen_one(board_row(vegas_line="12.5", model_proj="21.8"), form=tate)
     assert kept is not None, "the room's real WR1 must not be filtered by its alignment slot"
+    assert kept["rank_used"] == "WR1"
     assert kept["model_role"] == "WR1"
-    assert kept["alignment_slot"] == "WR3"
+    assert kept["depth_role"] == "WR3"
 
 
 def test_missing_rank_fails_closed():
     form = {"p": {**WR_FORM["p"], "model_role": ""}}
     _, reason = screen_one(board_row(vegas_line="12", model_proj="20"), form=form)
     assert reason == "not_a_playable_role:unknown"
+
+
+def test_quarterback_rank_comes_from_depth_role_not_model_role():
+    """model_role ranks quarterbacks by descending ypa, so a backup with a tiny
+    sample and a fluky average outranks the starter. For a single-alignment
+    position depth_role is the real depth order, so that is what gates here.
+
+    TEN: Trubisky reads model_role=QB1 on ypa 8.94 over four games, while Cam
+    Ward -- the actual starter, 22 games, ypa 5.82 -- reads model_role=QB2.
+    """
+    ward = {"p": {"position_group": "QB", "prior_games": "17", "current_games": "5",
+                  "depth_role": "QB1", "model_role": "QB2",
+                  "tgt_share": "0", "rush_share": "0.118"}}
+    kept, _ = screen_one(board_row(
+        market="pass_yards", vegas_line="200", model_proj="225",
+        qb_synthesis_applied="1", qb_synthesis_proj="225"), form=ward)
+    assert kept is not None, "the certified starter must not be filtered by an ypa rank"
+    assert kept["rank_used"] == "QB1"
+
+    trubisky = {"p": {"position_group": "QB", "prior_games": "2", "current_games": "2",
+                      "depth_role": "QB2", "model_role": "QB1",
+                      "tgt_share": "0", "rush_share": "0.063"}}
+    _, reason = screen_one(board_row(
+        market="pass_yards", vegas_line="200", model_proj="225",
+        qb_synthesis_applied="1", qb_synthesis_proj="225"), form=trubisky)
+    assert reason == "not_a_playable_role:QB2", \
+        "an ypa-promoted backup must not reach a ticket as the starter"
