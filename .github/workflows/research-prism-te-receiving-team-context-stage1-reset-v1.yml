@@ -1,0 +1,177 @@
+name: Research PRISM TE Receiving Team Context Stage1 Reset V1
+
+on:
+  push:
+    branches: [research-individual-opportunity-roadmap-2026-10-08]
+    paths:
+      - 'docs/research/PRISM_TE_RECEIVING_TEAM_CONTEXT_STAGE1_PARTICIPATION_AUTHORITY_RESET_V1_PREDICTIVE_FREEZE.md'
+      - 'scripts/research/evaluate_prism_te_receiving_team_context_stage1_participation_authority_reset_v1.py'
+      - 'tests/test_prism_te_receiving_team_context_stage1_participation_authority_reset_v1.py'
+      - '.github/workflows/research-prism-te-receiving-team-context-stage1-reset-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  FREEZE_COMMIT: "929d6565b594c00c870c78717481c9082175911c"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install numpy pandas scipy pytest pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_TE_RECEIVING_TEAM_CONTEXT_STAGE1_PARTICIPATION_AUTHORITY_RESET_V1_PREDICTIVE_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/evaluate_prism_te_receiving_team_context_stage1_participation_authority_reset_v1.py" 2>/dev/null; then
+            echo "ERROR: scorer existed at freeze"
+            exit 1
+          fi
+
+      - name: Verify immutable parents
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12187947053 --jq '.workflow_run.id')" = "39255619282"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12187947053 --jq '.digest')" = "sha256:885f3ec53f553f3d2aa1de04d87776497c2d76624bb6d35a600597b31064d266"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070774378 --jq '.workflow_run.id')" = "38957575645"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070774378 --jq '.digest')" = "sha256:e07edbad1bf97a4917ba95c58156c8941448e7b2668bd0eae2e9bcad5d4945b0"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-te-receiving-team-context-stage1-reset-v1-source-39255619282
+          path: /tmp/source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39255619282
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-conditional-allocation-bridge-v1-38957575645
+          path: /tmp/parent
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38957575645
+
+      - name: Resolve immutable files
+        run: |
+          set -euo pipefail
+          SOURCE="$(find /tmp/source -type f -name 'te_receiving_team_context_stage1_reset_source_rows.csv' -print -quit)"
+          PLAYERS="$(find /tmp/parent -type f -name 'active_role_conditional_allocation_bridge_player_rows.csv' -print -quit)"
+          ROOMS="$(find /tmp/parent -type f -name 'active_role_conditional_allocation_bridge_room_rows.csv' -print -quit)"
+          test -s "$SOURCE" && test -s "$PLAYERS" && test -s "$ROOMS"
+          echo "SOURCE=$SOURCE" >> "$GITHUB_ENV"
+          echo "PLAYERS=$PLAYERS" >> "$GITHUB_ENV"
+          echo "ROOMS=$ROOMS" >> "$GITHUB_ENV"
+
+      - name: Compile and focused tests
+        env: {PYTHONPATH: "${{ github.workspace }}"}
+        run: |
+          python -m py_compile scripts/research/evaluate_prism_te_receiving_team_context_stage1_participation_authority_reset_v1.py
+          pytest -q tests/test_prism_te_receiving_team_context_stage1_participation_authority_reset_v1.py
+
+      - name: Execute frozen predictive test
+        env: {PYTHONPATH: "${{ github.workspace }}"}
+        run: |
+          rm -rf /tmp/te-reset-score && mkdir -p /tmp/te-reset-score/out
+          python scripts/research/evaluate_prism_te_receiving_team_context_stage1_participation_authority_reset_v1.py \
+            --source-rows "$SOURCE" --parent-player-rows "$PLAYERS" --parent-room-rows "$ROOMS" \
+            --out-dir /tmp/te-reset-score/out
+
+      - name: Certify frozen predictive contract
+        run: |
+          python - <<'PY'
+          import json,pandas as pd
+          b='/tmp/te-reset-score/out'
+          p=json.load(open(f'{b}/te_receiving_team_context_stage1_reset_result.json'))
+          r=pd.read_csv(f'{b}/te_receiving_team_context_stage1_reset_scored_rows.csv')
+          assert p['freeze_commit']=='929d6565b594c00c870c78717481c9082175911c',p
+          assert p['disposition'] in {
+            'PRISM_TE_RECEIVING_TEAM_CONTEXT_STAGE1_PARTICIPATION_AUTHORITY_RESET_V1_QUALIFIED',
+            'PRISM_TE_RECEIVING_TEAM_CONTEXT_STAGE1_PARTICIPATION_AUTHORITY_RESET_V1_PREDICTIVE_CLOSED',
+          },p
+          d=p['development_2024']; c=p['confirmation_2025']
+          assert d['actionable_events']==17 and d['stable_ids']==17,p
+          assert c['actionable_events']==18 and c['stable_ids']==18,p
+          for s in (d,c):
+            for k in ('max_baseline_expected_count_parity_diff','max_baseline_crps_parity_diff','max_baseline_ae_parity_diff','max_baseline_room_error_parity_diff'):
+              assert s[k]<=1e-10,(k,s[k])
+            for k in ('max_baseline_state_weight_gap','max_candidate_state_weight_gap','max_baseline_mass_gap','max_candidate_mass_gap'):
+              assert s[k]<=1e-10,(k,s[k])
+          assert len(r)==35
+          assert r.groupby('season').size().to_dict()=={2024:17,2025:18}
+          assert (r['baseline_p_active']-r['candidate_reset_p_active']).abs().gt(1e-12).all()
+          assert p['bootstrap_reps']==5000 and p['bootstrap_seed']==20261019
+          assert p['coefficients_fit']==0 and p['thresholds_searched']==0 and p['subgroup_rescues']==0
+          assert p['yards_scored'] is False and p['touchdowns_scored'] is False
+          assert p['sportsbook_inputs_used']==0 and p['oddsapi_calls']==0 and p['outcomes_2026_used']==0
+          assert p['production_changed'] is False
+          PY
+
+      - name: Strict repository audit
+        env: {PYTHONPATH: "${{ github.workspace }}"}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 predictive result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json,os
+          p=json.load(open('/tmp/te-reset-score/out/te_receiving_team_context_stage1_reset_result.json'))
+          print("### PRISM TE receiving team-context Stage-1 participation authority reset V1 — predictive result")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          for key,label in (('development_2024','2024 development'),('confirmation_2025','2025 independent confirmation')):
+            s=p[key]
+            print()
+            print(f"**{label}**")
+            print(f"- actionable events / stable IDs: {s['actionable_events']} / {s['stable_ids']}")
+            print(f"- target CRPS gain: {s['mean_delta_crps']:+.6f}")
+            print(f"- target expected-count AE gain: {s['mean_delta_ae']:+.6f}")
+            print(f"- room allocation-error gain: {s['mean_delta_room_error']:+.6f}")
+            print(f"- equal-player mean / median / p10: {s['equal_player_mean_improvement']:+.6f} / {s['equal_player_median_improvement']:+.6f} / {s['equal_player_p10_improvement']:+.6f}")
+            print(f"- improved / tied / worsened: {s['equal_player_improved_share']:.2%} / {s['equal_player_tied_share']:.2%} / {s['equal_player_worsened_share']:.2%}")
+            print(f"- player-cluster CI: [{s['player_cluster_bootstrap']['ci95_low']:+.6f}, {s['player_cluster_bootstrap']['ci95_high']:+.6f}]")
+            print(f"- game-cluster CI: [{s['game_cluster_bootstrap']['ci95_low']:+.6f}, {s['game_cluster_bootstrap']['ci95_high']:+.6f}]")
+            print(f"- equal-player CI: [{s['equal_player_bootstrap']['ci95_low']:+.6f}, {s['equal_player_bootstrap']['ci95_high']:+.6f}]")
+          failed=[k for k,v in p['qualification_gates'].items() if k!='tail_floor' and not v]
+          print()
+          print(f"- Failed frozen gates: {failed or ['NONE']}")
+          print(f"- Frozen p10 tail floor: {p['qualification_gates'].get('tail_floor')}")
+          print()
+          print("Only the transitioned TE's old same-player Stage-1 participation authority changes. Current-team entitlement, teammates, room size and exact finite-opportunity conservation remain fixed. The closed TE player-specific Stage-2 signal remains closed.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-te-receiving-team-context-stage1-reset-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/te-reset-score/out/**
