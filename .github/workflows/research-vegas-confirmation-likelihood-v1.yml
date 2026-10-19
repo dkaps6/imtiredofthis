@@ -73,4 +73,4 @@ jobs:
             /tmp/vegas_confirmation/result/*.json
             docs/research/VEGAS_CONFIRMATION_LIKELIHOOD_V1_PLAN.md
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90

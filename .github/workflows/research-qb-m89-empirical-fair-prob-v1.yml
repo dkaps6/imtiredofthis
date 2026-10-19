@@ -241,7 +241,7 @@ jobs:
             /tmp/qb_m89/result/*.csv
             /tmp/qb_m89/legacy_grade/*.csv
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90
 
       - name: Upload reconstructed pass_yards distribution shards
         if: always()
@@ -250,5 +250,5 @@ jobs:
           name: qb-m89-simulated-outcome-shards-v1
           path: /tmp/qb_m89/distributions/*.npz
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 90
           compression-level: 0

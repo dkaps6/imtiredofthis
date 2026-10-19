@@ -47,4 +47,4 @@ jobs:
             data/backtests/historical_input_validation.csv
             data/backtests/wr_target_opportunity/*.csv
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90

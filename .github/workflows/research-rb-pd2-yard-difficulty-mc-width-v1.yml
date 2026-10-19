@@ -158,7 +158,7 @@ jobs:
             evidence/m91/${{ matrix.season }}/component_predictions.csv
             evidence/m91/${{ matrix.season }}/historical_input_validation.csv
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
       - name: Upload mean-mismatch diagnostic (failure only)
         if: failure()
         uses: actions/upload-artifact@v4
@@ -166,14 +166,14 @@ jobs:
           name: rb-pd2-yard-width-mismatch-diagnostic-${{ matrix.season }}
           path: evidence/distributions/${{ matrix.season }}/*_mean_mismatch_diagnostic.csv
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
       - name: Upload reconstructed distribution shard
         uses: actions/upload-artifact@v4
         with:
           name: rb-pd2-yard-width-distributions-${{ matrix.season }}
           path: evidence/distributions/${{ matrix.season }}/**
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
 
   evaluate-frozen-candidate:
     if: github.event_name != 'pull_request'
@@ -267,4 +267,4 @@ jobs:
           name: rb-pd2-yard-difficulty-mc-width-v1
           path: evidence/result/**
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90

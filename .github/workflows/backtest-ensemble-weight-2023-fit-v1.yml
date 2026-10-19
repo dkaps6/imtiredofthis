@@ -93,4 +93,4 @@ jobs:
             /tmp/weight_fit/component_predictions_2023.csv
             /tmp/weight_fit/ensemble_weights_2023_fit_v1.csv
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90

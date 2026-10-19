@@ -806,4 +806,11 @@ jobs:
             data/**
             outputs/**
           if-no-files-found: warn
-          retention-days: 7
+          # This artifact holds the paid sportsbook boundary -- props_raw.csv
+          # and odds_game.csv come from a one-time OddsAPI purchase and cannot
+          # be refetched at any price once the lines move. It was on 7 days
+          # while a research capture in this same job sat on 90, and that is
+          # how the Weeks 3-5 boards were lost: their artifacts expired before
+          # the durable archive existed, so those slates can never be graded
+          # at row level again.
+          retention-days: 90

@@ -268,7 +268,7 @@ jobs:
             /tmp/wrte/grade/*.csv
             /tmp/wrte/result/*.csv
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90
 
       - name: Upload hybrid raw distribution shards
         if: always()
@@ -277,5 +277,5 @@ jobs:
           name: wr-te-production-order-historical-distributions-v1
           path: /tmp/wrte/distributions/*.npz
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 90
           compression-level: 0

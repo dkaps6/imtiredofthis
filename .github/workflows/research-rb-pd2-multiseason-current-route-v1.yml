@@ -99,4 +99,4 @@ jobs:
             data/backtests/rb_pd2_multiseason_current_route_v1/*
             docs/research/RB_PD2_MULTISEASON_P3_EQUIVALENT_REPLICATION_V1_PLAN.md
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
