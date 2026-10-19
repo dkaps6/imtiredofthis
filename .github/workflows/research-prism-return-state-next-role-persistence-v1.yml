@@ -1,0 +1,213 @@
+name: Research PRISM Return State Next Role Persistence V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1_FREEZE.md'
+      - 'scripts/research/evaluate_prism_return_state_next_role_persistence_v1.py'
+      - 'tests/test_prism_return_state_next_role_persistence_v1.py'
+      - '.github/workflows/research-prism-return-state-next-role-persistence-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "c25d5f3d19cab3f68a0c0ad0482c79bf53a6730e"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/evaluate_prism_return_state_next_role_persistence_v1.py" 2>/dev/null; then
+            echo "ERROR: scorer existed at freeze"
+            exit 1
+          fi
+
+      - name: Verify immutable source authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+
+          expected = {
+              39162437467: (
+                  12149417234,
+                  'prism-return-from-injury-role-restoration-v1-source-39162437467',
+                  'sha256:7d69111925b7ad48f16b07150f5e5fbfac5e592bd01430d03efd907ca778c51e',
+              ),
+              39154145666: (
+                  12146625382,
+                  'prism-player-observation-health-state-v1-source-39154145666',
+                  'sha256:d74f2d3c37a88aa639527aedf719e7e08001d464c722613b46291cda0f74cbeb',
+              ),
+          }
+          repo = os.environ['GITHUB_REPOSITORY']
+          for run, (aid, name, digest) in expected.items():
+              payload = json.loads(subprocess.check_output(
+                  ['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts']
+              ))
+              arts = {int(a['id']): a for a in payload.get('artifacts', [])}
+              a = arts.get(aid)
+              assert a is not None, (run, aid)
+              assert not a.get('expired'), a
+              assert a.get('name') == name, a
+              assert a.get('digest') == digest, a
+              print('SOURCE_VERIFIED', run, aid, name, digest)
+          PY
+
+      - name: Download immutable sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-return-next-role
+          mkdir -p /tmp/prism-return-next-role/{return_source,health_source,out}
+
+          gh run download 39162437467 --repo "${{ github.repository }}"             --name prism-return-from-injury-role-restoration-v1-source-39162437467             --dir /tmp/prism-return-next-role/return_source
+
+          gh run download 39154145666 --repo "${{ github.repository }}"             --name prism-player-observation-health-state-v1-source-39154145666             --dir /tmp/prism-return-next-role/health_source
+
+          test -s /tmp/prism-return-next-role/return_source/return_from_injury_role_restoration_episodes.csv
+          test -s /tmp/prism-return-next-role/health_source/player_observation_health_state_rows.csv
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_prism_return_state_next_role_persistence_v1.py
+          pytest -q tests/test_prism_return_state_next_role_persistence_v1.py
+
+      - name: Execute frozen named-player return-state persistence test
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/evaluate_prism_return_state_next_role_persistence_v1.py             --episodes /tmp/prism-return-next-role/return_source/return_from_injury_role_restoration_episodes.csv             --health /tmp/prism-return-next-role/health_source/player_observation_health_state_rows.csv             --out-dir /tmp/prism-return-next-role/out
+
+      - name: Certify frozen contract
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+
+          p = json.load(open('/tmp/prism-return-next-role/out/return_state_next_role_persistence_result.json'))
+          rows = pd.read_csv('/tmp/prism-return-next-role/out/return_state_next_role_persistence_rows.csv')
+
+          assert p['version'] == 'PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1', p
+          assert p['freeze_commit'] == 'c25d5f3d19cab3f68a0c0ad0482c79bf53a6730e', p
+          assert p['return_source_run'] == 39162437467, p
+          assert p['return_source_artifact'] == 12149417234, p
+          assert p['health_source_run'] == 39154145666, p
+          assert p['health_source_artifact'] == 12146625382, p
+          assert p['disposition'] in {
+              'PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1_QUALIFIED_STATE_ONLY',
+              'PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1_CLOSED',
+          }, p
+
+          if len(rows):
+              assert rows['target_observation_state'].eq('NO_REPORT_PARTICIPATED').all()
+              assert (rows['target_week'] > rows['return_week']).all()
+              assert (rows['return_week'] > rows['episode_start_week']).all()
+              assert rows['actual_next_offense_pct'].gt(0).all()
+              assert rows['pre_role_anchor'].gt(0).all()
+              assert rows['decline_anchor'].ge(0).all()
+
+          assert p['performance_fields_used'] == 0, p
+          assert p['targets_used'] == 0, p
+          assert p['carries_used'] == 0, p
+          assert p['receptions_used'] == 0, p
+          assert p['yards_used'] == 0, p
+          assert p['touchdowns_used'] == 0, p
+          assert p['routes_inferred_from_snaps'] is False, p
+          assert p['coefficients_fit'] == 0, p
+          assert p['thresholds_searched'] == 0, p
+          assert p['outcomes_2026_used'] == 0, p
+          assert p['sportsbook_inputs_used'] == 0, p
+          assert p['oddsapi_calls'] == 0, p
+          assert p['production_changed'] is False, p
+          print(json.dumps(p, indent=2, sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+
+          p = json.load(open('/tmp/prism-return-next-role/out/return_state_next_role_persistence_result.json'))
+          print("### PRISM return-state next-role persistence V1")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          print()
+          for label in ('development_2024','confirmation_2025'):
+              s = p[label]
+              print(f"**{s['season']} named players**")
+              print(f"- scored episodes={s['scored_episodes']}; named players={s['named_players']}")
+              print(f"- equal-player gain={s['equal_player_average_gain']:+.6f}; median={s['median_player_gain']:+.6f}")
+              print(f"- improved/tied/worsened={s['improved_player_share']:.2%}/{s['tied_player_share']:.2%}/{s['worsened_player_share']:.2%}")
+              print(f"- p10/p25/p75/p90={s['p10_player_gain']:+.6f}/{s['p25_player_gain']:+.6f}/{s['p75_player_gain']:+.6f}/{s['p90_player_gain']:+.6f}")
+              if 'player_bootstrap' in s:
+                  b = s['player_bootstrap']
+                  print(f"- player-bootstrap 95% CI=[{b['ci_low']:+.6f},{b['ci_high']:+.6f}]")
+              for fam in s['family_diagnostics']:
+                  print(f"  - {fam['family']}: episodes={fam['scored_episodes']} players={fam['named_players']} equal-player={fam['equal_player_average_gain']:+.6f} improved/worsened={fam['improved_player_share']:.2%}/{fam['worsened_player_share']:.2%}")
+              print()
+
+          support_failed = [k for k,v in p['support_gates'].items() if not v]
+          qual_failed = [k for k,v in p['qualification_gates'].items() if not v]
+          print(f"- failed support gates: {support_failed or ['NONE']}")
+          print(f"- failed qualification gates: {qual_failed or ['NONE']}")
+          print(f"- immediate-next fail-closed exclusions: {p['audit']['exclusions']}")
+          print()
+          print("Named player is primary. This scores participation-state persistence only: no targets, carries, receptions, yards, TDs, routes, position coefficients, sportsbook/OddsAPI, 2026 outcomes, or production mutation. Finite-opportunity allocation remains untouched downstream.")
+          PY
+
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-return-state-next-role-persistence-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-return-next-role/out/**
