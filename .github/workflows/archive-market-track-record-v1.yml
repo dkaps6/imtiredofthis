@@ -61,40 +61,95 @@ jobs:
           test -s /tmp/fs_artifact/outputs/props_priced_clean.csv \
             || echo "no priced board artifact for run ${SOURCE_RUN_ID} (likely no live odds this run)"
 
+      - name: Resolve the triggering run's season and week from its own artifact
+        run: |
+          set -euo pipefail
+          # Scope must come from the run being archived, not from this job.
+          # SEASON is hard-coded in this workflow's env and resolve_week()
+          # answers for the archive job's own wall clock, so a manually
+          # dispatched Full Slate using the season/date inputs -- or any
+          # replay of an earlier slate -- would be labelled as the current
+          # week and overwrite that week's ledger files. Every candidate below
+          # is content the triggering run itself wrote into the artifact.
+          read -r ARCH_SEASON ARCH_WEEK <<<"$(python - <<'PY'
+          import csv, sys
+
+          # Ordered by authority. The priced board is definitive when pricing
+          # succeeded; the other two exist even when it failed, which is the
+          # case this has to survive.
+          CANDIDATES = [
+              "/tmp/fs_artifact/outputs/props_priced_clean.csv",
+              "/tmp/fs_artifact/data/metrics_ready.csv",
+              "/tmp/fs_artifact/data/player_form.csv",
+          ]
+
+          for path in CANDIDATES:
+              try:
+                  with open(path, newline="", encoding="utf-8") as fh:
+                      rows = list(csv.DictReader(fh))
+              except OSError:
+                  continue
+              if not rows or "season" not in rows[0] or "week" not in rows[0]:
+                  continue
+              pairs = {(r["season"], r["week"]) for r in rows
+                       if (r.get("season") or "").strip() and (r.get("week") or "").strip()}
+              if len(pairs) != 1:
+                  # Two slates in one artifact means the scope is not provable.
+                  print(f"{path}: ambiguous scope {sorted(pairs)}", file=sys.stderr)
+                  continue
+              season, week = pairs.pop()
+              print(f"resolved from {path}", file=sys.stderr)
+              print(int(float(season)), int(float(week)))
+              break
+          else:
+              print("FATAL: no artifact content proves this run's season/week",
+                    file=sys.stderr)
+              raise SystemExit(1)
+          PY
+          )"
+          echo "triggering run scope: season=${ARCH_SEASON} week=${ARCH_WEEK}"
+          echo "ARCH_SEASON=${ARCH_SEASON}" >> "$GITHUB_ENV"
+          echo "ARCH_WEEK=${ARCH_WEEK}" >> "$GITHUB_ENV"
+          echo "ARCH_STEM=$(printf '%d_wk%02d' "${ARCH_SEASON}" "${ARCH_WEEK}")" >> "$GITHUB_ENV"
+
+      - name: Preserve the paid raw inputs, whether or not pricing succeeded
+        run: |
+          set -euo pipefail
+          # This runs BEFORE the priced-board step and does not depend on it.
+          # A run can buy the odds and then fail in pricing -- Week 6's paid
+          # acquisition (run 38791377571) did exactly that, failing at the
+          # pricing step with props_raw.csv and odds_game.csv already on disk.
+          # Gating these behind the priced board recreates the precise failure
+          # that lost Weeks 3-5: acquisition paid, pricing failed, paid
+          # boundary expired.
+          #
+          # odds_game.csv also carries the game total, spread and implied team
+          # totals, which is the pregame game-environment signal.
+          for pair in "odds_game.csv:game_odds" "props_raw.csv:raw_props"; do
+            f="${pair%%:*}"; d="${pair##*:}"
+            if [ -s "/tmp/fs_artifact/outputs/$f" ]; then
+              mkdir -p "data/market_track_record/$d"
+              cp "/tmp/fs_artifact/outputs/$f" "data/market_track_record/$d/${ARCH_STEM}.csv"
+              echo "preserved $d/${ARCH_STEM}.csv ($(wc -l < "/tmp/fs_artifact/outputs/$f") lines)"
+            else
+              echo "note: $f absent from this run's artifact (expected with no live odds)"
+            fi
+          done
+
       - name: Archive priced board, if this run produced one
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
           SRC=/tmp/fs_artifact/outputs/props_priced_clean.csv
           if [ ! -s "$SRC" ]; then
-            echo "no priced board in this run's artifact (no-live-odds run) -- nothing to archive"
+            echo "no priced board in this run's artifact -- raw paid inputs already preserved above"
             exit 0
           fi
-          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
           python scripts/operations/archive_priced_board_v1.py \
             --priced-file "$SRC" \
-            --season "${SEASON}" \
-            --week "${WEEK_RESOLVED}" \
+            --season "${ARCH_SEASON}" \
+            --week "${ARCH_WEEK}" \
             --run-id "${SOURCE_RUN_ID}"
-
-          # The priced board is only half of what the OddsAPI purchase bought.
-          # odds_game.csv carries the game total, spread and implied team
-          # totals -- the pregame game-environment signal -- and props_raw.csv
-          # is the untransformed offer set. Both are unrepeatable once the
-          # lines move, and both were being dropped when the artifact expired,
-          # which is why Weeks 1-2 could be graded but their game environment
-          # could not be studied.
-          STEM="$(printf '%d_wk%02d' "${SEASON}" "${WEEK_RESOLVED}")"
-          for pair in "odds_game.csv:game_odds" "props_raw.csv:raw_props"; do
-            f="${pair%%:*}"; d="${pair##*:}"
-            if [ -s "/tmp/fs_artifact/outputs/$f" ]; then
-              mkdir -p "data/market_track_record/$d"
-              cp "/tmp/fs_artifact/outputs/$f" "data/market_track_record/$d/${STEM}.csv"
-              echo "preserved $d/${STEM}.csv"
-            else
-              echo "note: $f absent from this run's artifact"
-            fi
-          done
 
       - name: Snapshot recoverable ledger before git mutation
         run: |
@@ -143,10 +198,14 @@ jobs:
           exit 1
 
       - name: Preserve the ledger as a long-retention artifact
-        # Backstop for the failure mode that nearly lost Week 1: Full Slate
-        # artifacts expire after 7 days, so a board that is not committed is
-        # unrecoverable a week later. Upload the pre-git snapshot, never the
-        # working tree, so rebase conflicts cannot contaminate retained evidence.
+        # Backstop for the failure mode that actually lost Weeks 3-5: a board
+        # that is not committed is unrecoverable once its artifact expires.
+        # Full Slate uploads are now pinned at 90 days rather than the 7 that
+        # ran out on those slates, but 90 is GitHub's ceiling for a public
+        # repository, not permanence -- the commit below is the durable copy
+        # and this upload is only a safety net for a failed push. Upload the
+        # pre-git snapshot, never the working tree, so rebase conflicts cannot
+        # contaminate retained evidence.
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
