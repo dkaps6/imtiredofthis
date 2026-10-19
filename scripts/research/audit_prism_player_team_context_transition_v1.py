@@ -263,28 +263,33 @@ def build_states(roster):
     clean["same_family_competitor_count"]=competitor_count
     clean["same_family_competitor_stable_ids"]=competitor_ids
 
-    grouped={pid:g.sort_values(["ordinal","team"],kind="stable").reset_index(drop=True)
-             for pid,g in clean.groupby("stable_id",sort=False)}
-    prior_team_counts=[]
-    current_team_prior_counts=[]
+    # Strict-prior roster support can be accumulated in one chronological
+    # pass per named player. Counts are evaluated before the current row is
+    # added, so no same/future observation can enter the support metadata.
+    prior_team_counts=pd.Series(0,index=clean.index,dtype=int)
+    current_team_prior_counts=pd.Series(0,index=clean.index,dtype=int)
     skipped=0
-    for r in clean.itertuples(index=False):
-        h=grouped[str(r.stable_id)]
-        p=h.loc[h["ordinal"].lt(int(r.ordinal))].copy()
-        if pd.notna(r.previous_roster_ordinal) and len(p):
-            last=p.iloc[-1]
-            if (
-                int(last["ordinal"]) != int(r.previous_roster_ordinal)
-                or str(last["team"]) != str(r.previous_rostered_team)
-            ):
+    for _,g in clean.groupby("stable_id",sort=False):
+        team_counts={}
+        prior_row=None
+        for idx,r in g.iterrows():
+            if prior_row is not None:
+                if (
+                    int(prior_row["ordinal"]) != int(r["previous_roster_ordinal"])
+                    or str(prior_row["team"]) != str(r["previous_rostered_team"])
+                ):
+                    skipped += 1
+            elif pd.notna(r["previous_roster_ordinal"]):
                 skipped += 1
-        prior_team_counts.append(
-            int(p["team"].eq(str(r.previous_rostered_team)).sum())
-            if pd.notna(r.previous_rostered_team) else 0
-        )
-        current_team_prior_counts.append(int(p["team"].eq(str(r.team)).sum()))
-    clean["prior_team_roster_week_count"]=prior_team_counts
-    clean["current_team_prior_roster_week_count"]=current_team_prior_counts
+            prior_team_counts.loc[idx]=(
+                int(team_counts.get(str(r["previous_rostered_team"]),0))
+                if pd.notna(r["previous_rostered_team"]) else 0
+            )
+            current_team_prior_counts.loc[idx]=int(team_counts.get(str(r["team"]),0))
+            team_counts[str(r["team"])]=int(team_counts.get(str(r["team"]),0))+1
+            prior_row=r
+    clean["prior_team_roster_week_count"]=prior_team_counts.astype(int)
+    clean["current_team_prior_roster_week_count"]=current_team_prior_counts.astype(int)
     clean["prior_team_support_ge4"]=clean["prior_team_roster_week_count"].ge(4)
     clean["prior_team_support_ge8"]=clean["prior_team_roster_week_count"].ge(8)
 
