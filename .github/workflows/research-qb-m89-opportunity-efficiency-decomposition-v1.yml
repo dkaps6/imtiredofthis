@@ -175,7 +175,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: qb-m89-opportunity-efficiency-decomposition-v1
-          retention-days: 30
+          retention-days: 90
           path: |
             /tmp/qb_opp_eff/result/**
             /tmp/qb_opp_eff/m89_out/m89_synthesis_scoreboard.csv

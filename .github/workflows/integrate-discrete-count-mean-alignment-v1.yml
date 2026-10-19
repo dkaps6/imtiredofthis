@@ -104,4 +104,4 @@ jobs:
           name: discrete-count-mean-alignment-v1-integration
           path: /tmp/discrete_integration/out/*
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90
