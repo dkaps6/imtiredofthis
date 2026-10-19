@@ -243,18 +243,21 @@ def build_states(roster):
     )
 
     # Current same-family roster competition uses target-week roster only and
-    # does not infer rank or allocate opportunity.
+    # does not infer rank or allocate opportunity. Build the finite roster-room
+    # lookup once; do not rescan the full roster for every player-week.
+    room_ids={
+        (int(s),int(w),str(t),str(f)):sorted(set(str(v) for v in g["stable_id"] if str(v)))
+        for (s,w,t,f),g in admitted.groupby(["season","week","team","family"],sort=False)
+    }
     competitor_count=[]
     competitor_ids=[]
     for r in clean.itertuples(index=False):
-        comp=admitted.loc[
-            admitted["season"].eq(int(r.season))
-            & admitted["week"].eq(int(r.week))
-            & admitted["team"].eq(str(r.team))
-            & admitted["family"].eq(str(r.family))
-            & admitted["stable_id"].ne(str(r.stable_id))
-        ]["stable_id"].dropna().astype(str)
-        ids=sorted(set(v for v in comp if v))
+        ids=[
+            v for v in room_ids.get(
+                (int(r.season),int(r.week),str(r.team),str(r.family)),[]
+            )
+            if v != str(r.stable_id)
+        ]
         competitor_count.append(len(ids))
         competitor_ids.append(json.dumps(ids,separators=(",",":")))
     clean["same_family_competitor_count"]=competitor_count
