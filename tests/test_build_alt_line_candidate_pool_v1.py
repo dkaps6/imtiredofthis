@@ -132,3 +132,46 @@ def test_book_dedupe_prefers_the_book_that_posts_alt_lines():
     assert len(deduped) == 1
     assert deduped[0]["book"] == "fanduel", \
         "alt construction needs the book that actually posts alts, not the best main price"
+
+
+def test_backup_quarterback_is_not_a_playable_role():
+    qb2 = {"p": {"position_group": "QB", "prior_games": "8", "current_games": "3",
+                 "depth_role": "QB2", "tgt_share": "0", "rush_share": "0.12"}}
+    _, reason = screen_one(
+        board_row(market="rush_yards", vegas_line="12", model_proj="20"), form=qb2)
+    assert reason == "not_a_playable_role:QB2"
+
+
+@pytest.mark.parametrize("role", ["TE3", "RB3", "WR4", "WR5"])
+def test_deep_backups_are_rejected(role):
+    form = {"p": {"position_group": "TE", "prior_games": "15", "current_games": "5",
+                  "depth_role": role, "tgt_share": "0.05", "rush_share": "0"}}
+    _, reason = screen_one(board_row(vegas_line="12", model_proj="20"), form=form)
+    assert reason == f"not_a_playable_role:{role}"
+
+
+def test_receiver_rushing_prop_is_a_gadget_market():
+    _, reason = screen_one(board_row(market="rush_yards", vegas_line="12", model_proj="20"))
+    assert reason == "gadget_market:rush_yards/WR"
+
+
+@pytest.mark.parametrize("market,line", [
+    ("rec_yards", "5.5"), ("rush_yards", "0.5"), ("receptions", "0.5"),
+    ("pass_yards", "120"),
+])
+def test_lines_below_the_floor_are_degenerate(market, line):
+    form = {"p": {"position_group": "RB", "prior_games": "15", "current_games": "5",
+                  "depth_role": "RB1", "tgt_share": "0.1", "rush_share": "0.5"}}
+    kw = dict(market=market, vegas_line=line, model_proj="999")
+    if market == "pass_yards":
+        kw.update(qb_synthesis_applied="1", qb_synthesis_proj="999")
+        form["p"]["position_group"] = "QB"
+        form["p"]["depth_role"] = "QB1"
+    _, reason = screen_one(board_row(**kw), form=form)
+    assert reason.startswith("degenerate_low_line")
+
+
+def test_evidence_floor_defaults_to_ten_games():
+    form = {"p": {**WR_FORM["p"], "prior_games": "4", "current_games": "4"}}
+    _, reason = screen_one(board_row(vegas_line="12", model_proj="20"), form=form)
+    assert reason.startswith("insufficient_player_evidence")

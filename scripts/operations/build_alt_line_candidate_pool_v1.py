@@ -20,6 +20,22 @@ import sys
 YARD_MARKETS = {"pass_yards", "rush_yards", "rec_yards", "receptions"}
 SYNTH_TOL = 1e-6
 
+# Depth roles that actually see meaningful offensive snaps. A TE3 or RB3 with a
+# positive edge on a tiny line is the sparse-player fallback talking, not role
+# evidence, and a QB2 priced for half a rushing yard is a book pricing someone
+# who is not expected to play.
+PLAYABLE_ROLES = {"QB1", "RB1", "RB2", "WR1", "WR2", "WR3", "TE1", "TE2", "FB1"}
+
+# Below these the market stops being a yardage distribution and becomes a
+# near-binary event, where cushion measured in sd is meaningless.
+MIN_LINE = {"pass_yards": 150.0, "rush_yards": 10.0, "rec_yards": 10.0,
+            "receptions": 2.5}
+
+# A rushing prop on a receiver, or a receiving prop on a quarterback, prices a
+# gadget call rather than a role. "They might run a reverse" is not a thesis.
+GADGET = {("rush_yards", "WR"), ("rush_yards", "TE"),
+          ("rec_yards", "QB"), ("receptions", "QB")}
+
 
 def _f(row, key):
     try:
@@ -51,7 +67,7 @@ def _quarantined(board_row, prop_q, board_q, season, week):
     return None
 
 
-def screen(board, form_by_key, prop_q, board_q, min_games=3):
+def screen(board, form_by_key, prop_q, board_q, min_games=10):
     """Return (kept, rejected). Each kept row carries its cushion metrics."""
     kept, rejected = [], []
     for row in board:
@@ -116,6 +132,21 @@ def screen(board, form_by_key, prop_q, board_q, min_games=3):
             reject(f"insufficient_player_evidence:games={games:g}")
             continue
 
+        # The player has to be someone the offense actually uses.
+        depth_role = (form.get("depth_role") or "").strip().upper()
+        if depth_role not in PLAYABLE_ROLES:
+            reject(f"not_a_playable_role:{depth_role or 'unknown'}")
+            continue
+
+        if (market, pos_group) in GADGET:
+            reject(f"gadget_market:{market}/{pos_group}")
+            continue
+
+        floor = MIN_LINE.get(market)
+        if floor is not None and line < floor:
+            reject(f"degenerate_low_line:{market}@{line:g}")
+            continue
+
         cushion = (proj - line) if side == "OVER" else (line - proj)
         kept.append({
             **row,
@@ -154,7 +185,7 @@ def main(argv=None):
     ap.add_argument("--player-form", required=True)
     ap.add_argument("--prop-quarantine", default="")
     ap.add_argument("--final-board-quarantine", default="")
-    ap.add_argument("--min-games", type=float, default=3)
+    ap.add_argument("--min-games", type=float, default=10)
     ap.add_argument("--out", default="")
     ap.add_argument("--reject-summary", action="store_true")
     args = ap.parse_args(argv)
