@@ -96,8 +96,10 @@ jobs:
               print(f"  total_rows={len(rows)}")
               print(f"  COLUMNS ({len(hdr)}): {','.join(hdr)}")
 
-              tk = next((c for c in ("team", "team_code", "posteam") if c in hdr), None)
-              ok = next((c for c in ("opponent", "opp", "defteam") if c in hdr), None)
+              tk = next((c for c in ("team", "team_abbr", "team_code", "posteam",
+                                      "home_team") if c in hdr), None)
+              ok = next((c for c in ("opponent", "opponent_abbr", "opp", "defteam",
+                                      "away_team") if c in hdr), None)
               sel = [r for r in rows
                      if (tk and (r.get(tk) or "").upper() in teams)
                      or (ok and (r.get(ok) or "").upper() in teams)]
@@ -110,10 +112,12 @@ jobs:
               for r in (sel[:limit] if limit else sel):
                   print("\t".join((r.get(c) or "") for c in use))
 
-          BOARD = ["market","player","team","opponent","side","line","model_proj",
-                   "fair_prob","odds","ev","book","mc_proj","ml_proj","state_proj",
-                   "ensemble_proj","qb_synthesis_proj","rb_synthesis_proj",
-                   "rb_synthesis_route","position"]
+          BOARD = ["market","player","team","opponent","side","vegas_line","model_proj",
+                   "model_sd","mc_proj","ml_proj","state_proj","ensemble_proj",
+                   "ensemble_status","fair_prob","market_prob","vegas_odds","fair_odds",
+                   "edge_pct","edge_abs","book","book_title","week","rules_role",
+                   "qb_synthesis_applied","qb_synthesis_proj","rb_synthesis_applied",
+                   "rb_synthesis_proj","rb_synthesis_route"]
           dump("outputs/props_priced_clean.csv", BOARD)
           dump("outputs/props_raw.csv")
           dump("outputs/odds_game.csv")
