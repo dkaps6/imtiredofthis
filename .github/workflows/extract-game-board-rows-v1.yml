@@ -24,7 +24,7 @@ on:
       teams:
         description: "Comma-separated team codes to keep (matches team OR opponent)"
         required: false
-        default: "SF,WAS"
+        default: "TEN,IND,TB,PIT,LAC,KC,HOU,JAX,NO,NYG,ATL,CHI,DEN,SEA"
 
 permissions:
   contents: read
@@ -37,7 +37,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RUN_ID: ${{ github.event.inputs.run_id || '38792341891' }}
-      TEAMS: ${{ github.event.inputs.teams || 'SF,WAS' }}
+      TEAMS: ${{ github.event.inputs.teams || 'TEN,IND,TB,PIT,LAC,KC,HOU,JAX,NO,NYG,ATL,CHI,DEN,SEA' }}
     steps:
       - uses: actions/checkout@v4
 
