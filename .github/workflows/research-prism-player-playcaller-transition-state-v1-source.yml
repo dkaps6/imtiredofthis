@@ -1,0 +1,152 @@
+name: Research PRISM Player Playcaller Transition State V1 Source
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_PLAYER_PLAYCALLER_TRANSITION_STATE_V1_SOURCE_PLAN.md'
+      - 'scripts/research/audit_prism_player_playcaller_transition_state_v1.py'
+      - 'tests/test_prism_player_playcaller_transition_state_v1.py'
+      - '.github/workflows/research-prism-player-playcaller-transition-state-v1-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "16530e901489ab2853bbbae6131ff33013b40b3c"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest pyyaml nflreadpy
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_PLAYER_PLAYCALLER_TRANSITION_STATE_V1_SOURCE_PLAN.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/audit_prism_player_playcaller_transition_state_v1.py" 2>/dev/null; then
+            echo "ERROR: implementation existed at freeze"
+            exit 1
+          fi
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_player_playcaller_transition_state_v1.py
+          pytest -q tests/test_prism_player_playcaller_transition_state_v1.py
+
+      - name: Execute frozen source/parity audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/prism-player-playcaller
+          mkdir -p /tmp/prism-player-playcaller/out
+          python scripts/research/audit_prism_player_playcaller_transition_state_v1.py             --out-dir /tmp/prism-player-playcaller/out
+
+      - name: Certify source-only contract
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+
+          base='/tmp/prism-player-playcaller/out'
+          p=json.load(open(f'{base}/player_playcaller_transition_state_source_result.json'))
+          rows=pd.read_csv(f'{base}/player_playcaller_transition_state_rows.csv')
+
+          assert p['version']=='PRISM_PLAYER_PLAYCALLER_TRANSITION_STATE_V1_SOURCE_AUDIT',p
+          assert p['freeze_commit']=='16530e901489ab2853bbbae6131ff33013b40b3c',p
+          assert p['disposition'] in {
+              'PRISM_PLAYER_PLAYCALLER_TRANSITION_STATE_V1_SOURCE_READY',
+              'PRISM_PLAYER_PLAYCALLER_TRANSITION_STATE_V1_SOURCE_BLOCKED_PROSPECTIVE_PARITY',
+              'PRISM_PLAYER_PLAYCALLER_TRANSITION_STATE_V1_SOURCE_BLOCKED',
+          },p
+          assert set(rows['family'].astype(str).unique()) <= {'QB','RB','WR','TE'}
+          assert rows['stable_id'].astype(str).str.len().gt(0).all()
+          assert rows['current_playcaller'].astype(str).str.len().gt(0).all()
+
+          assert p['player_outcomes_scored']==0,p
+          assert p['player_opportunity_relationships_scored']==0,p
+          assert p['target_game_snaps_used']==0,p
+          assert p['recent_share_fields_used']==0,p
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 source result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+          p=json.load(open('/tmp/prism-player-playcaller/out/player_playcaller_transition_state_source_result.json'))
+          print("### PRISM named-player offensive playcaller transition state V1 — source audit")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          print()
+          for s in p['season_results']:
+              print(f"**{s['season']} historical source**")
+              print(f"- opening caller teams={s['opening_team_count']}/32")
+              print(f"- documented in-season transitions={s['documented_inseason_transition_count']}")
+              print(f"- weekly roster team-week coverage={s['team_week_coverage']:.2%}")
+              print(f"- stable-ID coverage={s['stable_id_coverage']:.2%}")
+              print(f"- player playcaller attachment={s['player_playcaller_attachment_coverage']:.2%}")
+              print(f"- transition player rows={s['transition_player_rows']}; named players={s['transition_named_players']}")
+              failed=[k for k,v in s['gates'].items() if not v]
+              print(f"- failed historical gates: {failed or ['NONE']}")
+              print()
+          q=p['prospective_2026']
+          print("**2026 prospective parity**")
+          print(f"- repo season-opening mapping={q['repository_season_opening_team_count']}/32")
+          print(f"- repo 2026 override count={q['repository_2026_override_count']}")
+          print(f"- prospective parity ready={q['prospective_parity_ready']}")
+          print(f"- blocker={q['blocker']}")
+          print()
+          print("Source/parity only. No player outcomes, usage outcomes, target-game snaps, recent-share features, 2026 outcomes, sportsbook/OddsAPI, fitted coefficients/thresholds, or production mutation.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable source result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-player-playcaller-transition-state-v1-source-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-player-playcaller/out/**
