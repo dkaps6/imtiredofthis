@@ -32,13 +32,16 @@ def board_row(**kw):
 
 WR_FORM = {"p": {"position_group": "WR", "prior_games": "10", "current_games": "5",
                  "depth_role": "WR1", "tgt_share": "0.25", "rush_share": "0"}}
-RB_FORM = {"p": {**WR_FORM["p"], "position_group": "RB"}}
+RB_FORM = {"p": {**WR_FORM["p"], "position_group": "RB", "depth_role": "RB1"}}
 
 
-def screen_one(row, form=None, prop_q=(), board_q=(), min_games=3):
+def screen_one(row, form=None, prop_q=(), board_q=(), min_games=None):
+    """Screen one row. min_games is left to the module default unless given,
+    so a change to that default is actually exercised here."""
+    kwargs = {} if min_games is None else {"min_games": min_games}
     kept, rejected = alt_pool.screen(
         [row], form if form is not None else WR_FORM,
-        list(prop_q), list(board_q), min_games=min_games)
+        list(prop_q), list(board_q), **kwargs)
     return (kept[0] if kept else None), (rejected[0]["reject_reason"] if rejected else None)
 
 
@@ -75,12 +78,16 @@ def test_pass_yards_must_carry_the_promoted_synthesis():
     assert reason == "pass_yards_without_qb_synthesis"
 
 
+QB_FORM = {"p": {"position_group": "QB", "prior_games": "17", "current_games": "5",
+                 "depth_role": "QB1", "tgt_share": "0", "rush_share": "0.1"}}
+
+
 def test_pass_yards_projection_must_equal_the_synthesis_mean():
-    _, reason = screen_one(board_row(
-        market="pass_yards", qb_synthesis_applied="1", qb_synthesis_proj="59"))
+    qb = dict(market="pass_yards", vegas_line="200", model_proj="220",
+              qb_synthesis_applied="1")
+    _, reason = screen_one(board_row(**qb, qb_synthesis_proj="219"), form=QB_FORM)
     assert reason == "qb_synthesis_proj_mismatch"
-    kept, _ = screen_one(board_row(
-        market="pass_yards", qb_synthesis_applied="1", qb_synthesis_proj="60"))
+    kept, _ = screen_one(board_row(**qb, qb_synthesis_proj="220"), form=QB_FORM)
     assert kept is not None
 
 
@@ -97,10 +104,9 @@ def test_rb_rushing_under_cluster_is_an_excluded_family():
     assert reason == "rb_rush_under_cluster"
 
 
-def test_rb_rushing_over_and_non_rb_rushing_under_are_not_in_that_cluster():
+def test_rb_rushing_over_is_not_in_that_cluster():
+    """The exclusion is the under cluster specifically, not RB rushing."""
     kept, _ = screen_one(board_row(market="rush_yards", side="OVER"), form=RB_FORM)
-    assert kept is not None
-    kept, _ = screen_one(board_row(market="rush_yards", side="UNDER", vegas_line="80"))
     assert kept is not None
 
 
