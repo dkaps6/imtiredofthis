@@ -1,5 +1,221 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-19 — TEAM-CONTEXT SOURCE READY / RB COUNT-ID BRIDGE SOURCE BLOCKED / ADDITIVE PLAYER-FIRST CONTINUATION
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+### READ THIS DEEP HANDOFF NEXT
+
+`docs/handoffs/NFL_HANDOFF_2026-10-19_PRISM_ELITE_ADDITIVE_TEAM_CONTEXT_IDENTITY_BRIDGE.md`
+
+Reusable restart prompt:
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-19_PRISM_ELITE_ADDITIVE_TEAM_CONTEXT.md`
+
+### NON-NEGOTIABLE ASSIGNMENT
+
+PRISM is an **INDIVIDUAL-PLAYER PROJECTION MODEL**.
+
+The objective is the named player's projection in his actual current football
+state for the exact market.
+
+Position-level MAE/RMSE is downstream QA only.
+
+> **THE PLAYER SHOULD HAVE THE RULES. THE POSITION SHOULD NOT HAVE THE PLAYER.**
+
+> **ANOMALIES ARE QUESTIONS, NOT TRENDS.**
+
+Do not make the user reteach this.
+
+### ADDITIVE MODEL RULE
+
+**DO NOT SCRAP OR REBUILD PRISM.**
+
+The existing model contains substantial qualified science.
+
+Current role-state / team-context research is an **additive arbitration layer**
+on top of existing player baselines, entitlement/opportunity science,
+finite-opportunity logic, uncertainty/distribution work and validated
+downstream components.
+
+A new state mechanism may alter only the exact upstream seam it separately
+qualifies for.
+
+Do not erase prior science because one new source bridge fails.
+
+### QUALIFIED RETURN-STATE SCIENCE PRESERVED
+
+`PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1_QUALIFIED_STATE_ONLY`
+
+Authority:
+- freeze `c25d5f3d19cab3f68a0c0ad0482c79bf53a6730e`;
+- run `39179843306` SUCCESS;
+- artifact `12156195287`;
+- digest
+  `sha256:8a6ac90e3209f1ec8f53d859a2f7b2a64b84b682f033667512d99b16ddee3988`.
+
+Meaning remains participation-state only.
+
+No automatic target/carry/route/efficiency/yard/TD restoration.
+
+### CURRENT CENTRAL STATE — PLAYER TEAM-CONTEXT TRANSITION SOURCE READY
+
+Disposition:
+
+`PRISM_PLAYER_TEAM_CONTEXT_TRANSITION_V1_SOURCE_READY`
+
+Canonical authority:
+- freeze `bd254ec9435cd0a17e2c7d82d78532e67c2cd23e`;
+- run `39182076127` SUCCESS;
+- exact head `6c047e4df67702affde52493f7d1b90296751968`;
+- job `117836769489`;
+- artifact `12156204035`;
+- digest
+  `sha256:abc2a5b9d3ea2a4d683e56626ea2d33495fa1e7cad2c36c56c01071ccc0339c8`;
+- result:
+  `docs/research/PRISM_PLAYER_TEAM_CONTEXT_TRANSITION_V1_SOURCE_RESULT.md`.
+
+The earlier looser freeze `fc63601c...` and run `39181783189` are
+noncanonical diagnostics only.
+
+2024:
+- 329 transitions / 287 named players;
+- offseason / in-season 216 / 113;
+- prior-team >=4 roster support 81.46%;
+- current same-family competitor metadata 100%.
+
+2025:
+- 351 transitions / 271 named players;
+- offseason / in-season 202 / 149;
+- prior-team >=4 80.06%;
+- competitor metadata 100%.
+
+2026 prospective roster parity:
+- latest complete observed week 6;
+- full team coverage;
+- stable-ID coverage 99.85%;
+- parity gates failed: NONE.
+
+Scientific meaning:
+
+> PRISM can source-certify that this exact named player's current team and
+> teammate-competition environment differ from the environment that generated
+> his immediately prior roster history.
+
+This is a current-context boundary, not a universal boost/penalty.
+
+### FIRST TEAM-CONTEXT MARKET TEST — SOURCE BLOCKED BEFORE SCORING
+
+Contract:
+
+`PRISM_RB_TEAM_CONTEXT_CARRY_IDENTITY_PERSISTENCE_V1`
+
+Freeze:
+
+`668bd3266b6e6c131875ef245ce037b1a9925be7`
+
+Canonical run:
+- `39182998402` SUCCESS as a fail-closed workflow;
+- exact head
+  `5a51ad27e38e6a87455dc78e31c1a2b2646d2868`.
+
+Disposition:
+
+`PRISM_RB_TEAM_CONTEXT_CARRY_IDENTITY_PERSISTENCE_V1_SOURCE_BLOCKED`
+
+Exact blocker:
+- exact stable carry-count identity linkage:
+  **0 / 39 = 0.00%**;
+- exclusion:
+  `target_count_identity_missing: 39`;
+- eligible predictive events scored:
+  **0**;
+- named RBs scored:
+  **0**.
+
+**This was NOT a predictive failure.**
+
+No old-team-vs-current-team carry relationship was scored.
+
+Do not say:
+- old-team carry identity was worse;
+- the canonical entitlement beat it;
+- the team-context idea failed;
+- MAE worsened.
+
+None of those were tested.
+
+The team-context source state remains valid and source-ready.
+
+### EXACT NEXT ACTION
+
+Stay in the **team-context transition lane**.
+
+Source-audit only:
+
+> Is there a canonical, leakage-safe, deterministic identifier bridge between
+> the team-context transition `stable_id` and the historical carry-count
+> authority identity for 2024/2025?
+
+Requirements:
+- inspect exact identity semantics in the canonical team-context artifact,
+  canonical RB rushing entitlement artifact and carry-count builder/universe;
+- shared provider-level stable ID only if genuinely present;
+- no names;
+- no fuzzy matching;
+- no manual outcome-derived crosswalk;
+- no target-game usage to infer identity;
+- do not lower the frozen >=99% exact-link gate;
+- predictive outcomes scored = 0 during the bridge audit;
+- preserve the already-frozen RB V1 formula and gates.
+
+If a clean exact bridge exists:
+- source-certify it first;
+- then execute the already-frozen RB V1 unchanged.
+
+If no exact bridge exists:
+- document source blocked;
+- preserve
+  `PRISM_PLAYER_TEAM_CONTEXT_TRANSITION_V1_SOURCE_READY`;
+- close only the RB carry-count linkage path;
+- select the next distinct team-context market seam only if it already has an
+  exact shared stable identity and qualified canonical baseline;
+- freeze before scoring.
+
+Do not choose a new seam because it gives prettier aggregate numbers.
+
+### QUEUE GOVERNANCE
+
+- Betting remains LOCKED/CLOSED unless explicitly reopened.
+- No paid OddsAPI without explicit authorization.
+- Sportsbook is downstream only.
+- QB passing TD remains BACKLOG ONLY.
+- Preserve qualified/closed/source-blocked science.
+- Never weaken exact source/digest/chronology/parity/byte-identity gates.
+- Never claim a workflow is running unless a fresh Actions read says
+  queued/in_progress.
+- Ignore unrelated legacy push-workflow failures unless they are the active
+  canonical lane.
+- No production mutation from research/source work without separate authority.
+
+### CONTINUITY PACKAGE
+
+Deep handoff commit:
+`9fd1fe3ed64c17a4c899e6d9dd90ca9608630308`
+
+Restart prompt commit:
+`a2ca0090122f421459b1eb9c432b8f4a6a748a0d`
+
+At continuity creation the research branch was at:
+`5a51ad27e38e6a87455dc78e31c1a2b2646d2868`
+
+PR #672 was open / draft.
+
+Always reconcile live state before mutation.
+
+---
+
+
 ## TOP CHECKPOINT — 2026-10-18 — PLAYCALLER REGIME SOURCE BLOCKED / NAMED-PLAYER TEAM-CONTEXT TRANSITION NEXT
 
 **Model:** PRISM — Player Role & Individual Situation Model
