@@ -1,5 +1,135 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — RETURN-STATE NEXT-ROLE PERSISTENCE QUALIFIED / PLAYER-FIRST FRONTIER
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+### NON-NEGOTIABLE ASSIGNMENT
+
+PRISM is an **INDIVIDUAL-PLAYER PROJECTION MODEL**.
+
+The named player in his actual current football state is the scientific unit.
+Position-level MAE/RMSE remains downstream QA/reporting only.
+
+> **The player should have the rules. The position should not have the player.**
+
+> **Anomalies are questions, not trends.**
+
+DNP is not zero performance. Injury-shortened observations are not ordinary
+full-game trajectory evidence. Return-from-injury is a distinct state.
+
+### PERMANENT COKER FAILURE CASE
+
+Do not read `138 -> 66 -> 18 -> DNP` as ordinary regression.
+
+Coker 2026:
+- W1 9 targets / 8-138-2;
+- W2 9 / 8-66;
+- W3 4 / 2-18, injury-affected early exit;
+- W4 DNP;
+- W5 bye;
+- W6 12 / 6-97.
+
+The prior roughly 38-yard projection against roughly 55.5 was a bad
+individual-player projection caused by false causal-state interpretation.
+
+### NEW QUALIFIED PLAYER-STATE SCIENCE
+
+Return-State Next-Role Persistence V1 is **QUALIFIED STATE ONLY**.
+
+Frozen before scoring:
+- freeze `c25d5f3d19cab3f68a0c0ad0482c79bf53a6730e`.
+
+Canonical execution:
+- run `39179843306` — SUCCESS;
+- exact scored head `57c962a935f25a6fbad521c3aad43dc2db3e4bb9`;
+- job `117830060246` — SUCCESS;
+- artifact `12156195287`;
+- digest `sha256:8a6ac90e3209f1ec8f53d859a2f7b2a64b84b682f033667512d99b16ddee3988`;
+- result commit on research branch
+  `594a749f4c7793796b4aa40b42d8aadad64a1134`;
+- result doc
+  `docs/research/PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1_RESULT.md`;
+- disposition
+  `PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1_QUALIFIED_STATE_ONLY`.
+
+2024:
+- 84 scored episodes / 79 named players;
+- equal-player gain +0.336361;
+- median +0.300000;
+- improved/tied/worsened 86.08% / 0.00% / 13.92%.
+
+2025 independent confirmation:
+- 105 scored episodes / 95 named players;
+- equal-player gain +0.299474;
+- median +0.255000;
+- improved/tied/worsened 85.26% / 0.00% / 14.74%;
+- named-player bootstrap 95% CI [+0.234841, +0.365316].
+
+Interpretation:
+once a named player's participation is source-certified restored, the player's
+own pre-injury participation role is materially more faithful for the next
+clean participation observation than carrying forward the interruption /
+continued-decline participation state.
+
+This does **not** establish restored targets, carries, receptions, routes,
+efficiency, yards or touchdowns.
+
+Snaps are snaps, never routes.
+
+### QUEUE GOVERNANCE
+
+- Betting remains LOCKED/CLOSED unless explicitly reopened.
+- No paid OddsAPI without explicit authorization.
+- Sportsbook remains downstream only.
+- QB passing TD remains BACKLOG ONLY unless explicitly promoted.
+- Preserve all closed science / anti-retest rules.
+- Do not retune the qualified return-state persistence mechanism.
+- Never weaken source, digest, chronology, parity or byte-identity gates.
+- Never claim a workflow is running without a fresh Actions read.
+
+### EXACT NEXT ACTION
+
+Stay in the same return-state causal lane.
+
+Source-map one market-specific opportunity state **without scoring it yet**:
+
+> After this named player's participation is source-certified restored, can
+> PRISM source-validly identify his receiving opportunity state from exact
+> stable-player target evidence and finite team target volume without assuming
+> that restored snaps automatically restore target earning?
+
+Requirements:
+- named player primary;
+- exact stable player + team + week identity;
+- strictly historical 2024/2025 only;
+- source/lineage audit first;
+- preserve finite team targets / teammate competition;
+- participation restoration separate from target earning;
+- target earning separate from efficiency;
+- no automatic yards multiplier;
+- no route inference from snaps;
+- no reuse of closed exposure x earning formula;
+- no deletion/reweighting rescue;
+- no 2026 outcomes;
+- no sportsbook/OddsAPI upstream;
+- no paid OddsAPI;
+- no production mutation.
+
+Only after source support passes may a separate predictive opportunity
+restoration contract be frozen before scoring.
+
+### LIVE STATE NOTE
+
+Research branch result head at this checkpoint:
+`594a749f4c7793796b4aa40b42d8aadad64a1134`.
+
+PR #672 remains the research PR and must be re-read live before any status
+claim.
+
+---
+
+
 ## TOP CHECKPOINT — 2026-10-18 — TRUE FINAL ELITE / NO RETEACH / INDIVIDUAL PLAYER FIRST / RETURN-STATE FRONTIER
 
 **Model:** PRISM — Player Role & Individual Situation Model
