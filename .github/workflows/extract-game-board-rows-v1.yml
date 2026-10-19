@@ -27,7 +27,7 @@ on:
         default: "TEN,IND,TB,PIT,LAC,KC,HOU,JAX,NO,NYG,ATL,CHI,DEN,SEA"
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -125,6 +125,51 @@ jobs:
           dump("outputs/props_raw.csv")
           dump("outputs/odds_game.csv")
           PY
+
+      - name: Preserve the paid sportsbook boundary into git
+        run: |
+          set -euo pipefail
+          # The three files below are the paid half of a Full Slate run: the
+          # raw OddsAPI offers, the game odds, and the priced board built from
+          # them. They came from a one-time purchase and cannot be refetched
+          # once the lines move, yet they only existed inside an artifact with
+          # an expiry date. That is how Weeks 3-5 were lost. Commit them.
+          SRC=/tmp/src_artifact/outputs
+          test -s "$SRC/props_priced_clean.csv" || { echo "no priced board in this artifact"; exit 0; }
+
+          read -r SEASON WEEK <<<"$(python - <<'PY'
+          import csv
+          with open("/tmp/src_artifact/outputs/props_priced_clean.csv", newline="") as fh:
+              r = next(csv.DictReader(fh))
+          print(r["season"], r["week"])
+          PY
+          )"
+          echo "board self-reports season=$SEASON week=$WEEK"
+          STEM="$(printf '%d_wk%02d' "$SEASON" "$WEEK")"
+
+          for pair in "props_priced_clean.csv:boards" "odds_game.csv:game_odds" "props_raw.csv:raw_props"; do
+            f="${pair%%:*}"; d="${pair##*:}"
+            if [ -s "$SRC/$f" ]; then
+              mkdir -p "data/market_track_record/$d"
+              cp "$SRC/$f" "data/market_track_record/$d/${STEM}.csv"
+              echo "preserved $d/${STEM}.csv ($(wc -l < "$SRC/$f") lines)"
+            else
+              echo "WARNING: $f absent from this artifact"
+            fi
+          done
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/market_track_record/
+          if git diff --cached --quiet; then
+            echo "already preserved; nothing to commit"
+          else
+            git commit -m "Preserve the paid ${STEM} sportsbook boundary from run ${RUN_ID}
+
+          Priced board, game odds and raw offers from a one-time OddsAPI
+          acquisition, committed before the artifact expires."
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
 
       - name: Screen the whole slate into the alt-line candidate pool
         run: |
