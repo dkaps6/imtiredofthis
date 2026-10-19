@@ -1,0 +1,228 @@
+name: Research PRISM RB Receiving Team Context History Authority Reset V1 Source
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_RB_RECEIVING_TEAM_CONTEXT_HISTORY_AUTHORITY_RESET_V1_SOURCE_FREEZE.md'
+      - 'scripts/research/audit_prism_rb_receiving_team_context_history_authority_reset_v1_source.py'
+      - 'tests/test_prism_rb_receiving_team_context_history_authority_reset_v1_source.py'
+      - '.github/workflows/research-prism-rb-receiving-team-context-history-authority-reset-v1-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "821d43059c1feabb3c7de617698e4913dfee0e6b"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pandas numpy pytest pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_RB_RECEIVING_TEAM_CONTEXT_HISTORY_AUTHORITY_RESET_V1_SOURCE_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/audit_prism_rb_receiving_team_context_history_authority_reset_v1_source.py" 2>/dev/null; then
+            echo "ERROR: source auditor existed at freeze"
+            exit 1
+          fi
+
+      - name: Verify immutable parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12156204035 --jq '.workflow_run.id')" = "39182076127"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12156204035 --jq '.digest')" = "sha256:abc2a5b9d3ea2a4d683e56626ea2d33495fa1e7cad2c36c56c01071ccc0339c8"
+
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12125534698 --jq '.workflow_run.id')" = "39099474655"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12125534698 --jq '.digest')" = "sha256:3d1f8043dc7a2ded0ed7fd9705b359d31a094a272ecce6958823ce660c2898e4"
+
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.workflow_run.id')" = "38907459996"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.digest')" = "sha256:41b1acd3f1b8d77abb53980db160ece32f8fc40351939d4827248b9caad0c64b"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-player-team-context-transition-v1-source-39182076127
+          path: /tmp/team-context
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39182076127
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-rb-stage2-player-specific-mechanism-authority-bridge-v1-39099474655
+          path: /tmp/authority
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39099474655
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-participation-mechanism-v1-38907459996
+          path: /tmp/stage1
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38907459996
+
+      - name: Resolve immutable source files
+        run: |
+          set -euo pipefail
+          TEAM_CONTEXT_EVENTS="$(find /tmp/team-context -type f -name 'player_team_context_transition_events.csv' -print -quit)"
+          TEAM_CONTEXT_STATES="$(find /tmp/team-context -type f -name 'player_team_context_states.csv' -print -quit)"
+          AUTHORITY_ROWS="$(find /tmp/authority -type f -name 'rb_stage2_player_specific_authority_bridge_player_rows.csv' -print -quit)"
+          STAGE1_ROWS="$(find /tmp/stage1 -type f -name 'player_active_role_mechanism_scored_rows.csv' -print -quit)"
+          test -n "$TEAM_CONTEXT_EVENTS" && test -s "$TEAM_CONTEXT_EVENTS"
+          test -n "$TEAM_CONTEXT_STATES" && test -s "$TEAM_CONTEXT_STATES"
+          test -n "$AUTHORITY_ROWS" && test -s "$AUTHORITY_ROWS"
+          test -n "$STAGE1_ROWS" && test -s "$STAGE1_ROWS"
+          echo "TEAM_CONTEXT_EVENTS=$TEAM_CONTEXT_EVENTS" >> "$GITHUB_ENV"
+          echo "TEAM_CONTEXT_STATES=$TEAM_CONTEXT_STATES" >> "$GITHUB_ENV"
+          echo "AUTHORITY_ROWS=$AUTHORITY_ROWS" >> "$GITHUB_ENV"
+          echo "STAGE1_ROWS=$STAGE1_ROWS" >> "$GITHUB_ENV"
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_prism_rb_receiving_team_context_history_authority_reset_v1_source.py
+          pytest -q tests/test_prism_rb_receiving_team_context_history_authority_reset_v1_source.py
+
+      - name: Execute frozen source-only audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/rb-receiving-team-context-reset
+          mkdir -p /tmp/rb-receiving-team-context-reset/out
+          python scripts/research/audit_prism_rb_receiving_team_context_history_authority_reset_v1_source.py \
+            --team-context-events "$TEAM_CONTEXT_EVENTS" \
+            --team-context-states "$TEAM_CONTEXT_STATES" \
+            --qualified-authority-rows "$AUTHORITY_ROWS" \
+            --stage1-mechanism-rows "$STAGE1_ROWS" \
+            --out-dir /tmp/rb-receiving-team-context-reset/out
+
+      - name: Certify frozen source contract
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+
+          base='/tmp/rb-receiving-team-context-reset/out'
+          p=json.load(open(f'{base}/rb_receiving_team_context_history_authority_reset_source_result.json'))
+          rows=pd.read_csv(f'{base}/rb_receiving_team_context_history_authority_reset_source_rows.csv')
+
+          assert p['version']=='PRISM_RB_RECEIVING_TEAM_CONTEXT_HISTORY_AUTHORITY_RESET_V1_SOURCE',p
+          assert p['freeze_commit']=='821d43059c1feabb3c7de617698e4913dfee0e6b',p
+          assert p['disposition']=='PRISM_RB_RECEIVING_TEAM_CONTEXT_HISTORY_AUTHORITY_RESET_V1_SOURCE_READY',p
+          assert p['source_ready'] is True,p
+
+          assert p['eligible_team_context_transitions']==150,p
+          assert p['selected_first_market_rows']==71,p
+          assert p['source_exclusions']=={'NO_CANONICAL_RB_RECEIVING_BASELINE':79},p
+          assert p['authority_state_link_hits']==2805,p
+          assert p['authority_state_link_attempts']==2805,p
+          assert abs(p['authority_state_link_rate']-1.0) < 1e-15,p
+
+          assert p['per_season']['2024']['selected_market_rows']==38,p
+          assert p['per_season']['2024']['distinct_stable_ids']==36,p
+          assert p['per_season']['2024']['stage1_exact_mechanism_rows']==22,p
+          assert p['per_season']['2024']['own_stage2_authority_disabled_rows']==0,p
+          assert p['per_season']['2024']['actionable_reset_rows']==22,p
+          assert p['per_season']['2024']['actionable_reset_stable_ids']==22,p
+
+          assert p['per_season']['2025']['selected_market_rows']==33,p
+          assert p['per_season']['2025']['distinct_stable_ids']==31,p
+          assert p['per_season']['2025']['stage1_exact_mechanism_rows']==13,p
+          assert p['per_season']['2025']['own_stage2_authority_disabled_rows']==8,p
+          assert p['per_season']['2025']['actionable_reset_rows']==17,p
+          assert p['per_season']['2025']['actionable_reset_stable_ids']==17,p
+
+          assert all(p['source_gates'].values()),p['source_gates']
+          assert rows['stage1_candidate_matches_current'].all()
+          assert rows['reset_p_active'].between(0,1,inclusive='neither').all()
+
+          forbidden_exact={'y','n','crps','ae','player_name_key','player','name_key'}
+          assert not forbidden_exact.intersection({str(c).lower() for c in rows.columns})
+          assert p['names_read_or_used']==0,p
+          assert p['predictive_outcomes_read_or_scored']==0,p
+          assert p['target_game_opportunity_counts_read']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 source result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+          p=json.load(open('/tmp/rb-receiving-team-context-reset/out/rb_receiving_team_context_history_authority_reset_source_result.json'))
+          print("### PRISM RB receiving team-context history-authority reset V1 — source audit")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          print(f"- Qualified RB-receiving authority -> team-context exact raw-ID lineage: {p['authority_state_link_hits']}/{p['authority_state_link_attempts']} ({p['authority_state_link_rate']:.2%})")
+          print(f"- Source-certified transitions considered: {p['eligible_team_context_transitions']}")
+          print(f"- First canonical post-change RB-receiving market rows: {p['selected_first_market_rows']}")
+          print(f"- No canonical RB-receiving baseline exclusions: {p['source_exclusions']['NO_CANONICAL_RB_RECEIVING_BASELINE']}")
+          for season in ('2024','2025'):
+              s=p['per_season'][season]
+              print()
+              print(f"**{season} source support**")
+              print(f"- selected rows / stable IDs: {s['selected_market_rows']} / {s['distinct_stable_ids']}")
+              print(f"- exact Stage-1 named-history rows: {s['stage1_exact_mechanism_rows']}")
+              print(f"- actionable joint history-authority resets: {s['actionable_reset_rows']} rows / {s['actionable_reset_stable_ids']} stable IDs")
+              print(f"- transition kinds: {s['transition_kind_counts']}")
+          print()
+          print(f"- Failed source gates: {[k for k,v in p['source_gates'].items() if not v] or ['NONE']}")
+          print()
+          print("Meaning: this distinct RB-receiving team-context seam is SOURCE READY for a separately frozen predictive test. The current QUALIFIED RB-receiving architecture remains the baseline. No outcomes, target-game opportunity counts, names, sportsbook/OddsAPI inputs, fitted coefficients/thresholds, or production mutations were used.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable source result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-rb-receiving-team-context-history-authority-reset-v1-source-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/rb-receiving-team-context-reset/out/**
