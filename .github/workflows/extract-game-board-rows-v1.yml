@@ -11,7 +11,10 @@ name: Extract Game Board Rows
 on:
   push:
     branches: [claude/nice-cori-4qkwqs]
-    paths: ['.github/workflows/extract-game-board-rows-v1.yml']
+    paths:
+      - '.github/workflows/extract-game-board-rows-v1.yml'
+      - 'scripts/operations/build_alt_line_candidate_pool_v1.py'
+      - 'tests/test_build_alt_line_candidate_pool_v1.py'
   workflow_dispatch:
     inputs:
       run_id:
