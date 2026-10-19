@@ -1,0 +1,202 @@
+name: Research PRISM RB Team Context Carry Identity V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_RB_TEAM_CONTEXT_CARRY_IDENTITY_PERSISTENCE_V1_FREEZE.md'
+      - 'scripts/research/evaluate_prism_rb_team_context_carry_identity_v1.py'
+      - 'tests/test_prism_rb_team_context_carry_identity_v1.py'
+      - '.github/workflows/research-prism-rb-team-context-carry-identity-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "668bd3266b6e6c131875ef245ce037b1a9925be7"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyyaml 'pyarrow==18.1.0'
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_RB_TEAM_CONTEXT_CARRY_IDENTITY_PERSISTENCE_V1_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/evaluate_prism_rb_team_context_carry_identity_v1.py" 2>/dev/null; then
+            echo "ERROR: scorer existed at freeze"
+            exit 1
+          fi
+
+      - name: Verify immutable parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12156204035 --jq '.workflow_run.id')" = "39182076127"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12156204035 --jq '.digest')" = "sha256:abc2a5b9d3ea2a4d683e56626ea2d33495fa1e7cad2c36c56c01071ccc0339c8"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070806828 --jq '.workflow_run.id')" = "38955368643"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070806828 --jq '.digest')" = "sha256:e91a108495d7a2b6eb289e0618ab6af09e3d6cdf6895e534742a07340e4a2a83"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-player-team-context-transition-v1-source-39182076127
+          path: /tmp/team-context
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39182076127
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-conditional-allocation-source-v1-38955368643
+          path: /tmp/stage2-source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38955368643
+
+      - name: Resolve immutable source files
+        run: |
+          set -euo pipefail
+          TEAM_CONTEXT_EVENTS="$(find /tmp/team-context -type f -name 'player_team_context_transition_events.csv' -print -quit)"
+          STAGE2_DETAIL="$(find /tmp/stage2-source -type f -name 'active_role_conditional_allocation_source_join_detail.csv' -print -quit)"
+          test -n "$TEAM_CONTEXT_EVENTS" && test -s "$TEAM_CONTEXT_EVENTS"
+          test -n "$STAGE2_DETAIL" && test -s "$STAGE2_DETAIL"
+          echo "TEAM_CONTEXT_EVENTS=$TEAM_CONTEXT_EVENTS" >> "$GITHUB_ENV"
+          echo "STAGE2_DETAIL=$STAGE2_DETAIL" >> "$GITHUB_ENV"
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_prism_rb_team_context_carry_identity_v1.py
+          pytest -q tests/test_prism_rb_team_context_carry_identity_v1.py
+
+      - name: Execute frozen named-RB carry identity test
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/rb-team-context-carry
+          mkdir -p /tmp/rb-team-context-carry/out
+          python scripts/research/evaluate_prism_rb_team_context_carry_identity_v1.py             --team-context-events "$TEAM_CONTEXT_EVENTS"             --stage2-detail "$STAGE2_DETAIL"             --out-dir /tmp/rb-team-context-carry/out
+
+      - name: Certify frozen contract
+        run: |
+          python - <<'PY'
+          import json
+          import numpy as np
+          import pandas as pd
+
+          base='/tmp/rb-team-context-carry/out'
+          p=json.load(open(f'{base}/rb_team_context_carry_identity_result.json'))
+          rows=pd.read_csv(f'{base}/rb_team_context_carry_identity_scored_rows.csv')
+          rooms=pd.read_csv(f'{base}/rb_team_context_carry_identity_room_rows.csv')
+
+          assert p['version']=='PRISM_RB_TEAM_CONTEXT_CARRY_IDENTITY_PERSISTENCE_V1',p
+          assert p['freeze_commit']=='668bd3266b6e6c131875ef245ce037b1a9925be7',p
+          assert p['team_context_parent_run']==39182076127,p
+          assert p['team_context_parent_artifact']==12156204035,p
+          assert p['stage2_parent_run']==38955368643,p
+          assert p['stage2_parent_artifact']==12070806828,p
+          assert p['disposition'] in {
+              'PRISM_RB_TEAM_CONTEXT_CARRY_IDENTITY_PERSISTENCE_V1_QUALIFIED',
+              'PRISM_RB_TEAM_CONTEXT_CARRY_IDENTITY_PERSISTENCE_V1_CLOSED',
+              'PRISM_RB_TEAM_CONTEXT_CARRY_IDENTITY_PERSISTENCE_V1_SOURCE_BLOCKED',
+          },p
+
+          if len(rows):
+              assert rows['week'].between(5,18).all()
+              assert rows['previous_team'].astype(str).ne(rows['team'].astype(str)).all()
+              assert rows['canonical_q_base'].gt(0).all()
+              assert rows['canonical_q_base'].lt(1).all()
+              assert rows['old_team_identity_q'].between(0,1).all()
+              assert rows['candidate_q'].between(0,1).all()
+          if len(rooms):
+              assert np.allclose(rooms['baseline_mass'],1.0,atol=1e-10)
+              assert np.allclose(rooms['candidate_mass'],1.0,atol=1e-10)
+
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['rushing_yards_scored'] is False,p
+          assert p['touchdowns_scored'] is False,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+          p=json.load(open('/tmp/rb-team-context-carry/out/rb_team_context_carry_identity_result.json'))
+          print("### PRISM RB team-context carry identity persistence V1")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          print(f"- Stable count linkage: {p['source_audit']['stable_link_hits']}/{p['source_audit']['stable_link_attempts']} ({p['source_audit']['stable_link_rate']:.2%})")
+          print(f"- Source exclusions: {p['source_audit']['source_exclusions']}")
+          for label in ('development_2024','confirmation_2025'):
+              s=p[label]
+              print()
+              print(f"**{s['season']} named RBs**")
+              print(f"- eligible events={s['eligible_events']}; named players={s['named_players']}")
+              print(f"- equal-player share-AE improvement={s['equal_player_share_ae_improvement']:+.6f}; median={s['median_player_share_ae_improvement']:+.6f}")
+              print(f"- improved/tied/worsened={s['improved_player_share']:.2%}/{s['tied_player_share']:.2%}/{s['worsened_player_share']:.2%}")
+              print(f"- equal-player expected-carry AE improvement={s['equal_player_count_ae_improvement']:+.6f}")
+              print(f"- mean finite-room log-score improvement={s['mean_room_log_score_improvement']:+.6f}")
+              if 'player_bootstrap' in s:
+                  b=s['player_bootstrap']
+                  print(f"- player-bootstrap 95% CI=[{b['ci_low']:+.6f},{b['ci_high']:+.6f}] reps={b['reps']}")
+          print()
+          print(f"- failed source gates: {[k for k,v in p['source_gates'].items() if not v] or ['NONE']}")
+          print(f"- failed development gates: {[k for k,v in p['development_gates'].items() if not v] or ['NONE']}")
+          print(f"- failed confirmation gates: {[k for k,v in p['confirmation_gates'].items() if not v] or ['NONE']}")
+          print()
+          print("Player-first carry opportunity only. The candidate applies only to the first source-certified in-season new-team RB event, preserves the current-team RB/residual competition proportions and exact finite room mass, and does not score rushing yards, efficiency, TDs, 2026 outcomes, sportsbook/OddsAPI, or production.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-rb-team-context-carry-identity-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/rb-team-context-carry/out/**
