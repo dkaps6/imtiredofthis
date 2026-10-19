@@ -1,0 +1,162 @@
+name: Extract Game Board Rows
+
+# Reads an existing Full Slate run's artifact and prints the priced-board rows
+# for one game to the job log. It downloads nothing new, re-prices nothing and
+# never touches OddsAPI -- the container this is driven from cannot reach
+# Actions blob storage, so the log is the transport.
+
+# A workflow_dispatch is only addressable once the file is on the default
+# branch, which this one is not, so a push to this branch is the trigger. The
+# path filter keeps unrelated commits on the branch from firing it.
+on:
+  push:
+    branches: [claude/nice-cori-4qkwqs]
+    paths: ['.github/workflows/extract-game-board-rows-v1.yml']
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Full Slate run ID whose artifact holds the priced board"
+        required: false
+        default: "38792341891"
+      teams:
+        description: "Comma-separated team codes to keep (matches team OR opponent)"
+        required: false
+        default: "SF,WAS"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ github.event.inputs.run_id || '38792341891' }}
+      TEAMS: ${{ github.event.inputs.teams || 'SF,WAS' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download the source run's artifact
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/src_artifact
+          mkdir -p /tmp/src_artifact
+          ok=0
+          for NAME in "run_${RUN_ID}" "offline_replay_${RUN_ID}"; do
+            if gh run download "${RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+                 --name "${NAME}" --dir /tmp/src_artifact 2>/dev/null; then
+              echo "downloaded ${NAME}"
+              ok=1
+              break
+            fi
+          done
+          if [ "$ok" != "1" ]; then
+            echo "FATAL: no downloadable artifact for run ${RUN_ID}"
+            exit 1
+          fi
+          echo "=== ARTIFACT TREE (csv/json only) ==="
+          find /tmp/src_artifact -type f \( -name '*.csv' -o -name '*.json' \) \
+            | sed 's#^/tmp/src_artifact/##' | sort
+
+      - name: Print the game's board rows
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv, os, sys
+          root = "/tmp/src_artifact"
+          teams = {t.strip().upper() for t in os.environ["TEAMS"].split(",") if t.strip()}
+
+          def find(rel):
+              for base, _, files in os.walk(root):
+                  for f in files:
+                      p = os.path.join(base, f)
+                      if p.endswith(rel):
+                          return p
+              return None
+
+          def dump(rel, cols=None, limit=None):
+              path = find(rel)
+              print("\n" + "=" * 72)
+              print(f"FILE: {rel}  ->  {path}")
+              if not path:
+                  print("  NOT PRESENT")
+                  return
+              with open(path, newline="", encoding="utf-8") as fh:
+                  rows = list(csv.DictReader(fh))
+              if not rows:
+                  print("  EMPTY")
+                  return
+              hdr = list(rows[0].keys())
+              print(f"  total_rows={len(rows)}")
+              print(f"  COLUMNS ({len(hdr)}): {','.join(hdr)}")
+
+              tk = next((c for c in ("team", "team_code", "posteam") if c in hdr), None)
+              ok = next((c for c in ("opponent", "opp", "defteam") if c in hdr), None)
+              sel = [r for r in rows
+                     if (tk and (r.get(tk) or "").upper() in teams)
+                     or (ok and (r.get(ok) or "").upper() in teams)]
+              print(f"  matched_rows={len(sel)}  (team_key={tk} opp_key={ok})")
+              if not sel:
+                  return
+              use = [c for c in (cols or hdr) if c in hdr]
+              print("  --- ROWS (tab-separated) ---")
+              print("\t".join(use))
+              for r in (sel[:limit] if limit else sel):
+                  print("\t".join((r.get(c) or "") for c in use))
+
+          BOARD = ["market","player","team","opponent","side","line","model_proj",
+                   "fair_prob","odds","ev","book","mc_proj","ml_proj","state_proj",
+                   "ensemble_proj","qb_synthesis_proj","rb_synthesis_proj",
+                   "rb_synthesis_route","position"]
+          dump("outputs/props_priced_clean.csv", BOARD)
+          dump("outputs/props_raw.csv")
+          dump("outputs/odds_game.csv")
+          PY
+
+      - name: Player form and role context for the game
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv, os
+          root = "/tmp/src_artifact"
+          teams = {t.strip().upper() for t in os.environ["TEAMS"].split(",") if t.strip()}
+
+          def find(rel):
+              for base, _, files in os.walk(root):
+                  for f in files:
+                      p = os.path.join(base, f)
+                      if p.endswith(rel):
+                          return p
+              return None
+
+          for rel, cols in [
+              ("data/player_form.csv", None),
+              ("data/roles_ourlads.csv", None),
+          ]:
+              path = find(rel)
+              print("\n" + "=" * 72)
+              print(f"FILE: {rel} -> {path}")
+              if not path:
+                  print("  NOT PRESENT"); continue
+              with open(path, newline="", encoding="utf-8") as fh:
+                  rows = list(csv.DictReader(fh))
+              if not rows:
+                  print("  EMPTY"); continue
+              hdr = list(rows[0].keys())
+              print(f"  total_rows={len(rows)}")
+              print(f"  COLUMNS ({len(hdr)}): {','.join(hdr)}")
+              tk = next((c for c in ("team","team_code","posteam") if c in hdr), None)
+              sel = [r for r in rows if tk and (r.get(tk) or "").upper() in teams]
+              print(f"  matched_rows={len(sel)}")
+              use = cols or hdr
+              print("  --- ROWS (tab-separated) ---")
+              print("\t".join(use))
+              for r in sel:
+                  print("\t".join((r.get(c) or "") for c in use))
+          PY
