@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 VERSION = "PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_AUDIT"
-FREEZE_COMMIT = "3a2a51e5412ad83265700dbf088e2425bae359c3"
+FREEZE_COMMIT = "930907dd91c1b4139f2aa6be52db23a730c7a96b"
 SEASONS = (2024, 2025)
 FAMILIES = {"RB", "WR", "TE"}
 RETURN_RESTORED = "RETURN_PARTICIPATION_RESTORED"
@@ -38,6 +38,10 @@ REC_REQ = {
     "season","week","team","stable_id","family","positive_participation",
     "offense_snaps","offense_pct","observation_state",
     "playerform_weekly_row_present","targets","team_targets","target_share_game",
+}
+HEALTH_REQ = {
+    "season","week","team","stable_id","family","positive_participation",
+    "observation_state",
 }
 
 
@@ -128,6 +132,41 @@ def load_receiving(path: Path) -> pd.DataFrame:
     ).reset_index(drop=True)
 
 
+
+def load_health(path: Path) -> pd.DataFrame:
+    x = pd.read_csv(path, low_memory=False)
+    x.columns = [str(c).strip().lower() for c in x.columns]
+    miss = HEALTH_REQ - set(x.columns)
+    if miss:
+        raise RuntimeError(f"health parent missing {sorted(miss)}")
+
+    x["season"] = pd.to_numeric(x["season"], errors="coerce")
+    x["week"] = pd.to_numeric(x["week"], errors="coerce")
+    x["stable_id"] = x["stable_id"].map(text)
+    x["team"] = x["team"].astype("string").fillna("").str.strip()
+    x["family"] = x["family"].astype("string").fillna("").str.upper().str.strip()
+    x["observation_state"] = (
+        x["observation_state"].astype("string").fillna("").str.strip()
+    )
+    x["positive_participation"] = as_bool(x["positive_participation"])
+
+    x = x.loc[
+        x["season"].isin(SEASONS)
+        & x["stable_id"].ne("")
+        & x["family"].isin(FAMILIES)
+    ].copy()
+    x["season"] = x["season"].astype(int)
+    x["week"] = x["week"].astype(int)
+
+    keys = ["season","week","team","stable_id"]
+    if x.duplicated(keys).any():
+        bad = x.loc[x.duplicated(keys, keep=False), keys].head(20).to_dict("records")
+        raise RuntimeError(f"duplicate health identities: {bad}")
+
+    return x.sort_values(
+        ["season","team","stable_id","week"], kind="mergesort"
+    ).reset_index(drop=True)
+
 def valid_opportunity_row(r: pd.Series) -> bool:
     return bool(
         r["positive_participation"]
@@ -144,10 +183,15 @@ def valid_opportunity_row(r: pd.Series) -> bool:
 def build_membership(
     episodes: pd.DataFrame,
     receiving: pd.DataFrame,
+    health: pd.DataFrame,
 ) -> tuple[pd.DataFrame,pd.DataFrame,set[tuple[int,int,str]],dict]:
-    groups = {
+    rec_groups = {
         (int(s),str(t),str(pid)): g.sort_values("week", kind="mergesort").reset_index(drop=True)
         for (s,t,pid),g in receiving.groupby(["season","team","stable_id"], sort=False)
+    }
+    health_groups = {
+        (int(s),str(t),str(pid)): g.sort_values("week", kind="mergesort").reset_index(drop=True)
+        for (s,t,pid),g in health.groupby(["season","team","stable_id"], sort=False)
     }
 
     membership = []
@@ -168,9 +212,12 @@ def build_membership(
         if return_week <= start_week:
             chronology_violations += 1
 
-        g = groups.get((season,team,pid))
+        g = rec_groups.get((season,team,pid))
         if g is None:
             g = pd.DataFrame(columns=receiving.columns)
+        hg = health_groups.get((season,team,pid))
+        if hg is None:
+            hg = pd.DataFrame(columns=health.columns)
 
         prior = g.loc[
             (g["week"] < start_week)
@@ -230,8 +277,11 @@ def build_membership(
             return_pf = bool(rr["playerform_weekly_row_present"])
             team_weeks.add((season,return_week,team))
 
-        nxt = g.loc[g["week"] > return_week].sort_values("week", kind="mergesort")
-        next_present = len(nxt) > 0
+        # The immutable health-state parent—not the positive-participation
+        # receiving panel—defines the exact immediately next scheduled same-team
+        # observation after the restored return.
+        hnext = hg.loc[hg["week"] > return_week].sort_values("week", kind="mergesort")
+        next_present = len(hnext) > 0
         next_week = np.nan
         next_state = ""
         next_positive = False
@@ -239,26 +289,33 @@ def build_membership(
         next_targets = np.nan
         next_team_targets = np.nan
         next_share = np.nan
+        next_receiving_row_present = False
         next_valid_if_positive = True
         if next_present:
-            nr = nxt.iloc[0]
-            next_week = int(nr["week"])
+            hr = hnext.iloc[0]
+            next_week = int(hr["week"])
             if next_week <= return_week:
                 chronology_violations += 1
-            next_state = str(nr["observation_state"])
-            next_positive = bool(nr["positive_participation"])
-            next_pf = bool(nr["playerform_weekly_row_present"])
-            next_targets = float(nr["targets"]) if pd.notna(nr["targets"]) else np.nan
-            next_team_targets = float(nr["team_targets"]) if pd.notna(nr["team_targets"]) else np.nan
-            next_share = float(nr["target_share_game"]) if pd.notna(nr["target_share_game"]) else np.nan
-            if next_positive:
-                next_valid_if_positive = valid_opportunity_row(nr)
-            team_weeks.add((season,next_week,team))
+            next_state = str(hr["observation_state"])
+            next_positive = bool(hr["positive_participation"])
 
-            # The frozen next observation is literally the first later row.
-            first_later_week = int(g.loc[g["week"] > return_week, "week"].min())
+            first_later_week = int(hg.loc[hg["week"] > return_week, "week"].min())
             if next_week != first_later_week:
                 skipped_next_violations += 1
+
+            exact = g.loc[g["week"].eq(next_week)].copy()
+            next_receiving_row_present = len(exact) == 1
+            if next_receiving_row_present:
+                nr = exact.iloc[0]
+                next_pf = bool(nr["playerform_weekly_row_present"])
+                next_targets = float(nr["targets"]) if pd.notna(nr["targets"]) else np.nan
+                next_team_targets = float(nr["team_targets"]) if pd.notna(nr["team_targets"]) else np.nan
+                next_share = float(nr["target_share_game"]) if pd.notna(nr["target_share_game"]) else np.nan
+                team_weeks.add((season,next_week,team))
+                if next_positive:
+                    next_valid_if_positive = valid_opportunity_row(nr)
+            elif next_positive:
+                next_valid_if_positive = False
 
         membership.append({
             "season":season,
@@ -282,6 +339,7 @@ def build_membership(
             "immediate_next_week":next_week,
             "immediate_next_state":next_state,
             "immediate_next_positive_participation":next_positive,
+            "immediate_next_receiving_row_present":next_receiving_row_present,
             "immediate_next_playerform_weekly_row_present":next_pf,
             "immediate_next_opportunity_valid_if_positive":bool(next_valid_if_positive),
             "immediate_next_targets":next_targets,
@@ -297,7 +355,6 @@ def build_membership(
         "skipped_immediate_next_violations":int(skipped_next_violations),
     }
     return mem,pri,team_weeks,audit
-
 
 def finite_opportunity_audit(
     receiving: pd.DataFrame,
@@ -513,12 +570,14 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--episodes", type=Path, required=True)
     ap.add_argument("--receiving", type=Path, required=True)
+    ap.add_argument("--health", type=Path, required=True)
     ap.add_argument("--out-dir", type=Path, required=True)
     a = ap.parse_args()
     a.out_dir.mkdir(parents=True, exist_ok=True)
 
     episodes = load_episodes(a.episodes)
     receiving = load_receiving(a.receiving)
+    health = load_health(a.health)
 
     ep_dup = int(
         episodes.duplicated(["season","team","stable_id","episode_number"]).sum()
@@ -527,7 +586,7 @@ def main() -> int:
         receiving.duplicated(["season","week","team","stable_id"]).sum()
     )
 
-    mem,pri,represented,audit = build_membership(episodes,receiving)
+    mem,pri,represented,audit = build_membership(episodes,receiving,health)
     finite,finite_audit = finite_opportunity_audit(receiving,represented)
 
     summaries = [
@@ -561,6 +620,9 @@ def main() -> int:
         "receiving_parent_run":39161711741,
         "receiving_parent_artifact":12149181200,
         "receiving_parent_digest":"sha256:6cae427b667db4a120a1308747d00b82b6770fe0adbc46d3efc68fce3e1db240",
+        "health_parent_run":39154145666,
+        "health_parent_artifact":12146625382,
+        "health_parent_digest":"sha256:d74f2d3c37a88aa639527aedf719e7e08001d464c722613b46291cda0f74cbeb",
         "disposition":(
             "PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_READY"
             if ready else
