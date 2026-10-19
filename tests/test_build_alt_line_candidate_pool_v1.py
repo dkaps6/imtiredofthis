@@ -240,7 +240,9 @@ def test_quarterback_rank_comes_from_depth_role_not_model_role():
     assert kept is not None, "the certified starter must not be filtered by an ypa rank"
     assert kept["rank_used"] == "QB1"
 
-    trubisky = {"p": {"position_group": "QB", "prior_games": "2", "current_games": "2",
+    # Enough games that the evidence floor is not what rejects him, so the
+    # rank gate is the binding one.
+    trubisky = {"p": {"position_group": "QB", "prior_games": "12", "current_games": "2",
                       "depth_role": "QB2", "model_role": "QB1",
                       "tgt_share": "0", "rush_share": "0.063"}}
     _, reason = screen_one(board_row(
