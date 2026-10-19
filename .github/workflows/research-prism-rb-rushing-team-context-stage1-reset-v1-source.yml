@@ -127,8 +127,8 @@ jobs:
           assert p['per_season']['2025']['distinct_stable_ids']==30,p
           assert p['per_season']['2025']['actionable_reset_rows']==12,p
           assert p['per_season']['2025']['actionable_reset_stable_ids']==12,p
-          failed=[k for k,v in p['source_gates'].items() if not v]
-          assert failed==['confirmation_2025_actionable_rows_ge_15','confirmation_2025_actionable_ids_ge_15'],failed
+          failed=sorted(k for k,v in p['source_gates'].items() if not v)
+          assert failed==sorted(['confirmation_2025_actionable_rows_ge_15','confirmation_2025_actionable_ids_ge_15']),failed
           assert r['stage1_candidate_matches_current'].all()
           assert r['stage1_support_flag_matches_exact_row'].all()
           assert p['predictive_outcomes_read']==0 and p['target_game_counts_read']==0
