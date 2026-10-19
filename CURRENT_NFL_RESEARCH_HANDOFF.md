@@ -1,5 +1,180 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — CORRECTED RETURN-STATE LINEAGE / INJURY-SPECIFIC FOLLOW-UP CLOSED / BROADER PLAYER ROLE-STATE FRONTIER
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+### NON-NEGOTIABLE ASSIGNMENT
+
+PRISM is an **INDIVIDUAL-PLAYER PROJECTION MODEL**.
+
+The model must understand the named player in his actual current football state
+for the exact market.
+
+Position-level MAE/RMSE is downstream QA only.
+
+> **The player should have the rules. The position should not have the player.**
+
+> **Anomalies are questions, not trends.**
+
+The Coker injury case is a permanent example of the reasoning standard, not the
+definition of PRISM. When a player observation is abnormal, investigate why
+before using it as trajectory evidence. The cause may be injury, DNP, partial
+participation, QB/starter change, teammate competition, coaching/deployment,
+game state, or another source-valid football cause. If unresolved, fail closed.
+
+### QUALIFIED STATE SCIENCE PRESERVED
+
+Return-State Next-Role Persistence V1 remains:
+
+`PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1_QUALIFIED_STATE_ONLY`
+
+Authority:
+- freeze `c25d5f3d19cab3f68a0c0ad0482c79bf53a6730e`;
+- run `39179843306` SUCCESS;
+- artifact `12156195287`;
+- digest
+  `sha256:8a6ac90e3209f1ec8f53d859a2f7b2a64b84b682f033667512d99b16ddee3988`;
+- result commit
+  `594a749f4c7793796b4aa40b42d8aadad64a1134`.
+
+Meaning:
+once restored participation is source-certified, the named player's own
+pre-injury participation role is materially more faithful for the next clean
+participation observation than carrying the injury interruption forward as
+continued decline.
+
+This is participation-state evidence only.
+
+No automatic target/carry/route/efficiency/yard/TD restoration follows.
+
+### CORRECTED RECEIVING-OPPORTUNITY SOURCE RESULT
+
+Return-State Receiving Opportunity Source V1 remains **SOURCE BLOCKED**, but
+the canonical authority is the corrected chronology run, not the earlier stale
+freeze execution.
+
+Authoritative pre-implementation chronology freeze:
+`930907dd91c1b4139f2aa6be52db23a730c7a96b`.
+
+Canonical corrected run:
+- run `39180575868` SUCCESS;
+- exact head `af3ca4469ae3fad59b219a36a79adbbb1b3ed640`;
+- job `117832254171` SUCCESS;
+- artifact `12156510164`;
+- digest
+  `sha256:ff57c3b2f3b700444ffb5fcc89f9ffa98242861711c7f143ec948d6ad3a03bf6`;
+- disposition
+  `PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_BLOCKED`.
+
+The earlier run `39180266614` is noncanonical because it used the stale
+pre-amendment freeze and could skip no-snap/unresolved observations when
+discovering the immediate next week.
+
+Corrected immediate-next state support includes reported no-snap and unresolved
+states from Observation Health-State V1.
+
+Exact blocker remains:
+the immutable PlayerForm-derived receiving parent does not provide enough exact
+named-player weekly target membership. Missing PlayerForm rows may carry filled
+numeric zeroes, and PRISM may not interpret missing source membership as true
+zero target earning.
+
+Do not lower the >=95% support gate. Do not rescue with missing-row zeroes,
+fuzzy identity, family cherry-picks, deletion/reweighting, or the closed
+exposure x earning formula.
+
+### INJURY-REPORT FOLLOW-UP CLOSED
+
+Restored-Return Injury-Report State Persistence V1:
+
+- freeze `513a5e5ee29b909aeaff387396352e1a10d83633`;
+- run `39180544730` SUCCESS;
+- exact head `5b2af3bda19fe16a150a6484e96050bd365f12db`;
+- job `117832159685` SUCCESS;
+- artifact `12155682815`;
+- digest
+  `sha256:0e868c6424f76abd423e4aff6cdebdeec6d5c4690f212759dfd4c67cc292fec8`;
+- disposition
+  `PRISM_RESTORED_RETURN_INJURY_REPORT_STATE_PERSISTENCE_V1_CLOSED`.
+
+2024 support was too small in the no-report return group.
+
+2025 confirmation:
+- no-report return equal-player clean-next rate 66.07%;
+- report-present 63.03%;
+- gain +0.030462;
+- player-cluster 95% CI
+  `[-0.169569,+0.221526]`.
+
+The exact weekly-report-presence reliability mechanism did not confirm.
+
+Do not rescue with body part, practice status, report-status subsets,
+position/family cuts, alternate lookahead, or changed return thresholds.
+
+### IMPORTANT SCIENTIFIC INTERPRETATION
+
+Stop extending the injury-specific lane.
+
+The injury work produced one useful qualified participation-state rule and
+closed/blocked the downstream variants that were not supported.
+
+That is exactly how PRISM should behave:
+- investigate the abnormal observation;
+- learn the valid player-state fact;
+- do not turn one failure case into the entire model.
+
+### QUEUE GOVERNANCE
+
+- Betting remains LOCKED/CLOSED unless explicitly reopened.
+- No paid OddsAPI.
+- Sportsbook downstream only.
+- QB passing TD remains BACKLOG ONLY.
+- No production mutation.
+- Preserve all qualified/closed science.
+- Preserve exact artifact/digest/chronology/byte-identity gates.
+- Do not retest the closed injury variants above.
+
+### EXACT NEXT ACTION
+
+Return to the broader player-first frontier:
+
+`PRISM_CURRENT_ROLE_STATE_ARBITRATION_FRONTIER_OPEN__SOURCE_AUDIT_ONLY`.
+
+Before scoring anything, source-map **ONE genuinely new pregame named-player
+role-regime transition object**.
+
+The object must answer:
+
+> What source-valid football evidence tells PRISM that this named player's
+> current role/state is genuinely different from his longer identity **now**,
+> before the target game?
+
+Anti-retest requirements:
+- distinct from raw recent-share replacement;
+- distinct from WR/TE target-share trajectory;
+- distinct from RB carry/snap state;
+- distinct from active-role / active-set allocation;
+- distinct from blocked teammate-availability role elasticity;
+- distinct from blocked RB/TE depth-role transition;
+- distinct from the now-closed injury-report persistence family;
+- exact historical/live semantic parity;
+- named player + target-game grain;
+- market-specific mapping;
+- no outcome scoring until source/chronology/parity gates pass;
+- no 2026 outcome leakage;
+- no sportsbook/OddsAPI upstream;
+- no paid OddsAPI;
+- no production mutation.
+
+Do not choose the next object because it improves a position average.
+
+Choose it only if PRISM can explain:
+
+**WHY SHOULD THIS SPECIFIC PLAYER'S PROJECTION CHANGE?**
+
+---
+
 ## TOP CHECKPOINT — 2026-10-18 — RECEIVING OPPORTUNITY BRIDGE SOURCE BLOCKED / RETURN HEALTH-STATE FRONTIER
 
 **Model:** PRISM — Player Role & Individual Situation Model
