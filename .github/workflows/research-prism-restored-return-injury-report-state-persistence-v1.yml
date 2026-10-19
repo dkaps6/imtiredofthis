@@ -1,0 +1,213 @@
+name: Research PRISM Restored Return Injury Report State Persistence V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_RESTORED_RETURN_INJURY_REPORT_STATE_PERSISTENCE_V1_FREEZE.md'
+      - 'scripts/research/evaluate_prism_restored_return_injury_report_state_persistence_v1.py'
+      - 'tests/test_prism_restored_return_injury_report_state_persistence_v1.py'
+      - '.github/workflows/research-prism-restored-return-injury-report-state-persistence-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "513a5e5ee29b909aeaff387396352e1a10d83633"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_RESTORED_RETURN_INJURY_REPORT_STATE_PERSISTENCE_V1_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/evaluate_prism_restored_return_injury_report_state_persistence_v1.py" 2>/dev/null; then
+            echo "ERROR: scorer existed at freeze"
+            exit 1
+          fi
+
+      - name: Verify immutable source parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+
+          expected={
+              39162437467:(
+                  12149417234,
+                  'prism-return-from-injury-role-restoration-v1-source-39162437467',
+                  'sha256:7d69111925b7ad48f16b07150f5e5fbfac5e592bd01430d03efd907ca778c51e',
+              ),
+              39154145666:(
+                  12146625382,
+                  'prism-player-observation-health-state-v1-source-39154145666',
+                  'sha256:d74f2d3c37a88aa639527aedf719e7e08001d464c722613b46291cda0f74cbeb',
+              ),
+          }
+          repo=os.environ['GITHUB_REPOSITORY']
+          for run,(aid,name,digest) in expected.items():
+              payload=json.loads(subprocess.check_output(
+                  ['gh','api',f'repos/{repo}/actions/runs/{run}/artifacts']
+              ))
+              arts={int(a['id']):a for a in payload.get('artifacts',[])}
+              a=arts.get(aid)
+              assert a is not None,(run,aid)
+              assert not a.get('expired'),a
+              assert a.get('name')==name,a
+              assert a.get('digest')==digest,a
+              print('PARENT_VERIFIED',run,aid,name,digest)
+          PY
+
+      - name: Download immutable source parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prism-return-report-state
+          mkdir -p /tmp/prism-return-report-state/{return_parent,health_parent,out}
+
+          gh run download 39162437467 --repo "${{ github.repository }}"             --name prism-return-from-injury-role-restoration-v1-source-39162437467             --dir /tmp/prism-return-report-state/return_parent
+
+          gh run download 39154145666 --repo "${{ github.repository }}"             --name prism-player-observation-health-state-v1-source-39154145666             --dir /tmp/prism-return-report-state/health_parent
+
+          test -s /tmp/prism-return-report-state/return_parent/return_from_injury_role_restoration_episodes.csv
+          test -s /tmp/prism-return-report-state/health_parent/player_observation_health_state_rows.csv
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_prism_restored_return_injury_report_state_persistence_v1.py
+          pytest -q tests/test_prism_restored_return_injury_report_state_persistence_v1.py
+
+      - name: Execute frozen named-player report-state persistence test
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/evaluate_prism_restored_return_injury_report_state_persistence_v1.py             --episodes /tmp/prism-return-report-state/return_parent/return_from_injury_role_restoration_episodes.csv             --health /tmp/prism-return-report-state/health_parent/player_observation_health_state_rows.csv             --out-dir /tmp/prism-return-report-state/out
+
+      - name: Certify frozen contract
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+
+          base='/tmp/prism-return-report-state/out'
+          p=json.load(open(f'{base}/restored_return_injury_report_state_persistence_result.json'))
+          rows=pd.read_csv(f'{base}/restored_return_injury_report_state_persistence_rows.csv')
+
+          assert p['version']=='PRISM_RESTORED_RETURN_INJURY_REPORT_STATE_PERSISTENCE_V1',p
+          assert p['freeze_commit']=='513a5e5ee29b909aeaff387396352e1a10d83633',p
+          assert p['return_parent_run']==39162437467,p
+          assert p['health_parent_run']==39154145666,p
+          assert p['disposition'] in {
+              'PRISM_RESTORED_RETURN_INJURY_REPORT_STATE_PERSISTENCE_V1_QUALIFIED_RELIABILITY_ONLY',
+              'PRISM_RESTORED_RETURN_INJURY_REPORT_STATE_PERSISTENCE_V1_CLOSED',
+          },p
+
+          if len(rows):
+              assert (rows['next_week'] > rows['return_week']).all()
+              assert rows['current_return_report_state'].isin({
+                  'RESTORED_RETURN_REPORT_PRESENT',
+                  'RESTORED_RETURN_NO_REPORT',
+              }).all()
+              assert rows['next_observation_state'].isin({
+                  'NO_REPORT_PARTICIPATED',
+                  'REPORTED_INJURY_PARTICIPATED',
+                  'REPORTED_INJURY_NO_OFFENSIVE_SNAPS',
+                  'NO_REPORT_NO_OFFENSIVE_SNAPS_UNRESOLVED',
+              }).all()
+              assert rows['next_clean_no_report_participation'].isin({0,1}).all()
+
+          assert p['targets_used']==0,p
+          assert p['carries_used']==0,p
+          assert p['receptions_used']==0,p
+          assert p['yards_used']==0,p
+          assert p['touchdowns_used']==0,p
+          assert p['routes_inferred_from_snaps'] is False,p
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+
+          p=json.load(open('/tmp/prism-return-report-state/out/restored_return_injury_report_state_persistence_result.json'))
+          print("### PRISM restored-return injury-report state persistence V1")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          for label in ('development_2024','confirmation_2025'):
+              s=p[label]
+              print()
+              print(f"**{s['season']} named-player state**")
+              print(f"- restored source episodes={s['restored_source_episodes']}; scored={s['scored_episodes']}; players={s['scored_named_players']}; next coverage={s['immediate_next_coverage']:.2%}")
+              print(f"- no-report at return: episodes={s['no_report_episodes']} players={s['no_report_named_players']} equal-player clean-next={s['no_report_equal_player_clean_rate']:.2%}")
+              print(f"- report-present at return: episodes={s['report_present_episodes']} players={s['report_present_named_players']} equal-player clean-next={s['report_present_equal_player_clean_rate']:.2%}")
+              print(f"- clean-state gain={s['report_state_clean_rate_gain']:+.6f}")
+              print(f"- next states={s['next_state_counts']}")
+              if 'player_cluster_bootstrap' in s:
+                  b=s['player_cluster_bootstrap']
+                  print(f"- player-cluster bootstrap valid={b['valid_reps']}/{b['requested_reps']} 95% CI=[{b['ci_low']:+.6f},{b['ci_high']:+.6f}]")
+              failed=[k for k,v in s['support_gates'].items() if not v]
+              print(f"- failed support gates: {failed or ['NONE']}")
+          failedq=[k for k,v in p['qualification_gates'].items() if not v]
+          print()
+          print(f"- failed qualification gates: {failedq or ['NONE']}")
+          print()
+          print("Named-player health-state/reliability only. No-report does not mean medically healthy. No targets, carries, receptions, yards, TDs, routes, position coefficients, sportsbook/OddsAPI, 2026 outcomes, or production mutation.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-restored-return-injury-report-state-persistence-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/prism-return-report-state/out/**
