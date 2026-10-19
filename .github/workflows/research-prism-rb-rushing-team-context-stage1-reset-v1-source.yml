@@ -1,0 +1,175 @@
+name: Research PRISM RB Rushing Team Context Stage1 Reset V1 Source
+
+on:
+  push:
+    branches: [research-individual-opportunity-roadmap-2026-10-08]
+    paths:
+      - 'docs/research/PRISM_RB_RUSHING_TEAM_CONTEXT_STAGE1_PARTICIPATION_AUTHORITY_RESET_V1_SOURCE_FREEZE.md'
+      - 'scripts/research/audit_prism_rb_rushing_team_context_stage1_participation_authority_reset_v1_source.py'
+      - 'tests/test_prism_rb_rushing_team_context_stage1_participation_authority_reset_v1_source.py'
+      - '.github/workflows/research-prism-rb-rushing-team-context-stage1-reset-v1-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  FREEZE_COMMIT: "7a27318b2a6cf4c4f0b235429e653f63a72714a8"
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pandas numpy pytest pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_RB_RUSHING_TEAM_CONTEXT_STAGE1_PARTICIPATION_AUTHORITY_RESET_V1_SOURCE_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/audit_prism_rb_rushing_team_context_stage1_participation_authority_reset_v1_source.py" 2>/dev/null; then
+            echo "ERROR: source auditor existed at freeze"
+            exit 1
+          fi
+
+      - name: Verify immutable parents
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12156204035 --jq '.workflow_run.id')" = "39182076127"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12156204035 --jq '.digest')" = "sha256:abc2a5b9d3ea2a4d683e56626ea2d33495fa1e7cad2c36c56c01071ccc0339c8"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070774378 --jq '.workflow_run.id')" = "38957575645"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12070774378 --jq '.digest')" = "sha256:e07edbad1bf97a4917ba95c58156c8941448e7b2668bd0eae2e9bcad5d4945b0"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.workflow_run.id')" = "38907459996"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12049120604 --jq '.digest')" = "sha256:41b1acd3f1b8d77abb53980db160ece32f8fc40351939d4827248b9caad0c64b"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-player-team-context-transition-v1-source-39182076127
+          path: /tmp/team-context
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39182076127
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-conditional-allocation-bridge-v1-38957575645
+          path: /tmp/parent
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38957575645
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: player-active-role-participation-mechanism-v1-38907459996
+          path: /tmp/stage1
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38907459996
+
+      - name: Resolve files
+        run: |
+          EVENTS="$(find /tmp/team-context -type f -name 'player_team_context_transition_events.csv' -print -quit)"
+          STATES="$(find /tmp/team-context -type f -name 'player_team_context_states.csv' -print -quit)"
+          PARENT="$(find /tmp/parent -type f -name 'active_role_conditional_allocation_bridge_player_rows.csv' -print -quit)"
+          STAGE1="$(find /tmp/stage1 -type f -name 'player_active_role_mechanism_scored_rows.csv' -print -quit)"
+          test -s "$EVENTS" && test -s "$STATES" && test -s "$PARENT" && test -s "$STAGE1"
+          echo "EVENTS=$EVENTS" >> "$GITHUB_ENV"
+          echo "STATES=$STATES" >> "$GITHUB_ENV"
+          echo "PARENT=$PARENT" >> "$GITHUB_ENV"
+          echo "STAGE1=$STAGE1" >> "$GITHUB_ENV"
+
+      - name: Compile and focused tests
+        env: {PYTHONPATH: "${{ github.workspace }}"}
+        run: |
+          python -m py_compile scripts/research/audit_prism_rb_rushing_team_context_stage1_participation_authority_reset_v1_source.py
+          pytest -q tests/test_prism_rb_rushing_team_context_stage1_participation_authority_reset_v1_source.py
+
+      - name: Execute source-only audit
+        env: {PYTHONPATH: "${{ github.workspace }}"}
+        run: |
+          rm -rf /tmp/rb-rush-reset && mkdir -p /tmp/rb-rush-reset/out
+          python scripts/research/audit_prism_rb_rushing_team_context_stage1_participation_authority_reset_v1_source.py \
+            --events "$EVENTS" --states "$STATES" --parent "$PARENT" --stage1 "$STAGE1" \
+            --out-dir /tmp/rb-rush-reset/out
+
+      - name: Certify fail-closed source result
+        run: |
+          python - <<'PY'
+          import json,pandas as pd
+          b='/tmp/rb-rush-reset/out'
+          p=json.load(open(f'{b}/rb_rushing_team_context_stage1_reset_source_result.json'))
+          r=pd.read_csv(f'{b}/rb_rushing_team_context_stage1_reset_source_rows.csv')
+          assert p['freeze_commit']=='7a27318b2a6cf4c4f0b235429e653f63a72714a8',p
+          assert p['disposition']=='PRISM_RB_RUSHING_TEAM_CONTEXT_STAGE1_PARTICIPATION_AUTHORITY_RESET_V1_SOURCE_BLOCKED',p
+          assert p['eligible_team_context_transitions']==150,p
+          assert p['selected_first_positive_market_rows']==70,p
+          assert p['source_exclusions']=={'NO_POSITIVE_CANONICAL_RB_RUSHING_BASELINE':80},p
+          assert p['parent_state_link_hits']==2805 and p['parent_state_link_attempts']==2805,p
+          assert p['per_season']['2024']['selected_market_rows']==38,p
+          assert p['per_season']['2024']['distinct_stable_ids']==36,p
+          assert p['per_season']['2024']['actionable_reset_rows']==22,p
+          assert p['per_season']['2024']['actionable_reset_stable_ids']==22,p
+          assert p['per_season']['2025']['selected_market_rows']==32,p
+          assert p['per_season']['2025']['distinct_stable_ids']==30,p
+          assert p['per_season']['2025']['actionable_reset_rows']==12,p
+          assert p['per_season']['2025']['actionable_reset_stable_ids']==12,p
+          failed=[k for k,v in p['source_gates'].items() if not v]
+          assert failed==['confirmation_2025_actionable_rows_ge_15','confirmation_2025_actionable_ids_ge_15'],failed
+          assert r['stage1_candidate_matches_current'].all()
+          assert r['stage1_support_flag_matches_exact_row'].all()
+          assert p['predictive_outcomes_read']==0 and p['target_game_counts_read']==0
+          assert p['production_changed'] is False
+          PY
+
+      - name: Strict repository audit
+        env: {PYTHONPATH: "${{ github.workspace }}"}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 source result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json,os
+          p=json.load(open('/tmp/rb-rush-reset/out/rb_rushing_team_context_stage1_reset_source_result.json'))
+          print("### PRISM RB rushing team-context Stage-1 participation authority reset V1 — source audit")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          print(f"- Qualified RB_RUSHING parent -> team-context exact raw-ID lineage: {p['parent_state_link_hits']}/{p['parent_state_link_attempts']} ({p['parent_state_link_rate']:.2%})")
+          for season in ('2024','2025'):
+            s=p['per_season'][season]
+            print(f"- {season}: selected {s['selected_market_rows']} / IDs {s['distinct_stable_ids']} / actionable {s['actionable_reset_rows']} rows and {s['actionable_reset_stable_ids']} IDs")
+          print(f"- Failed source gates: {[k for k,v in p['source_gates'].items() if not v]}")
+          print()
+          print("The 2025 actionable confirmation population is below the frozen >=15 support floor, so no predictive outcomes were opened. SOURCE BLOCKED is not a predictive failure.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable source result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-rb-rushing-team-context-stage1-reset-v1-source-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/rb-rush-reset/out/**
