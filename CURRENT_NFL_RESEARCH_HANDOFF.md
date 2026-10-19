@@ -1,5 +1,187 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-19 — TRUE FINAL ELITE NO-RETEACH / ADDITIVE TEAM-CONTEXT IDENTITY-BRIDGE FRONTIER
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+### READ THIS DEEP HANDOFF NEXT
+
+`docs/handoffs/NFL_HANDOFF_2026-10-19_PRISM_TRUE_FINAL_ELITE_NO_RETEACH_ADDITIVE_IDENTITY_BRIDGE.md`
+
+Deep handoff commit:
+`3d1f8b65485955d2b4da870554d74e780a7ebd45`
+
+Reusable restart prompt:
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-19_PRISM_TRUE_FINAL_ELITE_NO_RETEACH_ADDITIVE_IDENTITY_BRIDGE.md`
+
+Restart prompt commit:
+`be01af40317be0022317cf556c62d9e12b74e8b7`
+
+### ABSOLUTE ASSIGNMENT
+
+PRISM is an **INDIVIDUAL-PLAYER PROJECTION MODEL**.
+
+The objective is to project the named player correctly in his actual current
+football state for the exact market.
+
+Position-level MAE/RMSE is downstream QA only.
+
+> **THE PLAYER SHOULD HAVE THE RULES. THE POSITION SHOULD NOT HAVE THE PLAYER.**
+
+> **ANOMALIES ARE QUESTIONS, NOT TRENDS.**
+
+Do not make the user teach this again.
+
+### DO NOT SCRAP / REBUILD PRISM
+
+The current work is an **additive high-resolution player-state arbitration
+layer** on top of the existing validated PRISM stack.
+
+Preserve existing:
+- player baselines;
+- qualified entitlement/opportunity science;
+- finite-opportunity architecture;
+- efficiency science;
+- uncertainty/distribution work;
+- surviving opponent/environment science;
+- production components not explicitly superseded.
+
+A source block in a new layer does not erase the model beneath it.
+
+A new state mechanism may alter only the exact seam it separately qualifies
+for.
+
+### CURRENT CENTRAL SOURCE STATE
+
+`PRISM_PLAYER_TEAM_CONTEXT_TRANSITION_V1_SOURCE_READY`
+
+Canonical authority:
+- freeze `bd254ec9435cd0a17e2c7d82d78532e67c2cd23e`;
+- run `39182076127` SUCCESS;
+- exact head `6c047e4df67702affde52493f7d1b90296751968`;
+- artifact `12156204035`;
+- digest
+  `sha256:abc2a5b9d3ea2a4d683e56626ea2d33495fa1e7cad2c36c56c01071ccc0339c8`.
+
+Meaning:
+
+> PRISM can source-certify that this named player's current team / competition
+> environment differs from the environment that generated his immediately
+> prior roster history.
+
+This is a current-context boundary, not a boost or penalty.
+
+### CURRENT RB MARKET SEAM
+
+Frozen contract:
+
+`PRISM_RB_TEAM_CONTEXT_CARRY_IDENTITY_PERSISTENCE_V1`
+
+Freeze:
+`668bd3266b6e6c131875ef245ce037b1a9925be7`
+
+Canonical run:
+`39182998402` SUCCESS as a fail-closed workflow.
+
+Exact research head:
+`5a51ad27e38e6a87455dc78e31c1a2b2646d2868`
+
+Disposition:
+
+`PRISM_RB_TEAM_CONTEXT_CARRY_IDENTITY_PERSISTENCE_V1_SOURCE_BLOCKED`
+
+Exact blocker:
+- stable carry-count identity linkage: **0 / 39 = 0.00%**;
+- exclusion: `target_count_identity_missing: 39`;
+- eligible predictive events scored: **0**;
+- named RBs scored: **0**.
+
+This was **NOT** a predictive failure.
+
+No result exists saying:
+- old-team carry identity was worse;
+- canonical entitlement beat it;
+- MAE worsened;
+- team-context science failed.
+
+None of those were scored.
+
+### EXACT NEXT ACTION
+
+Stay in the **team-context transition lane**.
+
+Source / identity lineage audit only:
+
+> Is there a canonical, deterministic, leakage-safe identifier bridge between
+> the team-context transition `stable_id` and the historical carry-count
+> authority identity for 2024/2025?
+
+Inspect:
+1. canonical team-context transition artifact;
+2. canonical RB rushing entitlement artifact;
+3. historical carry-count builder / universe.
+
+Requirements:
+- exact shared provider-level stable ID only if genuinely present;
+- no names;
+- no normalized-name matching;
+- no fuzzy matching;
+- no manual crosswalk from outcomes;
+- no target-game usage to infer identity;
+- do not lower the frozen >=99% exact-link gate;
+- predictive outcomes scored = 0 during bridge audit.
+
+If exact bridge exists:
+- source-certify it first;
+- then execute the already-frozen RB V1 unchanged.
+
+If exact bridge does not exist:
+- document source blocked;
+- preserve `PRISM_PLAYER_TEAM_CONTEXT_TRANSITION_V1_SOURCE_READY`;
+- close only the RB carry-count linkage path;
+- choose the next distinct team-context market seam only if exact shared
+  identity and a qualified canonical baseline already exist;
+- freeze before scoring.
+
+### PERMANENT COKER / CAUSAL RULE
+
+Do not read injury-shortened/DNP rows as normal regression.
+
+DNP is not zero performance.
+
+Missing source membership is not automatically zero opportunity.
+
+Player context belongs before projection.
+
+Football causality comes before formulas.
+
+### QUEUE GOVERNANCE
+
+- Betting remains LOCKED/CLOSED unless explicitly reopened.
+- No paid OddsAPI without explicit authorization.
+- Sportsbook remains downstream only.
+- QB passing TD remains BACKLOG ONLY.
+- Preserve closed/qualified/source-blocked science.
+- Never weaken source/digest/chronology/parity/byte-identity gates.
+- Never claim a workflow is running without fresh Actions evidence.
+- Ignore unrelated legacy push-workflow failures unless they are the active lane.
+- No production mutation from source-only work.
+
+### LIVE STATE AT CONTINUITY CREATION
+
+Before continuity docs were added:
+- `main`: `930113019ee71bbb0a1106ab091a8d99000cfe49`;
+- research branch:
+  `5a51ad27e38e6a87455dc78e31c1a2b2646d2868`;
+- PR #672: open / draft at that research head;
+- canonical RB run `39182998402`: completed / SUCCESS.
+
+Always reconcile live state before mutation.
+
+---
+
+
 ## TOP CHECKPOINT — 2026-10-19 — TEAM-CONTEXT SOURCE READY / RB COUNT-ID BRIDGE SOURCE BLOCKED / ADDITIVE PLAYER-FIRST CONTINUATION
 
 **Model:** PRISM — Player Role & Individual Situation Model
