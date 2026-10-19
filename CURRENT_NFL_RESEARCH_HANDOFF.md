@@ -1,5 +1,94 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — TRUE FINAL ELITE / NO RETEACH / INDIVIDUAL PLAYER FIRST / RETURN-STATE FRONTIER
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-18_PRISM_TRUE_FINAL_ELITE_NO_RETEACH_RETURN_STATE.md`
+
+**Reusable next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-18_PRISM_TRUE_FINAL_ELITE_NO_RETEACH.md`
+
+### THE ASSIGNMENT — DO NOT DRIFT
+
+PRISM is an **INDIVIDUAL-PLAYER PROJECTION MODEL**.
+
+The objective is the named player's projection in his actual current football state for the exact market.
+
+**Position-level MAE/RMSE is downstream QA/reporting only. It is NOT the optimization target.**
+
+> **The player should have the rules. The position should not have the player.**
+
+> **Anomalies are questions, not trends.**
+
+Before using an abnormal game as trajectory evidence, explain WHY it happened. DNP is not zero performance. Injury-shortened/partial games are not ordinary full-game observations. Return-from-injury is a distinct current-role state. If context is unresolved, fail closed.
+
+Do not make the user teach these rules again.
+
+### PERMANENT COKER FAILURE CASE
+
+2026:
+- W1: 9 targets / 8-138-2;
+- W2: 9 / 8-66;
+- W3: 4 / 2-18, injury-affected early exit;
+- W4: DNP;
+- W5: bye;
+- W6: 12 / 6-97.
+
+The prior roughly 38-yard projection against roughly 55.5 used invalid regression reasoning. The user reported roughly 60 yards in the first half.
+
+This was a **bad individual-player projection caused by false causal-state interpretation**, not an aggregate-metric problem.
+
+Never read `138 -> 66 -> 18 -> DNP` as ordinary regression.
+
+### QUEUE GOVERNANCE
+
+- Betting remains LOCKED/CLOSED unless explicitly reopened.
+- No paid OddsAPI without explicit authorization.
+- Sportsbook downstream only.
+- Do not switch research lanes on your own.
+- QB passing TD remains BACKLOG ONLY unless explicitly promoted.
+- Preserve closed science / anti-retest rules.
+- Never weaken byte identity, digest, parity, source or chronology gates.
+- Never claim a workflow is running unless a fresh Actions read says queued/in_progress.
+- When the user says **keep going**, continue the exact active canonical lane.
+- When the user asks for a handoff, actually write it to GitHub and provide the prompt.
+
+### CURRENT FRONTIER
+
+Return-from-Injury Role Restoration V1 is **SOURCE READY**:
+- freeze `3eafb971c0a842750fa5af31a77a8b17adf890b0`;
+- run `39162437467` SUCCESS;
+- exact source head `4e5edc98c95f25800f6f66633443aa79379a2944`;
+- job `117778377817` SUCCESS;
+- artifact `12149417234`;
+- digest `sha256:7d69111925b7ad48f16b07150f5e5fbfac5e592bd01430d03efd907ca778c51e`;
+- result commit `a69386569a441176254ecc559cc7264612e34c26`;
+- disposition `PRISM_RETURN_FROM_INJURY_ROLE_RESTORATION_V1_SOURCE_READY`.
+
+No target/carry/reception/yard/TD predictive relationship has been scored from return state.
+
+### EXACT NEXT ACTION
+
+After live reconciliation, freeze **ONE** player-first predictive return-state mechanism before scoring:
+
+> Once this named player has source-certified `RETURN_PARTICIPATION_RESTORED`, does his next current-role/opportunity state behave more like his own pre-injury role than like a continued-decline state?
+
+Named player primary. Strictly-prior same-player state. Preserve teammate competition / finite opportunity. Participation restoration separate from target earning; target earning separate from efficiency. No automatic yards multiplier. No position coefficient as player identity. Snaps are not routes. No rescue of closed deletion/reweighting or exposure×earning formulas. No 2026 outcomes. No sportsbook/OddsAPI upstream. No paid OddsAPI. No production mutation.
+
+### LIVE STATE AT HANDOFF WRITE
+
+- `main` before this TOP update: `32d6491bc60fb99331b0542d38a89dfb5a645ba4`.
+- research branch: `a69386569a441176254ecc559cc7264612e34c26`.
+- PR #672: OPEN / DRAFT; head `a69386569a441176254ecc559cc7264612e34c26`.
+- exact research-head Actions: no legitimate PRISM research workflow queued/in_progress; only two unrelated legacy source workflows were present and completed/failure.
+- exact main-head Actions at reconciliation: Repo CI run `39179349289` was `in_progress`; Full Slate run `39179349332` was `pending`. Those are main-push workflows, not the active player-first research mechanism. Re-read live Actions before relying on status.
+
+---
+
 ## TOP CHECKPOINT — 2026-10-18 — CONVERSATION-LIMIT FINAL / INDIVIDUAL PLAYER FIRST / NO DRIFT / RETURN-STATE FRONTIER
 
 **Model:** PRISM — Player Role & Individual Situation Model
