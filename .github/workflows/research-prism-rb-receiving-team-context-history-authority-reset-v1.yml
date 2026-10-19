@@ -1,0 +1,221 @@
+name: Research PRISM RB Receiving Team Context History Authority Reset V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PRISM_RB_RECEIVING_TEAM_CONTEXT_HISTORY_AUTHORITY_RESET_V1_PREDICTIVE_FREEZE.md'
+      - 'scripts/research/evaluate_prism_rb_receiving_team_context_history_authority_reset_v1.py'
+      - 'tests/test_prism_rb_receiving_team_context_history_authority_reset_v1.py'
+      - '.github/workflows/research-prism-rb-receiving-team-context-history-authority-reset-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FREEZE_COMMIT: "c4226d642ac5b7ac4f20260949c9eddd726c19b8"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install numpy pandas scipy pytest pyyaml
+
+      - name: Verify frozen-before-implementation boundary
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$FREEZE_COMMIT" HEAD
+          git cat-file -e "$FREEZE_COMMIT:docs/research/PRISM_RB_RECEIVING_TEAM_CONTEXT_HISTORY_AUTHORITY_RESET_V1_PREDICTIVE_FREEZE.md"
+          if git cat-file -e "$FREEZE_COMMIT:scripts/research/evaluate_prism_rb_receiving_team_context_history_authority_reset_v1.py" 2>/dev/null; then
+            echo "ERROR: scorer existed at freeze"
+            exit 1
+          fi
+
+      - name: Verify immutable parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12187431307 --jq '.workflow_run.id')" = "39254338930"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12187431307 --jq '.digest')" = "sha256:7e7b51c75508b4e883db2934c2e892b377a3d284cb61b448e77e9b7c7eca96cd"
+
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12125534698 --jq '.workflow_run.id')" = "39099474655"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/12125534698 --jq '.digest')" = "sha256:3d1f8043dc7a2ded0ed7fd9705b359d31a094a272ecce6958823ce660c2898e4"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-rb-receiving-team-context-history-authority-reset-v1-source-39254338930
+          path: /tmp/source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39254338930
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-rb-stage2-player-specific-mechanism-authority-bridge-v1-39099474655
+          path: /tmp/authority
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 39099474655
+
+      - name: Resolve immutable files
+        run: |
+          set -euo pipefail
+          SOURCE_ROWS="$(find /tmp/source -type f -name 'rb_receiving_team_context_history_authority_reset_source_rows.csv' -print -quit)"
+          AUTHORITY_PLAYER_ROWS="$(find /tmp/authority -type f -name 'rb_stage2_player_specific_authority_bridge_player_rows.csv' -print -quit)"
+          AUTHORITY_ROOM_ROWS="$(find /tmp/authority -type f -name 'rb_stage2_player_specific_authority_bridge_room_rows.csv' -print -quit)"
+          test -n "$SOURCE_ROWS" && test -s "$SOURCE_ROWS"
+          test -n "$AUTHORITY_PLAYER_ROWS" && test -s "$AUTHORITY_PLAYER_ROWS"
+          test -n "$AUTHORITY_ROOM_ROWS" && test -s "$AUTHORITY_ROOM_ROWS"
+          echo "SOURCE_ROWS=$SOURCE_ROWS" >> "$GITHUB_ENV"
+          echo "AUTHORITY_PLAYER_ROWS=$AUTHORITY_PLAYER_ROWS" >> "$GITHUB_ENV"
+          echo "AUTHORITY_ROOM_ROWS=$AUTHORITY_ROOM_ROWS" >> "$GITHUB_ENV"
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_prism_rb_receiving_team_context_history_authority_reset_v1.py
+          pytest -q tests/test_prism_rb_receiving_team_context_history_authority_reset_v1.py
+
+      - name: Execute frozen predictive test
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/rb-receiving-team-context-score
+          mkdir -p /tmp/rb-receiving-team-context-score/out
+          python scripts/research/evaluate_prism_rb_receiving_team_context_history_authority_reset_v1.py \
+            --source-rows "$SOURCE_ROWS" \
+            --authority-player-rows "$AUTHORITY_PLAYER_ROWS" \
+            --authority-room-rows "$AUTHORITY_ROOM_ROWS" \
+            --out-dir /tmp/rb-receiving-team-context-score/out
+
+      - name: Certify frozen predictive contract
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+
+          base='/tmp/rb-receiving-team-context-score/out'
+          p=json.load(open(f'{base}/rb_receiving_team_context_history_authority_reset_result.json'))
+          rows=pd.read_csv(f'{base}/rb_receiving_team_context_history_authority_reset_scored_rows.csv')
+
+          assert p['version']=='PRISM_RB_RECEIVING_TEAM_CONTEXT_HISTORY_AUTHORITY_RESET_V1',p
+          assert p['freeze_commit']=='c4226d642ac5b7ac4f20260949c9eddd726c19b8',p
+          assert p['disposition'] in {
+              'PRISM_RB_RECEIVING_TEAM_CONTEXT_HISTORY_AUTHORITY_RESET_V1_QUALIFIED',
+              'PRISM_RB_RECEIVING_TEAM_CONTEXT_HISTORY_AUTHORITY_RESET_V1_PREDICTIVE_CLOSED',
+          },p
+
+          d=p['development_2024']
+          c=p['confirmation_2025']
+          assert d['actionable_events']==22 and d['stable_ids']==22,p
+          assert c['actionable_events']==17 and c['stable_ids']==17,p
+
+          parity_fields=[
+              'max_baseline_expected_count_parity_diff',
+              'max_baseline_crps_parity_diff',
+              'max_baseline_ae_parity_diff',
+              'max_baseline_room_error_parity_diff',
+          ]
+          for s in (d,c):
+              for k in parity_fields:
+                  assert s[k] <= 1e-10,(k,s[k])
+              for k in (
+                  'max_baseline_state_weight_gap',
+                  'max_candidate_state_weight_gap',
+                  'max_baseline_mass_gap',
+                  'max_candidate_mass_gap',
+              ):
+                  assert s[k] <= 1e-10,(k,s[k])
+
+          assert len(rows)==39
+          assert rows.groupby('season').size().to_dict()=={2024:22,2025:17}
+          assert (rows['baseline_p_effective']-rows['candidate_reset_p_active']).abs().gt(1e-12).all()
+
+          assert p['bootstrap_reps']==5000,p
+          assert p['bootstrap_seed']==20261019,p
+          assert p['coefficients_fit']==0,p
+          assert p['thresholds_searched']==0,p
+          assert p['subgroup_rescues']==0,p
+          assert p['rushing_yards_scored'] is False,p
+          assert p['receiving_yards_scored'] is False,p
+          assert p['touchdowns_scored'] is False,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['production_changed'] is False,p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Record Issue 535 predictive result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY' > /tmp/comment.md
+          import json, os
+          p=json.load(open('/tmp/rb-receiving-team-context-score/out/rb_receiving_team_context_history_authority_reset_result.json'))
+          print("### PRISM RB receiving team-context history-authority reset V1 — predictive result")
+          print()
+          print(f"- Run: {os.environ['RUN_ID']}")
+          print(f"- Exact head: {os.environ['HEAD_SHA']}")
+          print(f"- Freeze: {p['freeze_commit']}")
+          print(f"- Disposition: {p['disposition']}")
+          print()
+          for key,label in (('development_2024','2024 development'),('confirmation_2025','2025 independent confirmation')):
+              s=p[key]
+              print(f"**{label}**")
+              print(f"- actionable events / stable IDs: {s['actionable_events']} / {s['stable_ids']}")
+              print(f"- target CRPS gain: {s['mean_delta_crps']:+.6f}")
+              print(f"- target expected-count AE gain: {s['mean_delta_ae']:+.6f}")
+              print(f"- room allocation-error gain: {s['mean_delta_room_error']:+.6f}")
+              print(f"- equal-player mean / median / p10 CRPS gain: {s['equal_player_mean_improvement']:+.6f} / {s['equal_player_median_improvement']:+.6f} / {s['equal_player_p10_improvement']:+.6f}")
+              print(f"- improved / tied / worsened player share: {s['equal_player_improved_share']:.2%} / {s['equal_player_tied_share']:.2%} / {s['equal_player_worsened_share']:.2%}")
+              print(f"- player-cluster CI: [{s['player_cluster_bootstrap']['ci95_low']:+.6f}, {s['player_cluster_bootstrap']['ci95_high']:+.6f}]")
+              print(f"- game-cluster CI: [{s['game_cluster_bootstrap']['ci95_low']:+.6f}, {s['game_cluster_bootstrap']['ci95_high']:+.6f}]")
+              print(f"- equal-player CI: [{s['equal_player_bootstrap']['ci95_low']:+.6f}, {s['equal_player_bootstrap']['ci95_high']:+.6f}]")
+              print()
+          failed=[k for k,v in p['qualification_gates'].items() if k!='tail_floor' and not v]
+          print(f"- Failed frozen gates: {failed or ['NONE']}")
+          print(f"- Frozen p10 tail floor: {p['qualification_gates'].get('tail_floor')}")
+          print()
+          print("Interpretation is player-first: baseline is the already-QUALIFIED RB-receiving named-player architecture; candidate changes only the transitioned target RB's old-history authority on his first canonical new-team market row. Current-team entitlement, teammate authorities, room size and exact finite-opportunity conservation remain unchanged. No yards/TDs, sportsbook/OddsAPI, 2026 outcomes, fitting, threshold search or production mutation.")
+          PY
+          gh issue comment 535 --repo "${{ github.repository }}" --body-file /tmp/comment.md
+
+      - name: Upload immutable result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-rb-receiving-team-context-history-authority-reset-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/rb-receiving-team-context-score/out/**
