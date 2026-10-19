@@ -110,8 +110,29 @@ Use only:
   `PRISM_RECEIVING_OPPORTUNITY_EARNING_PARTICIPATION_EXPOSURE_V1_SOURCE_READY`.
 
 This parent provides exact stable player + team + week identity, raw weekly
-targets, exact team target volume, target share, offensive participation and
-source-certified observation state.
+targets, exact team target volume, target share, and positive offensive
+participation evidence.
+
+### C. Observation Health-State V1 chronology parent
+
+Use only:
+
+- run `39154145666`;
+- artifact `12146625382`;
+- artifact name
+  `prism-player-observation-health-state-v1-source-39154145666`;
+- digest
+  `sha256:d74f2d3c37a88aa639527aedf719e7e08001d464c722613b46291cda0f74cbeb`;
+- file
+  `player_observation_health_state_rows.csv`;
+- disposition
+  `PRISM_PLAYER_OBSERVATION_HEALTH_STATE_V1_SOURCE_READY`.
+
+This parent is required only to identify the exact immediately next scheduled
+same-team player observation after the restored return. The receiving
+opportunity panel contains positive-participation rows only, so it cannot
+source-validly prove that a no-snap / reported / unresolved observation was not
+skipped.
 
 The scorer from the CLOSED injury-partial decomposition is **not** a parent.
 
@@ -215,19 +236,24 @@ It may not define a predictive target-restoration label in this audit.
 ### C. Immediate next same-player observation
 
 Identify the immediately next scheduled same-team observation after return week
-from the receiving source panel.
+from the immutable Observation Health-State V1 parent.
+
+Then left-join receiving-opportunity evidence onto that **exact** week using:
+
+`season + team + stable_id + week`
 
 Persist:
 - next week when present;
-- observation_state;
+- exact health-state `observation_state`;
 - positive-participation flag;
-- targets;
-- team_targets;
-- target_share_game;
+- targets when the exact receiving row exists;
+- team_targets when the exact receiving row exists;
+- target_share_game when the exact receiving row exists;
 - `playerform_weekly_row_present`.
 
-Do not skip a reported/unresolved immediate observation to find a later clean
-one.
+Do not use the positive-participation-only receiving panel to discover the next
+week. Do not skip a reported/no-snap/unresolved immediate observation to find a
+later clean one.
 
 The source audit must report the exact next-state distribution.
 
@@ -435,3 +461,23 @@ Before this freeze:
 Disposition at freeze:
 
 `PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_FROZEN`.
+
+## 16. Pre-implementation chronology amendment
+
+Initial document-only freeze:
+`3a2a51e5412ad83265700dbf088e2425bae359c3`.
+
+Before any implementation, source execution, target-restoration scoring, or
+outcome inspection, the contract was amended to add Observation Health-State V1
+as the exact chronology authority for the immediate-next scheduled player
+observation.
+
+Reason: the immutable receiving-opportunity panel intentionally contains
+positive-participation rows only. Using it to discover the next observation
+could silently skip a DNP/no-snap/unresolved week and violate the anomaly rule.
+
+This amendment changes no predictive hypothesis, threshold, formula, gate, or
+outcome definition. It only prevents a false chronology inference.
+
+The amendment commit is the authoritative implementation freeze and must be
+recorded by the implementation/workflow before execution.
