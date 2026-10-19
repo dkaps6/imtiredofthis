@@ -1,5 +1,157 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## TOP CHECKPOINT — 2026-10-18 — PLAYCALLER REGIME SOURCE BLOCKED / NAMED-PLAYER TEAM-CONTEXT TRANSITION NEXT
+
+**Model:** PRISM — Player Role & Individual Situation Model
+
+### NON-NEGOTIABLE ASSIGNMENT
+
+PRISM is an **INDIVIDUAL-PLAYER PROJECTION MODEL**.
+
+The named player in his actual current football state is the scientific unit.
+Position-level MAE/RMSE remains downstream QA/reporting only.
+
+> **The player should have the rules. The position should not have the player.**
+
+> **Anomalies are questions, not trends.**
+
+### PRESERVED QUALIFIED SCIENCE
+
+Return-State Next-Role Persistence V1 remains:
+`PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1_QUALIFIED_STATE_ONLY`.
+
+Authority:
+- freeze `c25d5f3d19cab3f68a0c0ad0482c79bf53a6730e`;
+- run `39179843306` SUCCESS;
+- artifact `12156195287`;
+- digest
+  `sha256:8a6ac90e3209f1ec8f53d859a2f7b2a64b84b682f033667512d99b16ddee3988`.
+
+Participation restoration is separate from target earning.
+Target earning is separate from efficiency.
+Snaps are snaps, never routes.
+
+### CORRECTED RECEIVING OPPORTUNITY BRIDGE
+
+Return-State Receiving Opportunity V1 remains:
+`PRISM_RETURN_STATE_RECEIVING_OPPORTUNITY_V1_SOURCE_BLOCKED`.
+
+Canonical chronology authority:
+- freeze `930907dd91c1b4139f2aa6be52db23a730c7a96b`;
+- corrected run `39180575868` SUCCESS;
+- exact head `af3ca4469ae3fad59b219a36a79adbbb1b3ed640`;
+- artifact `12156510164`;
+- digest
+  `sha256:ff57c3b2f3b700444ffb5fcc89f9ffa98242861711c7f143ec948d6ad3a03bf6`.
+
+The stale run `39180266614` is noncanonical.
+
+Exact blocker:
+missing PlayerForm weekly-row membership cannot be interpreted as true zero
+target earning. Do not lower the >=95% support gate or rescue with filled
+zeroes/fuzzy identity/deletion/reweighting.
+
+### INJURY FOLLOW-UP CLOSED
+
+Restored-Return Injury-Report State Persistence V1 remains:
+`PRISM_RESTORED_RETURN_INJURY_REPORT_STATE_PERSISTENCE_V1_CLOSED`.
+
+Do not retest body-part, practice-status, report-status, family/position,
+lookahead or threshold variants.
+
+### NEW PLAYCALLER SOURCE RESULT — BLOCKED
+
+Offensive Playcaller Regime Transition V1:
+
+- freeze `533e628c99359fbfddbb9f4d787a96d8dbfbc67c`;
+- run `39181153541` SUCCESS;
+- exact head `f62d72df3a8b9ca0ce2491d58ac800504006d053`;
+- job `117833981762` SUCCESS;
+- artifact `12155618757`;
+- digest
+  `sha256:0bfcebc29d7ddeaf07c565afc6f1ac010d1974473a9475d966fb32ccac8ab5ec`;
+- research result commit
+  `053f7eb57c3dd5a2be1a60e3781fbbc0f2c1d81a`;
+- disposition
+  `PRISM_OFFENSIVE_PLAYCALLER_REGIME_TRANSITION_V1_SOURCE_BLOCKED`.
+
+2024:
+- caller coverage 100%;
+- 19 caller-change events;
+- 484 transition player-weeks / 445 named players;
+- >=3 strictly-prior same-team positive-participation support only
+  **8.47%** versus frozen **40%** minimum.
+
+2025:
+- caller coverage 100%;
+- 18 change events;
+- 438 transition player-weeks / 382 named players;
+- prior-role support **42.24%**;
+- all frozen 2025 source gates passed.
+
+2026 prospective semantic parity passed:
+- 32 / 32 Week-1 primary callers;
+- one documented in-season override;
+- effective-week semantics compatible with historical source.
+
+The blocker is 2024 named-player same-team role-history support.
+
+Do not rescue by:
+- lowering the 40% gate;
+- fitting only 2025;
+- excluding offseason transitions;
+- using position/team averages as player identity;
+- merging playcaller and QB identity;
+- using target-game usage.
+
+### QUEUE GOVERNANCE
+
+- Betting remains LOCKED/CLOSED unless explicitly reopened.
+- No paid OddsAPI.
+- Sportsbook downstream only.
+- QB passing TD BACKLOG ONLY.
+- No production mutation.
+- Preserve all qualified/closed science and exact source/digest/chronology gates.
+
+### EXACT NEXT ACTION
+
+Remain in:
+`PRISM_CURRENT_ROLE_STATE_ARBITRATION_FRONTIER_OPEN__SOURCE_AUDIT_ONLY`.
+
+Source-map one genuinely distinct named-player state:
+
+> Did this exact named RB/WR/TE change NFL teams before the target game, such
+> that his old-team role identity and his current-team competition environment
+> are different football states?
+
+This **named-player team-context transition** must be source-audited before any
+outcome scoring.
+
+Requirements:
+- exact stable player identity;
+- weekly pregame roster chronology;
+- distinguish offseason team change from in-season team change;
+- no target-game snaps/carries/targets/receptions/yards/TDs used to define the
+  state;
+- exact historical/live semantic parity including 2026;
+- preserve teammate competition / finite opportunity downstream;
+- distinct from teammate-vacancy role elasticity;
+- distinct from active-set allocation;
+- distinct from raw recent share;
+- distinct from depth chart;
+- distinct from QB-pair history;
+- distinct from playcaller state;
+- no 2026 outcome leakage;
+- no sportsbook/OddsAPI upstream;
+- no paid OddsAPI;
+- no production mutation.
+
+If source-ready, freeze a separate market-specific predictive contract before
+scoring anything.
+
+---
+
+
 ## TOP CHECKPOINT — 2026-10-18 — PLAYCALLER SOURCE BLOCKED / PLAYER TEAM-CONTEXT TRANSITION FRONTIER
 
 **Model:** PRISM — Player Role & Individual Situation Model
