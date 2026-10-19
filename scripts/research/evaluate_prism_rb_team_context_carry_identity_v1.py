@@ -341,7 +341,7 @@ def score(
 
         trans_ids = sorted(
             pid for (s, w, t, pid) in anchors
-            if (s, w, t) == (season, week)
+            if (s, w, t) == (season, week, team)
         )
         raw = np.array([anchors[(season, week, team, pid)]["anchor"] for pid in trans_ids], dtype=float)
         raw_sum = float(raw.sum())
