@@ -38,6 +38,12 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The grader reads the immutable production decision gates with
+          # `git show <anchor-commit>:<path>`, so a shallow clone has no
+          # history to resolve the anchor against and the gate load fails
+          # before any actual is read.
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
