@@ -118,7 +118,7 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/operations/grade_market_track_record_gsis_v1.py \
             --season "${SEASON}" --weeks "${WEEK}" \
-            --detail-out "/tmp/graded_wk${WEEK}.csv"
+            --detail-out "/tmp/graded_wk${WEEK}.csv" 2>&1 | tee /tmp/grade.log
           test -s "/tmp/graded_wk${WEEK}.csv"
 
       - name: Report the board decomposition
@@ -139,7 +139,8 @@ jobs:
           fi
           python scripts/operations/grade_preregistered_cards_v1.py \
             --cards "$CARDS" --season "${SEASON}" --week "${WEEK}" \
-            --out "data/market_track_record/graded/${BOARD_STEM}_cards_graded.csv"
+            --out "data/market_track_record/graded/${BOARD_STEM}_cards_graded.csv" \
+            2>&1 | tee /tmp/cards.log
 
       - name: Commit the graded ledger
         run: |
@@ -170,3 +171,16 @@ jobs:
             data/market_track_record/graded/**
           if-no-files-found: warn
           retention-days: 90
+
+      - name: Replay the failure tail
+        # A job log ends with the artifact upload, so a traceback from the
+        # middle of the run is unreachable without fetching the whole log.
+        # Reprint it last, where the tail actually is.
+        if: ${{ failure() }}
+        run: |
+          for f in /tmp/grade.log /tmp/cards.log; do
+            if [ -s "$f" ]; then
+              echo "================ tail of $f ================"
+              tail -45 "$f"
+            fi
+          done
