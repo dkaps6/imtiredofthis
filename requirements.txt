@@ -8,7 +8,12 @@ scikit-learn==1.4.2
 statsmodels==0.14.2
 
 # --- IO / utils ---
-pyarrow>=17.0.0
+# pyarrow needs an upper bound for the same reason numpy is pinned: pyarrow
+# 26 requires NumPy >= 2.0, numpy is held at 1.26.4 because nfl_data_py 0.3.3
+# requires pandas < 2.0, and an unbounded pyarrow therefore resolves to a
+# wheel that cannot import. That breaks every nflverse read in the repo --
+# `polars.to_pandas()` raises ImportError before any data is touched.
+pyarrow>=17.0.0,<19.0.0
 requests==2.32.3
 openpyxl
 python-dateutil==2.9.0.post0
