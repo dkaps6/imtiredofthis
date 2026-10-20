@@ -373,10 +373,41 @@ def resolve_gsis(player_clean_key: str, team: str, idx: dict) -> tuple[str, str]
     return "", "UNRESOLVED_IDENTITY"
 
 
-def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict:
+def grade(
+    season: int,
+    weeks: list[int],
+    detail_out: Path | None = None,
+    allow_ungated_population: bool = False,
+) -> dict:
+    """Grade archived boards for the given weeks.
+
+    ``allow_ungated_population`` only takes effect for a week that has no
+    preserved pregame decision-gate evidence at all. Those gates record
+    decisions that cannot be rebuilt after kickoff -- which teams were already
+    locked, which player-markets the pregame workbook marked BLOCKED -- so a
+    week without them cannot be graded on the same population as one with
+    them. Rather than fabricate a gate spec, the ungated path keeps every
+    priced row and labels it ``UNGATED_ALL_PRICED_ROWS``, so the two
+    populations can never be silently pooled. A week that does have evidence
+    is still gated, flag or not.
+    """
     board = apply_final_board_quarantine(load_boards(season, weeks))
-    board = apply_production_decision_gates(board)
+    try:
+        board = apply_production_decision_gates(board)
+        ungated = False
+    except RuntimeError as exc:
+        if not (allow_ungated_population
+                and "no preserved production decision gate evidence" in str(exc)):
+            raise
+        print(f"WARNING: {exc}")
+        print("WARNING: grading the UNGATED population -- every priced row is kept "
+              "and labelled UNGATED_ALL_PRICED_ROWS. This is NOT the same "
+              "population as a gated week and must not be pooled with one.")
+        ungated = True
     bets = select_model_bet(board)
+    if ungated and not bets.empty:
+        bets = bets.copy()
+        bets["production_decision"] = "UNGATED_ALL_PRICED_ROWS"
     if bets.empty:
         graded = empty_graded_frame(bets)
         if detail_out is not None:
@@ -526,11 +557,18 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", type=int, required=True)
     ap.add_argument("--weeks", required=True)
+    ap.add_argument(
+        "--allow-ungated-population",
+        action="store_true",
+        help="for a week with NO preserved decision-gate evidence, grade every "
+             "priced row and label the population instead of failing closed",
+    )
     ap.add_argument("--detail-out", type=Path, default=None,
                     help="optional path to write the per-bet graded detail rows")
     args = ap.parse_args()
     weeks = [int(w) for w in args.weeks.split(",") if w.strip()]
-    result = grade(args.season, weeks, detail_out=args.detail_out)
+    result = grade(args.season, weeks, detail_out=args.detail_out,
+                   allow_ungated_population=args.allow_ungated_population)
     print("\n=== CORRECTED MARKET TRACK RECORD GRADING (GSIS identity + zero-usage-preserving actuals) ===")
     for k, v in result.items():
         print(f"  {k}: {v}")

@@ -112,22 +112,6 @@ jobs:
                 f"{wk[teamcol].nunique() if teamcol else '?'} teams")
           PY
 
-      - name: Grade the board against final actuals
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          python scripts/operations/grade_market_track_record_gsis_v1.py \
-            --season "${SEASON}" --weeks "${WEEK}" \
-            --detail-out "/tmp/graded_wk${WEEK}.csv" 2>&1 | tee /tmp/grade.log
-          test -s "/tmp/graded_wk${WEEK}.csv"
-
-      - name: Report the board decomposition
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          python scripts/operations/report_weekly_backtest_v1.py \
-            --detail "/tmp/graded_wk${WEEK}.csv"
-
       - name: Grade the preregistered cards at their own thresholds
         run: |
           set -euo pipefail
@@ -141,6 +125,30 @@ jobs:
             --cards "$CARDS" --season "${SEASON}" --week "${WEEK}" \
             --out "data/market_track_record/graded/${BOARD_STEM}_cards_graded.csv" \
             2>&1 | tee /tmp/cards.log
+
+      - name: Grade the board against final actuals
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          # Weeks 1-2 carry preserved pregame decision-gate evidence and are
+          # graded on the production-decided population. Week 6 has none --
+          # that evidence records which teams were already kicked off and which
+          # player-markets the pregame workbook blocked, and it was never made
+          # durable. The flag below only applies where the evidence is wholly
+          # absent, and it labels the rows so the two populations cannot be
+          # pooled by accident.
+          python scripts/operations/grade_market_track_record_gsis_v1.py \
+            --season "${SEASON}" --weeks "${WEEK}" \
+            --allow-ungated-population \
+            --detail-out "/tmp/graded_wk${WEEK}.csv" 2>&1 | tee /tmp/grade.log
+          test -s "/tmp/graded_wk${WEEK}.csv"
+
+      - name: Report the board decomposition
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/report_weekly_backtest_v1.py \
+            --detail "/tmp/graded_wk${WEEK}.csv"
 
       - name: Commit the graded ledger
         run: |
