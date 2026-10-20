@@ -72,15 +72,37 @@ jobs:
           python - <<'PY'
           import os
           import nflreadpy as nfl
+
           season, week = int(os.environ["SEASON"]), int(os.environ["WEEK"])
           d = nfl.load_player_stats(seasons=[season])
           d = d.to_pandas() if hasattr(d, "to_pandas") else d
-          d.columns = [str(c).lower() for c in d.columns]
+          d.columns = [str(c).strip().lower() for c in d.columns]
+
+          # Say what was actually found before deciding anything. A gate that
+          # only reports its own verdict cannot distinguish "the week is not
+          # published" from "this probe is reading the wrong column".
+          print("columns:", ", ".join(sorted(d.columns))[:400])
+          print(f"total 2026 stat rows: {len(d)}")
+          if "week" not in d.columns:
+              raise SystemExit("FATAL: nflverse player stats carry no 'week' column")
+          counts = d.groupby("week").size().sort_index()
+          print("rows per week:")
+          for w, n in counts.items():
+              mark = "  <-- target" if int(w) == week else ""
+              print(f"  week {int(w):>2}: {n:>5}{mark}")
+
+          have = int(counts.get(week, 0))
+          if have <= 300:
+              raise SystemExit(
+                  f"FAIL CLOSED: week {week} has only {have} stat rows, which reads as "
+                  f"unpublished or partial. Latest published week appears to be "
+                  f"{int(counts.index.max()) if len(counts) else 'none'}. "
+                  f"Not grading a partial week."
+              )
+          teamcol = next((c for c in ("team", "recent_team", "team_abbr") if c in d.columns), None)
           wk = d[d["week"] == week]
-          # Fail closed rather than grade a half-published week.
-          assert len(wk) > 300, f"week {week} looks unpublished: only {len(wk)} stat rows"
-          print(f"week {week}: {len(wk)} player-stat rows, "
-                f"{wk['team'].nunique() if 'team' in wk else '?'} teams")
+          print(f"week {week} OK: {have} rows, "
+                f"{wk[teamcol].nunique() if teamcol else '?'} teams")
           PY
 
       - name: Grade the board against final actuals
