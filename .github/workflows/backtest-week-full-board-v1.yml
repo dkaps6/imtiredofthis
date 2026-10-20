@@ -19,6 +19,7 @@ on:
       - '.github/workflows/backtest-week-full-board-v1.yml'
       - 'scripts/operations/grade_preregistered_cards_v1.py'
       - 'data/market_track_record/cards/**'
+      - 'data/market_track_record/boards/**'
 
 permissions:
   contents: write
