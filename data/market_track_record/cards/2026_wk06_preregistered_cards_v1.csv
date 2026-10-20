@@ -1,0 +1,28 @@
+card,tier,player,team,opponent,market,threshold,model_proj,model_sd,stated_p,rank_used,usage_note
+FULL_SLATE_BLIND,SAFE,Alvin Kamara,NO,NYG,rush_yards,15,31.0,12.7,0.896,RB1,rush share 0.3903
+FULL_SLATE_BLIND,SAFE,Omarion Hampton,LAC,KC,rush_yards,20,39.8,16.7,0.882,RB1,rush share 0.5046
+FULL_SLATE_BLIND,SAFE,Dalton Schultz,HOU,JAX,rec_yards,20,40.0,19.7,0.845,TE1,tgt share 0.1859
+FULL_SLATE_BLIND,MODERATE,Wan'Dale Robinson,TEN,IND,rec_yards,20,46.8,21.0,0.899,WR2,tgt share 0.2487
+FULL_SLATE_BLIND,MODERATE,Cooper Kupp,SEA,DEN,rec_yards,10,28.1,17.1,0.855,WR3,tgt share 0.1309
+FULL_SLATE_BLIND,MODERATE,Kyle Pitts,ATL,CHI,rec_yards,20,34.6,17.5,0.798,TE1,tgt share 0.1667
+FULL_SLATE_BLIND,MODERATE,Bucky Irving,TB,PIT,rec_yards,10,17.5,12.0,0.734,RB1,rush share 0.5779
+FULL_SLATE_BLIND,HIGH,Omarion Hampton,LAC,KC,rush_yards,30,39.8,16.7,0.721,RB1,rush share 0.5046
+FULL_SLATE_BLIND,HIGH,Trevor Lawrence,JAX,HOU,pass_yards,225,256.3,62.9,0.691,QB1,qb synthesis applied
+FULL_SLATE_BLIND,HIGH,Cade Otton,TB,PIT,rec_yards,30,39.4,18.9,0.691,TE1,tgt share 0.1777
+FULL_SLATE_BLIND,HIGH,Cam Ward,TEN,IND,pass_yards,200,225.2,57.0,0.671,QB1,qb synthesis applied
+FULL_SLATE_BLIND,HIGH,Rome Odunze,CHI,ATL,rec_yards,40,49.0,22.1,0.658,WR1,tgt share 0.2053
+FULL_SLATE_BLIND,LOTTERY,Kyle Pitts,ATL,CHI,rec_yards,40,34.6,17.5,0.379,TE1,tgt share 0.1667
+FULL_SLATE_BLIND,LOTTERY,Dalton Schultz,HOU,JAX,rec_yards,50,40.0,19.7,0.306,TE1,tgt share 0.1859
+FULL_SLATE_BLIND,LOTTERY,Wan'Dale Robinson,TEN,IND,rec_yards,60,46.8,21.0,0.265,WR2,tgt share 0.2487
+FULL_SLATE_BLIND,LOTTERY,Alvin Kamara,NO,NYG,rush_yards,40,31.0,12.7,0.239,RB1,rush share 0.3903
+MNF_SF_WAS,SAFE,Jayden Daniels,WAS,SF,pass_yards,150,211.4,52.0,0.881,QB1,off injury report; qb synthesis
+MNF_SF_WAS,SAFE,Rachaad White,WAS,SF,rush_yards,10,23.0,12.2,0.856,RB2,lead back with CKM out
+MNF_SF_WAS,MODERATE,Jayden Daniels,WAS,SF,pass_yards,175,211.4,52.0,0.758,QB1,off injury report; qb synthesis
+MNF_SF_WAS,MODERATE,Brock Purdy,SF,WAS,pass_yards,200,251.6,63.2,0.793,QB1,qb synthesis +45.0 over ensemble
+MNF_SF_WAS,MODERATE,Rachaad White,WAS,SF,rush_yards,15,23.0,12.2,0.743,RB2,lead back with CKM out
+MNF_SF_WAS,HIGH,Jayden Daniels,WAS,SF,pass_yards,200,211.4,52.0,0.587,QB1,off injury report; qb synthesis
+MNF_SF_WAS,HIGH,Brock Purdy,SF,WAS,pass_yards,225,251.6,63.2,0.663,QB1,qb synthesis +45.0 over ensemble
+MNF_SF_WAS,HIGH,Rachaad White,WAS,SF,rush_yards,20,23.0,12.2,0.598,RB2,lead back with CKM out
+MNF_SF_WAS,LOTTERY,Jayden Daniels,WAS,SF,pass_yards,250,211.4,52.0,0.229,QB1,off injury report; qb synthesis
+MNF_SF_WAS,LOTTERY,Brock Purdy,SF,WAS,pass_yards,300,251.6,63.2,0.222,QB1,qb synthesis +45.0 over ensemble
+MNF_SF_WAS,LOTTERY,Rachaad White,WAS,SF,rush_yards,40,23.0,12.2,0.082,RB2,lead back with CKM out

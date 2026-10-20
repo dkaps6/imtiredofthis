@@ -1,0 +1,142 @@
+name: Backtest Week Full Board
+
+# Grades one completed week's committed priced board against final nflverse
+# actuals, then grades any preregistered card for that week at its own alt
+# thresholds. Read-only with respect to the football pipeline: it replays the
+# durable committed copy of a board that was already produced and already paid
+# for, and never fetches sportsbook odds.
+
+on:
+  workflow_dispatch:
+    inputs:
+      week:
+        description: "Completed NFL week to grade"
+        required: false
+        default: "6"
+  push:
+    branches: [claude/nice-cori-4qkwqs]
+    paths:
+      - '.github/workflows/backtest-week-full-board-v1.yml'
+      - 'scripts/operations/grade_preregistered_cards_v1.py'
+      - 'data/market_track_record/cards/**'
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  SEASON: '2026'
+  WEEK: ${{ github.event.inputs.week || '6' }}
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Verify the committed board for this week
+        run: |
+          set -euo pipefail
+          STEM="$(printf '%d_wk%02d' "${SEASON}" "${WEEK}")"
+          echo "BOARD_STEM=${STEM}" >> "$GITHUB_ENV"
+          python - <<'PY'
+          import os, pandas as pd
+          stem = f"{int(os.environ['SEASON'])}_wk{int(os.environ['WEEK']):02d}"
+          p = f"data/market_track_record/boards/{stem}.csv"
+          d = pd.read_csv(p, low_memory=False)
+          assert len(d), f"{p} is empty"
+          print(f"{p}: {len(d)} rows, {d['market'].nunique()} markets, "
+                f"{d['week'].nunique()} distinct week value(s)")
+          for c in ("archived_at_utc", "source_run_id", "source_git_sha"):
+              assert c in d.columns, f"{p} missing provenance column {c}"
+          print("provenance:", d["source_run_id"].dropna().unique()[:3])
+          PY
+
+      - name: Confirm nflverse carries final stats for this week
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import nflreadpy as nfl
+          season, week = int(os.environ["SEASON"]), int(os.environ["WEEK"])
+          d = nfl.load_player_stats(seasons=[season])
+          d = d.to_pandas() if hasattr(d, "to_pandas") else d
+          d.columns = [str(c).lower() for c in d.columns]
+          wk = d[d["week"] == week]
+          # Fail closed rather than grade a half-published week.
+          assert len(wk) > 300, f"week {week} looks unpublished: only {len(wk)} stat rows"
+          print(f"week {week}: {len(wk)} player-stat rows, "
+                f"{wk['team'].nunique() if 'team' in wk else '?'} teams")
+          PY
+
+      - name: Grade the board against final actuals
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/grade_market_track_record_gsis_v1.py \
+            --season "${SEASON}" --weeks "${WEEK}" \
+            --detail-out "/tmp/graded_wk${WEEK}.csv"
+          test -s "/tmp/graded_wk${WEEK}.csv"
+
+      - name: Report the board decomposition
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/report_weekly_backtest_v1.py \
+            --detail "/tmp/graded_wk${WEEK}.csv"
+
+      - name: Grade the preregistered cards at their own thresholds
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          CARDS="data/market_track_record/cards/${BOARD_STEM}_preregistered_cards_v1.csv"
+          if [ ! -s "$CARDS" ]; then
+            echo "no preregistered card for ${BOARD_STEM} -- board grading above stands alone"
+            exit 0
+          fi
+          python scripts/operations/grade_preregistered_cards_v1.py \
+            --cards "$CARDS" --season "${SEASON}" --week "${WEEK}" \
+            --out "data/market_track_record/graded/${BOARD_STEM}_cards_graded.csv"
+
+      - name: Commit the graded ledger
+        run: |
+          set -euo pipefail
+          mkdir -p data/market_track_record/graded
+          cp "/tmp/graded_wk${WEEK}.csv" \
+            "data/market_track_record/graded/${BOARD_STEM}_graded.csv"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/market_track_record/graded/
+          if git diff --cached --quiet; then
+            echo "graded ledger unchanged"
+            exit 0
+          fi
+          git commit -m "Grade the ${BOARD_STEM} board and cards against final actuals
+
+          Produced by run ${GITHUB_RUN_ID} from the committed board, not from an
+          expiring artifact."
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Upload grading evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: week_backtest_${{ env.WEEK }}_${{ github.run_id }}
+          path: |
+            /tmp/graded_wk*.csv
+            data/market_track_record/graded/**
+          if-no-files-found: warn
+          retention-days: 90
