@@ -20,6 +20,7 @@ on:
       - 'scripts/operations/grade_preregistered_cards_v1.py'
       - 'data/market_track_record/cards/**'
       - 'data/market_track_record/boards/**'
+      - 'requirements.txt'
 
 permissions:
   contents: write
