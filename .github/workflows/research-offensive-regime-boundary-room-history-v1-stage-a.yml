@@ -103,6 +103,6 @@ jobs:
         with:
           name: offensive-regime-boundary-room-history-v1-stage-a
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
           path: |
             /tmp/regime_boundary/result/**

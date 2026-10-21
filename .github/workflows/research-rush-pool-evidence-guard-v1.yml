@@ -94,4 +94,4 @@ jobs:
             data/backtests/rush_guard_2024/historical_input_validation.csv
             data/backtests/rush_guard_2025/historical_input_validation.csv
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90

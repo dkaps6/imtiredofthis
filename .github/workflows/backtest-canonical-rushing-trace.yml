@@ -76,4 +76,4 @@ jobs:
             data/backtests/component_predictions.csv
             data/backtests/canonical_rushing_trace/*.csv
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90

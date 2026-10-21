@@ -126,7 +126,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rush-att-zero-mc-allocation-lineage-v1
-          retention-days: 30
+          retention-days: 90
           if-no-files-found: warn
           path: |
             /tmp/rush_lineage/result_2024/**

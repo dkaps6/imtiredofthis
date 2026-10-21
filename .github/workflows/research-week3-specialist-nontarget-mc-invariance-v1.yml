@@ -131,7 +131,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: week3-specialist-nontarget-mc-invariance-v1-${{ github.run_id }}
-          retention-days: 30
+          retention-days: 90
           if-no-files-found: warn
           path: |
             data/research/week3_specialist_nontarget_mc_invariance_v1/**

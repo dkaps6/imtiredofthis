@@ -112,7 +112,7 @@ jobs:
         with:
           name: wr-anchor-role-transmission-audit-v1
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
           path: |
             /tmp/hist_2023/historical_input_validation.csv
             /tmp/hist_2024/historical_input_validation.csv

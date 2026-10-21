@@ -100,7 +100,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: espn-availability-semantics-week4-v1
-          retention-days: 14
+          retention-days: 90
           if-no-files-found: warn
           path: |
             /tmp/verify/espn_out_proxy_status.json

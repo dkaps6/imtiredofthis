@@ -139,7 +139,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rng-isolation-production-candidate-v1-${{ github.run_id }}
-          retention-days: 30
+          retention-days: 90
           if-no-files-found: warn
           path: |
             data/research/rng_isolation_production_candidate_v1/**

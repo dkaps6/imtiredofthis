@@ -83,4 +83,4 @@ jobs:
             data/market_track_record/graded_detail_*.csv
             data/market_track_record/boards/*.csv
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90

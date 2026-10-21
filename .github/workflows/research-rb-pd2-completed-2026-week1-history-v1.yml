@@ -87,4 +87,4 @@ jobs:
             /tmp/rb_w1_history/rb_pd2_completed_2026_week1_history.csv
             /tmp/rb_w1_history/rb_pd2_completed_2026_week1_audit.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
