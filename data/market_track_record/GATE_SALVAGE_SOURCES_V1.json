@@ -2,7 +2,7 @@
   "version": "PRODUCTION_DECISION_GATE_SALVAGE_SOURCES_V1",
   "season": 2026,
   "purpose": "Pinned Full Slate runs whose surviving Actions logs are read back for weeks 3-5 pregame decision-gate evidence. Weeks 1-2 already have canonical gates in PRODUCTION_DECISION_GATES_V1.json and are listed here only as read-back controls.",
-  "note": "Each week names the Full Slate run that performed that week's paid live-odds acquisition. Week 4's run concluded 'failure': the paid fetch and pregame certification completed and a later step failed, which is the same pattern as week 6. A failed run's log is still authoritative for pregame state, because certification runs before the failure.",
+  "note": "Each week names the Full Slate run that performed that week's paid live-odds acquisition. Week 4's run concluded 'failure': the paid fetch and pregame certification completed and a later step failed, which is the same pattern as week 6. A failed run's log is still authoritative for pregame state, because certification runs before the failure. Week 6 is included because its board came from a PRESERVED_REPLAY and was graded on an UNGATED population; a recoverable gate would let it be regraded on the production-decided population.",
   "weeks": {
     "1": {
       "run_id": "34650067599",
@@ -43,6 +43,14 @@
       "conclusion": "success",
       "created_at": "2026-10-08T23:38:57Z",
       "role": "salvage_target"
+    },
+    "6": {
+      "run_id": "38792341891",
+      "git_sha": "9b70b12e2fb4bc39f08556f244370068aad9c47b",
+      "job_id": "116620446562",
+      "conclusion": "success",
+      "created_at": "2026-10-15T19:15:03Z",
+      "role": "salvage_target_regrade_candidate"
     }
   }
 }

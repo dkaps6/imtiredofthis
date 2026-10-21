@@ -140,7 +140,7 @@ jobs:
               raise SystemExit(1)
           print('\nweek-1 control reproduces the canonical gate exactly')
 
-          for w in ('3', '4', '5'):
+          for w in ('3', '4', '5', '6'):
               s = report['weeks'][w]
               print(f"  week {w}: {s['status']}")
           EOF
