@@ -1,0 +1,154 @@
+{
+  "purpose": "Candidate gate entries salvaged from surviving run logs. These are NOT canonical and must not be consumed by the grader until audited and promoted into PRODUCTION_DECISION_GATES_V1.json.",
+  "season": 2026,
+  "status": "AWAITING_AUDIT",
+  "version": "PRODUCTION_DECISION_GATES_SALVAGE_CANDIDATE_V1",
+  "weeks": {
+    "1": {
+      "block_rules": [
+        {
+          "reason": "KICKED_OFF_LOCKED",
+          "scope": "TEAM_ALL",
+          "team": "LAR"
+        },
+        {
+          "reason": "KICKED_OFF_LOCKED",
+          "scope": "TEAM_ALL",
+          "team": "NE"
+        },
+        {
+          "reason": "KICKED_OFF_LOCKED",
+          "scope": "TEAM_ALL",
+          "team": "SEA"
+        },
+        {
+          "reason": "KICKED_OFF_LOCKED",
+          "scope": "TEAM_ALL",
+          "team": "SF"
+        }
+      ],
+      "corroborating_facts": {
+        "core_unresolved_player_rows": null,
+        "lineage_version": null,
+        "sportsbook_current_roster_mismatches": "0",
+        "temporary_possible_historical_aliases": "0"
+      },
+      "evidence_basis": "Printed availability timing certification meta from the surviving Full Slate run log (run 34650067599, job 103429972300, git be061eaf23372f080db3911d3b4919120c744c53).",
+      "source_facts": {
+        "availability_asof_utc": "2026-09-11T21:36:40.970365+00:00",
+        "certification_state_counts": {
+          "KICKED_OFF_LOCKED": 2,
+          "NOT_YET_REQUIRED": 14
+        },
+        "eligible_games": 14,
+        "game_count": 16,
+        "require_minutes_before_kickoff": 75.0,
+        "sportsbook_inputs_used": 0,
+        "withheld_games": 2,
+        "withheld_teams": [
+          "LAR",
+          "NE",
+          "SEA",
+          "SF"
+        ]
+      },
+      "source_git_sha": "be061eaf23372f080db3911d3b4919120c744c53",
+      "source_job_id": "103429972300",
+      "source_run_id": "34650067599",
+      "withheld_reason_recoverable": true
+    },
+    "2": {
+      "block_rules": [],
+      "corroborating_facts": {
+        "core_unresolved_player_rows": null,
+        "lineage_version": "MARKET_MODEL_LINEAGE_V3_R22_NOT_APPLICABLE_OUTSIDE_WEEK1",
+        "sportsbook_current_roster_mismatches": "0",
+        "temporary_possible_historical_aliases": "2"
+      },
+      "evidence_basis": "Printed availability timing certification meta from the surviving Full Slate run log (run 35282021679, job 105405884949, git c6ec55be70d6e05bbd1dbae83d7d5c86ac8aa00a).",
+      "source_facts": {
+        "availability_asof_utc": "2026-09-17T22:27:52.744489+00:00",
+        "certification_state_counts": {
+          "NOT_YET_REQUIRED": 16
+        },
+        "eligible_games": 16,
+        "game_count": 16,
+        "require_minutes_before_kickoff": 75.0,
+        "sportsbook_inputs_used": 0,
+        "withheld_games": 0,
+        "withheld_teams": []
+      },
+      "source_git_sha": "c6ec55be70d6e05bbd1dbae83d7d5c86ac8aa00a",
+      "source_job_id": "105405884949",
+      "source_run_id": "35282021679",
+      "withheld_reason_recoverable": true
+    },
+    "3": {
+      "block_rules": [
+        {
+          "reason": "KICKED_OFF_LOCKED",
+          "scope": "TEAM_ALL",
+          "team": "ATL"
+        },
+        {
+          "reason": "KICKED_OFF_LOCKED",
+          "scope": "TEAM_ALL",
+          "team": "GB"
+        }
+      ],
+      "corroborating_facts": {
+        "core_unresolved_player_rows": null,
+        "lineage_version": "MARKET_MODEL_LINEAGE_V3_R22_NOT_APPLICABLE_OUTSIDE_WEEK1",
+        "sportsbook_current_roster_mismatches": "0",
+        "temporary_possible_historical_aliases": "2"
+      },
+      "evidence_basis": "Printed availability timing certification meta from the surviving Full Slate run log (run 36293274478, job 108547303910, git 0982b62276303403e2ca58b16e6f4fc3e041f65d).",
+      "source_facts": {
+        "availability_asof_utc": "2026-09-27T04:07:03.434276+00:00",
+        "certification_state_counts": {
+          "KICKED_OFF_LOCKED": 1,
+          "NOT_YET_REQUIRED": 15
+        },
+        "eligible_games": 15,
+        "game_count": 16,
+        "require_minutes_before_kickoff": 75.0,
+        "sportsbook_inputs_used": 0,
+        "withheld_games": 1,
+        "withheld_teams": [
+          "ATL",
+          "GB"
+        ]
+      },
+      "source_git_sha": "0982b62276303403e2ca58b16e6f4fc3e041f65d",
+      "source_job_id": "108547303910",
+      "source_run_id": "36293274478",
+      "withheld_reason_recoverable": true
+    },
+    "4": {
+      "block_rules": [],
+      "corroborating_facts": {
+        "core_unresolved_player_rows": null,
+        "lineage_version": null,
+        "sportsbook_current_roster_mismatches": "0",
+        "temporary_possible_historical_aliases": "1"
+      },
+      "evidence_basis": "Printed availability timing certification meta from the surviving Full Slate run log (run 36934563481, job 110612154945, git b8e233192033a8fa44742b7c069ad2a42968ceec).",
+      "source_facts": {
+        "availability_asof_utc": "2026-10-01T22:25:23.889965+00:00",
+        "certification_state_counts": {
+          "NOT_YET_REQUIRED": 16
+        },
+        "eligible_games": 16,
+        "game_count": 16,
+        "require_minutes_before_kickoff": 75.0,
+        "sportsbook_inputs_used": 0,
+        "withheld_games": 0,
+        "withheld_teams": []
+      },
+      "source_git_sha": "b8e233192033a8fa44742b7c069ad2a42968ceec",
+      "source_job_id": "110612154945",
+      "source_run_id": "36934563481",
+      "withheld_reason_recoverable": true
+    }
+  }
+}
