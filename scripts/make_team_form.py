@@ -16,7 +16,6 @@ Patches (surgical, no nukes):
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import warnings
@@ -802,8 +801,6 @@ def build_team_form(season: int, box_backfill_prev: bool = False) -> pd.DataFram
 
     # (Optional) backfill the current season's box counts from prior season if participation is empty
     part_for_box = part
-    box_source_season = season
-    box_fallback_state = "current"
     if (part is None or part.empty) and box_backfill_prev:
         prev = season - 1
         try:
@@ -811,43 +808,10 @@ def build_team_form(season: int, box_backfill_prev: bool = False) -> pd.DataFram
             if prev_part is not None and not prev_part.empty:
                 print(f"[make_team_form] participation {season} empty; backfilling LIGHT/HEAVY box from {prev}")
                 part_for_box = prev_part
-                box_source_season = prev
-                box_fallback_state = "prior"
         except Exception:
             pass
-    if _is_empty(part_for_box):
-        box_fallback_state = "unavailable"
-        box_source_season = None
 
     pers_tbl = compute_personnel_rates(pbp, part_for_box)
-
-    # The box rates can legitimately come from the prior season, but they must
-    # never read as current (AGENTS.md sections 1 and 4). Record which season
-    # actually supplied them, and the resolved column names, so a provider
-    # rename shows up as provenance rather than as silently absent metrics.
-    _box_col, _team_col = resolve_participation_columns(part_for_box)
-    _box_teams = 0
-    if not _is_empty(pers_tbl) and "light_box_rate" in pers_tbl.columns:
-        _box_teams = int(pers_tbl["light_box_rate"].notna().sum())
-    box_provenance = {
-        "version": "TEAM_FORM_BOX_PROVENANCE_V1",
-        "active_season": int(season),
-        "box_source_season": box_source_season,
-        "fallback_state": box_fallback_state,
-        "source": "nflverse_participation",
-        "resolved_box_column": _box_col,
-        "resolved_team_column": _team_col,
-        "participation_rows": 0 if _is_empty(part_for_box) else int(len(part_for_box)),
-        "teams_with_box_rate": _box_teams,
-        "sportsbook_inputs_used": 0,
-    }
-    try:
-        _prov_path = os.path.join(DATA_DIR, "team_form_box_provenance_v1.json")
-        with open(_prov_path, "w", encoding="utf-8") as fh:
-            json.dump(box_provenance, fh, indent=2, sort_keys=True)
-        print(f"[make_team_form] box provenance: {json.dumps(box_provenance, sort_keys=True)}")
-    except Exception as exc:
-        print(f"[make_team_form] WARNING: could not write box provenance: {exc}")
 
     print("[make_team_form] Merging components ...")
     # Canonicalize keys BEFORE merge
