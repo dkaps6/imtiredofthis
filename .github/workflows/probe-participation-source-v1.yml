@@ -1,16 +1,18 @@
 name: Probe Participation Source
 
-# Diagnostic only. Full Slate on main began failing closed in
-# `make_team_form` on 2026-10-21 because nflverse participation came back
-# empty for both 2026 and the 2025 backfill, leaving light_box_rate and
-# heavy_box_rate missing for all 32 teams. The same step succeeded on
-# 2026-10-19 with identical code.
+# Diagnostic only. Full Slate on main fails closed in `make_team_form`:
+# nflreadpy 0.1.5 caps participation at 2025 ("Season must be between 2016
+# and 2025"), so 2026 is permanently unavailable from this source, the
+# prior-season backfill runs, and light_box_rate / heavy_box_rate still come
+# out missing for all 32 teams.
 #
 # Those two metrics feed live production paths (team_context_v3,
-# modeling/rules_v2, modeling/context_bridge, modeling/contracts), so
-# passing allow_missing_box would degrade the model rather than quiet a
-# warning. Before any decision, establish what the provider actually
-# serves per season.
+# modeling/rules_v2, modeling/context_bridge, modeling/contracts), so passing
+# allow_missing_box would degrade the model rather than quiet a warning.
+#
+# This establishes the participation schema and which column resolution in
+# compute_personnel_rates actually fails, then checks whether a corrected
+# team-column candidate list produces real box rates.
 #
 # Reads no sportsbook data and spends nothing. Changes no production file.
 
@@ -41,53 +43,76 @@ jobs:
           pip install -r requirements.txt
           pip install nflreadpy
 
-      - name: Probe participation availability by season
+      - name: Participation schema and column resolution
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
           python - <<'EOF'
-          import traceback
+          import pandas as pd
 
-          import nflreadpy as nflv
-
-          print(f"nflreadpy version: {getattr(nflv, '__version__', 'unknown')}")
-          print()
-
-          # Walk back far enough to find the dataset's real upper boundary.
-          for season in (2026, 2025, 2024, 2023, 2022):
-              try:
-                  df = nflv.load_participation(seasons=[season])
-                  try:
-                      df = df.to_pandas()
-                  except AttributeError:
-                      pass
-                  rows = 0 if df is None else len(df)
-                  cols = [] if rows == 0 else sorted(df.columns)[:6]
-                  print(f"  {season}: rows={rows}")
-                  if rows:
-                      has_box = [
-                          c
-                          for c in df.columns
-                          if "box" in str(c).lower() or "defenders" in str(c).lower()
-                      ]
-                      print(f"        first cols={cols}")
-                      print(f"        box-ish cols={has_box}")
-              except Exception as exc:
-                  print(f"  {season}: RAISED {type(exc).__name__}: {exc}")
-                  traceback.print_exc()
-          EOF
-
-      - name: Probe what the repo's own loader returns
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          python - <<'EOF'
           from scripts.make_team_form import load_participation
 
-          for season in (2026, 2025, 2024, 2023):
-              try:
-                  df = load_participation(season)
-                  print(f"  load_participation({season}): rows={0 if df is None else len(df)}")
-              except Exception as exc:
-                  print(f"  load_participation({season}): RAISED {type(exc).__name__}: {exc}")
+          part = load_participation(2025)
+          print(f"2025 participation rows={len(part)}")
+          print(f"all columns ({len(part.columns)}):")
+          for c in sorted(part.columns):
+              print(f"    {c}")
+
+          # Exactly the candidate lists compute_personnel_rates uses today.
+          box_cands = ["box", "men_in_box", "in_box", "defenders_in_box"]
+          team_cands = ["offense_team", "posteam", "team", "club_code"]
+          box_col = next((c for c in box_cands if c in part.columns), None)
+          team_col = next((c for c in team_cands if c in part.columns), None)
+          print()
+          print(f"RESOLVED box_col  = {box_col!r}")
+          print(f"RESOLVED team_col = {team_col!r}   <-- None means box rates are skipped")
+
+          # Any column that actually looks like a team identifier.
+          print()
+          print("team-ish columns present:")
+          for c in sorted(part.columns):
+              if "team" in c.lower() or "club" in c.lower():
+                  nun = part[c].nunique(dropna=True)
+                  sample = sorted(str(v) for v in part[c].dropna().unique()[:4])
+                  print(f"    {c}: nunique={nun} sample={sample}")
+          EOF
+
+      - name: Does a corrected team-column candidate list produce box rates
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          import numpy as np
+          import pandas as pd
+
+          from scripts._opponent_map import canon_team
+          from scripts.make_team_form import load_participation
+
+          part = load_participation(2025)
+          box_col = "defenders_in_box"
+          # possession_team is the nflverse participation offense identifier.
+          team_col = next(
+              (c for c in ("possession_team", "offense_team", "posteam", "team", "club_code")
+               if c in part.columns),
+              None,
+          )
+          print(f"using box_col={box_col!r} team_col={team_col!r}")
+          if team_col is None or box_col not in part.columns:
+              raise SystemExit("cannot resolve columns; schema differs from expectation")
+
+          p = part.copy()
+          p["_team"] = p[team_col].map(canon_team)
+          p = p[p["_team"] != ""]
+          box = pd.to_numeric(p[box_col], errors="coerce")
+          p["_light"] = (box <= 6).astype(float)
+          p["_heavy"] = (box >= 8).astype(float)
+          g = p.groupby("_team").agg(
+              light_box_rate=("_light", "mean"),
+              heavy_box_rate=("_heavy", "mean"),
+              plays=("_light", "size"),
+          )
+          print(f"\nteams with box rates: {len(g)}")
+          print(f"nulls: light={int(g.light_box_rate.isna().sum())} heavy={int(g.heavy_box_rate.isna().sum())}")
+          print()
+          print(g.sort_index().head(34).to_string())
           EOF
