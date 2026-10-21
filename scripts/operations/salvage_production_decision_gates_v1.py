@@ -175,6 +175,12 @@ def salvage_week(week: int, source: dict[str, str], log_path: Path) -> dict[str,
                 f"{len(blocks)} certification blocks disagree on the required "
                 "fields; the operative pregame gate is ambiguous and is not guessed"
             )
+            # Record every candidate so the disagreement can be adjudicated from
+            # the report instead of only being reported as a verdict. These are
+            # observations, not a gate: none is selected here.
+            result["disagreeing_candidates"] = [
+                {k: b.get(k) for k in _REQUIRED_CERT_FIELDS} for b in blocks
+            ]
             return result
         result["notes"].append(
             f"{len(blocks)} identical certification blocks; using the last"

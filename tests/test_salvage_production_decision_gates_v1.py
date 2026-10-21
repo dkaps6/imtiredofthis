@@ -212,6 +212,12 @@ def test_disagreeing_certification_blocks_fail_closed(tmp_path):
         "availability_timing_certification_agreement"
     ]
     assert got["certification_blocks_found"] == 2
+    # The disagreement is adjudicable from the report, and no candidate is
+    # silently selected as the gate.
+    assert len(got["disagreeing_candidates"]) == 2
+    assert [c["eligible_games"] for c in got["disagreeing_candidates"]] == [14, 13]
+    assert "source_facts" not in got
+    assert "block_rules" not in got
 
 
 def test_identical_repeated_blocks_are_recoverable(tmp_path):
