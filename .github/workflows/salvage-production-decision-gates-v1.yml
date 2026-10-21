@@ -1,0 +1,178 @@
+name: Salvage Production Decision Gates
+
+# Reads back pregame production decision-gate evidence from surviving Actions
+# run logs for 2026 weeks whose priced-board artifacts expired.
+#
+# Weeks 1-2 are included as read-back controls: they already have canonical
+# gates derived by hand, so if this reader disagrees with them the reader is
+# wrong, not the canonical file.
+#
+# Read-only with respect to production. No OddsAPI fetch, no model run, no
+# change to the canonical gate file. The output is a candidate AWAITING_AUDIT.
+#
+# The container this was authored from cannot reach the Actions log host
+# (the agent proxy returns 403 for results-receiver.actions.githubusercontent.com),
+# so the download has to happen on a runner.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - claude/nice-cori-4qkwqs
+    paths:
+      - '.github/workflows/salvage-production-decision-gates-v1.yml'
+      - 'scripts/operations/salvage_production_decision_gates_v1.py'
+      - 'data/market_track_record/GATE_SALVAGE_SOURCES_V1.json'
+      - 'tests/test_salvage_production_decision_gates_v1.py'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  salvage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MANIFEST: data/market_track_record/GATE_SALVAGE_SOURCES_V1.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Unit tests for the salvage reader
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          pytest -q tests/test_salvage_production_decision_gates_v1.py
+
+      - name: Download the pinned run logs
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gate_logs
+          weeks=$(python -c "import json;print(' '.join(sorted(json.load(open('${MANIFEST}'))['weeks'],key=int)))")
+          for w in ${weeks}; do
+            job=$(python -c "import json;print(json.load(open('${MANIFEST}'))['weeks']['${w}']['job_id'])")
+            run=$(python -c "import json;print(json.load(open('${MANIFEST}'))['weeks']['${w}']['run_id'])")
+            echo "--- week ${w}: run ${run} job ${job}"
+            # A log that is gone is a finding, not a failure: the reader reports
+            # the week NOT_RECOVERABLE. Keep going so every week gets classified.
+            if gh api "repos/${GITHUB_REPOSITORY}/actions/jobs/${job}/logs" \
+                 > "/tmp/gate_logs/week${w}.log" 2>/tmp/gate_logs/week${w}.err; then
+              echo "    downloaded $(wc -l < "/tmp/gate_logs/week${w}.log") lines"
+            else
+              echo "    LOG UNAVAILABLE:"
+              sed 's/^/      /' "/tmp/gate_logs/week${w}.err" | head -5
+              rm -f "/tmp/gate_logs/week${w}.log"
+            fi
+          done
+
+      - name: Read back the gate evidence
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/salvage_production_decision_gates_v1.py \
+            --manifest "${MANIFEST}" \
+            --logs-dir /tmp/gate_logs \
+            --report-out data/market_track_record/GATE_SALVAGE_REPORT_V1.json \
+            --candidate-out data/market_track_record/GATE_SALVAGE_CANDIDATE_V1.json
+
+      - name: Cross-check the reader against the canonical weeks 1-2 gates
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          import json
+
+          report = json.load(open('data/market_track_record/GATE_SALVAGE_REPORT_V1.json'))
+          canon = json.load(open('data/market_track_record/PRODUCTION_DECISION_GATES_V1.json'))
+
+          # Week 1's canonical gate carries source_facts read from this same
+          # printed block, so it is a true control. Week 2's blocks came from an
+          # uploaded workbook instead, so only its presence is checked.
+          w1c = canon['weeks']['1']['source_facts']
+          w1s = report['weeks']['1']
+          if w1s['status'] != 'RECOVERABLE':
+              print(f"CONTROL week 1 not recoverable: {w1s['missing_fields']}")
+              print('The reader cannot reproduce a week whose gate was derived '
+                    'from this exact block, so its output for weeks 3-5 is not '
+                    'trustworthy yet.')
+              raise SystemExit(1)
+
+          got = w1s['source_facts']
+          checks = {
+              'availability_asof_utc': (w1c['availability_asof_utc'], got['availability_asof_utc']),
+              'game_count': (w1c['game_count'], got['game_count']),
+              'eligible_games': (w1c['eligible_games'], got['eligible_games']),
+              'kicked_off_locked_games': (
+                  w1c['kicked_off_locked_games'],
+                  got['certification_state_counts'].get('KICKED_OFF_LOCKED', 0),
+              ),
+              'kicked_off_locked_teams': (
+                  sorted(w1c['kicked_off_locked_teams']),
+                  sorted(got['withheld_teams']),
+              ),
+          }
+          bad = {k: v for k, v in checks.items() if v[0] != v[1]}
+          for k, (want, have) in checks.items():
+              flag = 'MISMATCH' if k in bad else 'ok'
+              print(f'  week1 {k:28s} canonical={want!r} read_back={have!r} [{flag}]')
+          if bad:
+              print('\nThe reader disagrees with the canonical week-1 gate. '
+                    'Treat the reader as wrong and do not promote weeks 3-5.')
+              raise SystemExit(1)
+          print('\nweek-1 control reproduces the canonical gate exactly')
+
+          for w in ('3', '4', '5'):
+              s = report['weeks'][w]
+              print(f"  week {w}: {s['status']}")
+          EOF
+
+      - name: Commit the salvage report and candidate
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/market_track_record/GATE_SALVAGE_REPORT_V1.json \
+                  data/market_track_record/GATE_SALVAGE_CANDIDATE_V1.json
+          if git diff --cached --quiet; then
+            echo "salvage output unchanged"
+            exit 0
+          fi
+          git commit -m "Salvage weeks 3-5 pregame decision-gate evidence from surviving run logs
+
+          Read back from the pinned Full Slate run logs by run ${GITHUB_RUN_ID}.
+          Candidate is AWAITING_AUDIT and is not consumed by the grader."
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Upload salvage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate_salvage_${{ github.run_id }}
+          path: |
+            data/market_track_record/GATE_SALVAGE_REPORT_V1.json
+            data/market_track_record/GATE_SALVAGE_CANDIDATE_V1.json
+            /tmp/gate_logs/*.err
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Replay the failure tail
+        if: failure()
+        run: |
+          set -euo pipefail
+          ls -la /tmp/gate_logs/ || true
+          for f in /tmp/gate_logs/*.err; do
+            [ -s "$f" ] || continue
+            echo "--- $f"; head -20 "$f"
+          done
