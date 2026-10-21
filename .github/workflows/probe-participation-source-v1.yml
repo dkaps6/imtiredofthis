@@ -1,0 +1,93 @@
+name: Probe Participation Source
+
+# Diagnostic only. Full Slate on main began failing closed in
+# `make_team_form` on 2026-10-21 because nflverse participation came back
+# empty for both 2026 and the 2025 backfill, leaving light_box_rate and
+# heavy_box_rate missing for all 32 teams. The same step succeeded on
+# 2026-10-19 with identical code.
+#
+# Those two metrics feed live production paths (team_context_v3,
+# modeling/rules_v2, modeling/context_bridge, modeling/contracts), so
+# passing allow_missing_box would degrade the model rather than quiet a
+# warning. Before any decision, establish what the provider actually
+# serves per season.
+#
+# Reads no sportsbook data and spends nothing. Changes no production file.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/nice-cori-4qkwqs
+    paths:
+      - '.github/workflows/probe-participation-source-v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Probe participation availability by season
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          import traceback
+
+          import nflreadpy as nflv
+
+          print(f"nflreadpy version: {getattr(nflv, '__version__', 'unknown')}")
+          print()
+
+          # Walk back far enough to find the dataset's real upper boundary.
+          for season in (2026, 2025, 2024, 2023, 2022):
+              try:
+                  df = nflv.load_participation(seasons=[season])
+                  try:
+                      df = df.to_pandas()
+                  except AttributeError:
+                      pass
+                  rows = 0 if df is None else len(df)
+                  cols = [] if rows == 0 else sorted(df.columns)[:6]
+                  print(f"  {season}: rows={rows}")
+                  if rows:
+                      has_box = [
+                          c
+                          for c in df.columns
+                          if "box" in str(c).lower() or "defenders" in str(c).lower()
+                      ]
+                      print(f"        first cols={cols}")
+                      print(f"        box-ish cols={has_box}")
+              except Exception as exc:
+                  print(f"  {season}: RAISED {type(exc).__name__}: {exc}")
+                  traceback.print_exc()
+          EOF
+
+      - name: Probe what the repo's own loader returns
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          from scripts.make_team_form import load_participation
+
+          for season in (2026, 2025, 2024, 2023):
+              try:
+                  df = load_participation(season)
+                  print(f"  load_participation({season}): rows={0 if df is None else len(df)}")
+              except Exception as exc:
+                  print(f"  load_participation({season}): RAISED {type(exc).__name__}: {exc}")
+          EOF
