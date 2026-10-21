@@ -106,7 +106,20 @@ def main()->int:
     slate=tm[(pd.to_numeric(tm['season'],errors='coerce')==season)&(pd.to_numeric(tm['week'],errors='coerce')==week)].copy()
     if 'bye' in slate.columns: slate=slate[~slate['bye'].fillna(False).astype(bool)]
     slate=slate[slate.team.ne('')&slate.opponent.ne('')].drop_duplicates('team')
-    if len(slate)!=32: raise RuntimeError(f'expected 32 active team rows, got {len(slate)}')
+    # A literal 32 is only right on a week with no byes. 2026 week 7 has 14
+    # games and four teams idle, which is the same hard-coded bye-week guard
+    # that failed the week-5 run. Assert the slate is a *closed* set of
+    # scheduled teams instead: every opponent also appears as a team, each
+    # team appears once, and the participant count is even. That detects a
+    # genuinely broken schedule map more tightly than a count does, and it
+    # stays correct on bye weeks.
+    teams=set(slate['team']);opps=set(slate['opponent'])
+    if (not teams) or len(slate)%2 or teams!=opps or len(teams)!=len(slate) or len(teams)>32:
+        raise RuntimeError(
+            f'season {season} week {week} slate is not a closed set of scheduled '
+            f'teams: rows={len(slate)} teams={len(teams)} opponents={len(opps)} '
+            f'unmatched={sorted(teams ^ opps)}'
+        )
 
     seasons=list(range(2019,season))
     hist=pd.concat([aggregate_season(s) for s in seasons],ignore_index=True,sort=False)

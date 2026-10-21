@@ -292,8 +292,28 @@ jobs:
           python - <<'EOF'
           import pandas as pd
           x=pd.read_csv('data/qb_distribution_state_context.csv',low_memory=False)
-          if len(x) != 32 or x['team'].nunique() != 32:
-              raise SystemExit(f'FATAL: QB C2 state context expected 32 teams, got rows={len(x)} teams={x["team"].nunique()}')
+          # Must cover exactly the teams scheduled that week, which is 32 only
+          # on a week with no byes. Derived from the authoritative schedule map
+          # rather than hard-coded, so a bye week does not fail the gate and a
+          # genuinely short slate still does.
+          tm=pd.read_csv('data/team_week_map.csv',low_memory=False)
+          tm.columns=[str(c).lower() for c in tm.columns]
+          wk=tm[(pd.to_numeric(tm['season'],errors='coerce')==int(x['season'].iloc[0]))
+                &(pd.to_numeric(tm['week'],errors='coerce')==int(x['week'].iloc[0]))].copy()
+          if 'bye' in wk.columns:
+              wk=wk[~wk['bye'].fillna(False).astype(bool)]
+          # The context canonicalizes team codes, so the schedule side must too
+          # or a non-canonical map spelling would raise a false FATAL.
+          from scripts._opponent_map import canon_team
+          wk['team']=wk['team'].map(canon_team)
+          wk=wk[wk['team'].astype(str).str.strip().ne('')].drop_duplicates('team')
+          scheduled=set(wk['team'].astype(str))
+          got=set(x['team'].map(canon_team).astype(str))
+          if not scheduled or got != scheduled or len(x) != len(scheduled):
+              raise SystemExit(
+                  f'FATAL: QB C2 state context must match the {len(scheduled)} scheduled '
+                  f'teams, got rows={len(x)} teams={len(got)} '
+                  f'missing={sorted(scheduled-got)} extra={sorted(got-scheduled)}')
           if not pd.to_numeric(x['sportsbook_inputs_used'],errors='coerce').eq(0).all():
               raise SystemExit('FATAL: QB C2 state context reports sportsbook input')
           print('QB C2 football state context OK teams=32')
