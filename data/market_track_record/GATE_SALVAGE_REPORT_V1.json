@@ -210,6 +210,33 @@
     },
     "5": {
       "certification_blocks_found": 2,
+      "disagreeing_candidates": [
+        {
+          "asof_utc": "2026-10-08T23:41:14.413318+00:00",
+          "eligible_games": 14,
+          "games": 15,
+          "state_counts": {
+            "NOT_YET_REQUIRED": 14,
+            "REQUIRED_MISSING_FAIL_CLOSED": 1
+          },
+          "withheld_games": 1,
+          "withheld_teams": [
+            "DAL",
+            "TB"
+          ]
+        },
+        {
+          "asof_utc": "2026-10-08T23:41:14.413318+00:00",
+          "eligible_games": 15,
+          "games": 15,
+          "state_counts": {
+            "NOT_YET_REQUIRED": 14,
+            "PRESERVED_PRE_T75_REPLAY": 1
+          },
+          "withheld_games": 0,
+          "withheld_teams": []
+        }
+      ],
       "log_available": true,
       "log_lines": 3878,
       "missing_fields": [
