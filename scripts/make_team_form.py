@@ -605,6 +605,31 @@ def compute_red_zone_and_airyards(pbp: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+# nflverse participation names the box count `defenders_in_box` and the
+# offense `possession_team`. `possession_team` was missing from the team
+# candidates, so team_col resolved to None, box rates were silently skipped,
+# and the strict validator then failed every team. Single-sourced here so a
+# schema rename is one edit and a test can pin the real column names.
+_BOX_COL_CANDIDATES = ("defenders_in_box", "box", "men_in_box", "in_box")
+_PART_TEAM_COL_CANDIDATES = (
+    "possession_team",
+    "offense_team",
+    "posteam",
+    "team",
+    "club_code",
+)
+
+
+def resolve_participation_columns(participation):
+    """Return (box_col, team_col) for a participation frame, or Nones."""
+    if _is_empty(participation):
+        return None, None
+    cols = set(participation.columns)
+    box_col = next((c for c in _BOX_COL_CANDIDATES if c in cols), None)
+    team_col = next((c for c in _PART_TEAM_COL_CANDIDATES if c in cols), None)
+    return box_col, team_col
+
+
 def compute_personnel_rates(pbp: pd.DataFrame, participation: pd.DataFrame) -> pd.DataFrame:
     if _is_empty(pbp) and _is_empty(participation):
         return pd.DataFrame(columns=["team", "personnel_12_rate", "light_box_rate", "heavy_box_rate"])
@@ -627,16 +652,7 @@ def compute_personnel_rates(pbp: pd.DataFrame, participation: pd.DataFrame) -> p
     light = heavy = None
     if not _is_empty(participation):
         p = participation.copy()
-        box_col = None
-        for cand in ["box", "men_in_box", "in_box", "defenders_in_box"]:
-            if cand in p.columns:
-                box_col = cand
-                break
-        team_col = None
-        for cand in ["offense_team", "posteam", "team", "club_code"]:
-            if cand in p.columns:
-                team_col = cand
-                break
+        box_col, team_col = resolve_participation_columns(p)
         if box_col and team_col:
             p["_team"] = p[team_col].map(canon_team)
             p = p[p["_team"] != ""]
