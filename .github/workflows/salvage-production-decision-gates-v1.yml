@@ -70,7 +70,11 @@ jobs:
             echo "--- week ${w}: run ${run} job ${job}"
             # A log that is gone is a finding, not a failure: the reader reports
             # the week NOT_RECOVERABLE. Keep going so every week gets classified.
-            if gh api "repos/${GITHUB_REPOSITORY}/actions/jobs/${job}/logs" \
+            # Run logs carry ANSI colour codes, which gh refuses to emit
+            # without --allow-escape-sequences. The reader strips the Actions
+            # timestamp prefix and parses JSON, so the codes are harmless here.
+            if gh api --allow-escape-sequences \
+                 "repos/${GITHUB_REPOSITORY}/actions/jobs/${job}/logs" \
                  > "/tmp/gate_logs/week${w}.log" 2>/tmp/gate_logs/week${w}.err; then
               echo "    downloaded $(wc -l < "/tmp/gate_logs/week${w}.log") lines"
             else

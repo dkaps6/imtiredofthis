@@ -32,6 +32,11 @@ from typing import Any
 # the payload parses as JSON.
 _TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z\s?")
 
+# Actions logs also carry ANSI colour codes. The certification meta is printed
+# uncoloured, but stripping them unconditionally keeps a coloured line from
+# ever hiding a brace from the block scanner.
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
 # Unique signature of the certification meta block printed by
 # validate_current_player_availability_timing_v1.main().
 _CERT_KEY = "require_minutes_before_kickoff"
@@ -63,7 +68,9 @@ _OPTIONAL_PATTERNS = {
 
 
 def strip_timestamps(text: str) -> str:
-    return "\n".join(_TS.sub("", line) for line in text.splitlines())
+    return "\n".join(
+        _TS.sub("", _ANSI.sub("", line)) for line in text.splitlines()
+    )
 
 
 def extract_json_blocks(text: str, key: str) -> list[dict[str, Any]]:

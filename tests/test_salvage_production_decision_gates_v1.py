@@ -72,6 +72,24 @@ def test_strip_timestamps_leaves_unprefixed_lines_alone():
     assert strip_timestamps("plain line") == "plain line"
 
 
+def test_strip_timestamps_also_removes_ansi_colour_codes():
+    raw = "2026-09-27T04:06:00.0000001Z \x1b[36;1m{\x1b[0m"
+    assert strip_timestamps(raw) == "{"
+
+
+def test_coloured_braces_do_not_hide_a_certification_block():
+    """Real Actions logs colour echoed script lines, braces included."""
+    body = json.dumps(cert_meta(), indent=2, sort_keys=True).splitlines()
+    coloured = "\n".join(
+        f"2026-09-27T04:06:00.0000001Z \x1b[36;1m{line}\x1b[0m" for line in body
+    )
+    blocks = extract_json_blocks(
+        strip_timestamps(coloured), "require_minutes_before_kickoff"
+    )
+    assert len(blocks) == 1
+    assert blocks[0]["games"] == 16
+
+
 def test_extract_json_blocks_keeps_nested_objects_intact():
     text = json.dumps(cert_meta(), indent=2, sort_keys=True)
     blocks = extract_json_blocks(text, "require_minutes_before_kickoff")
