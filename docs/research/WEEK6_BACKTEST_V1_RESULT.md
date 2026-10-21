@@ -31,6 +31,36 @@ and which player-markets the pregame workbook blocked. That is a permanent
 loss for this week, of the same kind as the Weeks 3-5 priced boards
 (AGENTS.md §5a).
 
+### Amended 2026-10-21 — the team layer was recovered after all
+
+The claim above is too strong and is corrected here. The pregame certification
+meta is **printed to the run log**, and Actions logs outlive artifacts, so
+week 6's team-layer gate was read back from run `38792341891`. See
+`docs/research/GATE_SALVAGE_WEEKS_3_6_V1_RESULT.md` (salvage run
+`39620564121`), whose reader reproduces the canonical week-1 gate exactly as
+its control.
+
+Week 6: asof `2026-10-15T19:18:47.517314+00:00`, **14 games, 14 eligible, 0
+withheld**, only `NOT_YET_REQUIRED`, one certification block, no
+`PRESERVED_PRE_T75_REPLAY` override.
+
+Two amendments follow:
+
+1. **Week 6 had zero team-level blocks.** The `UNGATED_ALL_PRICED_ROWS`
+   population graded below is therefore identical, *at the team layer*, to the
+   production-decided population. The 308-bet result is not distorted by
+   missing team gates, because there were none to miss.
+2. **The "28/32 teams" line in falsification check 2 is explained**: 14 games
+   means 28 teams played and 4 were on bye. It is not evidence of selection
+   bias. The six teams with a board row but no graded `pass_yards` bet are a
+   separate, still-open finding.
+
+What remains genuinely unrecovered is the **player-market layer** — the
+pregame workbook's Decision/Snapshot Signal `BLOCKED` rows, which are not in
+any log. Week 2's canonical gate has three such blocks and zero team blocks,
+so "0 withheld teams" is not the same as "no blocks". **Week 6 must not be
+described as fully gated**, and the no-pooling rule below still stands.
+
 ## Settlement integrity
 
 | field | value |
@@ -239,11 +269,16 @@ bands have n<=5.
    cannot see an early exit, which is why the grader flags rather than
    classifies these.
 
-2. **Selection bias is unresolved.** The falsification check reports 28/32
-   teams with any graded row, `pass_yards` covering 22 teams, and six teams
-   holding a board row with no graded `pass_yards` bet: BAL, BUF, KC, SF, TB,
-   WAS. Verbatim: "10 teams unaccounted for; selection bias is unresolved
-   until each is explained." Every per-market rate above inherits this.
+2. **Selection bias is partly resolved.** The falsification check reports
+   28/32 teams with any graded row, `pass_yards` covering 22 teams, and six
+   teams holding a board row with no graded `pass_yards` bet: BAL, BUF, KC,
+   SF, TB, WAS. Verbatim: "10 teams unaccounted for; selection bias is
+   unresolved until each is explained."
+
+   Of those ten, **four are now explained**: week 6 had 14 games, so 4 of 32
+   teams were on bye (see the amendment above). The remaining **six** —
+   teams with a board row but no graded `pass_yards` bet — are still
+   unexplained, and every per-market rate above inherits that.
 
 3. **Quote selection.** 147 of 312 graded rows (47.1%) were priced away from
    cross-book consensus, median absolute gap 0.50; 21 rows had the projection
