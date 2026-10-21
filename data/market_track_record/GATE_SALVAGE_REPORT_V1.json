@@ -7,7 +7,8 @@
     "1",
     "2",
     "3",
-    "4"
+    "4",
+    "6"
   ],
   "season": 2026,
   "version": "PRODUCTION_DECISION_GATE_SALVAGE_V1",
@@ -252,6 +253,44 @@
       "source_run_id": "37860592615",
       "status": "NOT_RECOVERABLE",
       "week": 5
+    },
+    "6": {
+      "block_rules": [],
+      "certification_blocks_found": 1,
+      "corroborating_facts": {
+        "core_unresolved_player_rows": null,
+        "lineage_version": "MARKET_MODEL_LINEAGE_V3_R22_NOT_APPLICABLE_OUTSIDE_WEEK1",
+        "sportsbook_current_roster_mismatches": "0",
+        "temporary_possible_historical_aliases": "0"
+      },
+      "corroborating_facts_absent": [
+        "core_unresolved_player_rows"
+      ],
+      "evidence_basis": "Printed availability timing certification meta from the surviving Full Slate run log (run 38792341891, job 116620446562, git 9b70b12e2fb4bc39f08556f244370068aad9c47b).",
+      "log_available": true,
+      "log_lines": 3847,
+      "missing_fields": [],
+      "notes": [],
+      "source_facts": {
+        "availability_asof_utc": "2026-10-15T19:18:47.517314+00:00",
+        "certification_state_counts": {
+          "NOT_YET_REQUIRED": 14
+        },
+        "eligible_games": 14,
+        "game_count": 14,
+        "require_minutes_before_kickoff": 75.0,
+        "sportsbook_inputs_used": 0,
+        "withheld_games": 0,
+        "withheld_teams": []
+      },
+      "source_git_sha": "9b70b12e2fb4bc39f08556f244370068aad9c47b",
+      "source_job_id": "116620446562",
+      "source_run_conclusion": "success",
+      "source_run_created_at": "2026-10-15T19:15:03Z",
+      "source_run_id": "38792341891",
+      "status": "RECOVERABLE",
+      "week": 6,
+      "withheld_reason_recoverable": true
     }
   }
 }
