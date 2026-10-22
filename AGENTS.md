@@ -8,6 +8,8 @@ This file defines how automation should operate the repository after the 2026 pr
 
 > **Active research continuity:** before doing new NFL research or resuming a prior chat, read root `CURRENT_NFL_RESEARCH_HANDOFF.md` first. It is the canonical cross-chat ledger of current QB/RB/WR/TE status, exact runs/artifacts, failed-lineage stopping rules, the active opportunity/entitlement architecture, and authorized next steps. After every substantive research milestone, update that handoff on `main` so a future session can resume without relying on chat memory.
 
+> **Continuity maintenance rule:** root `CURRENT_NFL_RESEARCH_HANDOFF.md` must contain exactly **one active TOP checkpoint**. Supersede that checkpoint in place; **do not prepend another TOP checkpoint**. Preserve displaced checkpoint history under `docs/handoffs/` as an archive/deep handoff. A future session must never have to infer which of multiple “TOP” sections is newest.
+
 ---
 
 ## PLAYER PROJECTION FIRST PRINCIPLE — NON-NEGOTIABLE
