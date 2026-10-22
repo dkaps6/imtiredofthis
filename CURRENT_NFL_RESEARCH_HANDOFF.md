@@ -1,16 +1,16 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-22 — PRISM WEEK-7 LIVE BOARD / CLAUDE EXECUTOR + GPT AUDITOR / PLAYER-FIRST CONTINUITY
+## TOP CHECKPOINT — 2026-10-22 — FINAL V2 PRISM WEEK-7 LIVE BOARD / CLAUDE EXECUTOR + GPT AUDITOR / PLAYER-FIRST CONTINUITY
 
 **Model:** PRISM — Player Role & Individual Situation Model
 
 ### READ THIS DEEP HANDOFF NEXT
 
-`docs/handoffs/NFL_HANDOFF_2026-10-22_PRISM_WEEK7_LIVE_BOARD_CONTROL_ROOM_PLAYER_FIRST.md`
+`docs/handoffs/NFL_HANDOFF_2026-10-22_V2_PRISM_WEEK7_LIVE_BOARD_CONTROL_ROOM_PLAYER_FIRST.md`
 
 Reusable restart prompt:
 
-`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-22_PRISM_WEEK7_LIVE_BOARD_CONTROL_ROOM.md`
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-22_V2_PRISM_WEEK7_LIVE_BOARD_CONTROL_ROOM.md`
 
 Historical stacked checkpoints were preserved verbatim at:
 
@@ -56,8 +56,8 @@ Before substantive status/audit decisions:
 
 ### LIVE PRODUCTION STATE — WEEK 7 BOARD EXISTS AND IS DURABLE
 
-Current `main` at handoff:
-`c8f6f057db7bf6c81201984e2de179ca51c7e882`
+Current `main` at the final pre-handoff refresh:
+`32b5cbf41f551b452a89c457c1b32e497bd934da`
 
 PR #693 is merged:
 - merge commit `4dc178b59da8708dbea978b8e54e753b1e2f75c5`
@@ -177,3 +177,17 @@ Week-6 SF-WAS manual construction used this method and the user later reported *
 - No production mutation from source/research work alone.
 - Keep old QUALIFIED/CLOSED/SOURCE_BLOCKED results intact.
 - On “keep going,” continue the exact active canonical lane after live reconciliation.
+
+
+### FINAL V2 END-OF-CHAT REFRESH
+
+At the final refresh for this chat:
+- no Claude Issue #535 comment newer than GPT continuity comments `6353044832` / `6353046193` was visible;
+- PR #672 remained OPEN/DRAFT and stale/huge;
+- PR #690 remained OPEN and audit-cleared, with SOURCE_BLOCKED science unchanged;
+- PR #691 remained OPEN but stale/superseded; do not merge;
+- PR #693 remained MERGED;
+- Week-7 live board run `39849371821` and durable paid boundary remained canonical;
+- no additional OddsAPI acquisition was authorized.
+
+The next chat MUST re-fetch #535/live GitHub before asserting that this remains current.
