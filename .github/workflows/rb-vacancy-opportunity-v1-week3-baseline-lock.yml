@@ -1,0 +1,107 @@
+name: RB Vacancy Opportunity V1 Week 3 Pregame Projection Lock
+
+on:
+  push:
+    branches:
+      - research-rb-vacancy-opportunity-v1
+    paths:
+      - "scripts/research/lock_rb_vacancy_week3_baseline_v1.py"
+      - ".github/workflows/rb-vacancy-opportunity-v1-week3-baseline-lock.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout research lock branch
+        uses: actions/checkout@v4
+
+      - name: Checkout exact production source
+        uses: actions/checkout@v4
+        with:
+          ref: f7d2011b73950488ea209124ba895b92c401b2b1
+          path: production_source
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install exact production dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r production_source/requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+
+      - name: Download frozen Week-3 pregame Full Slate source
+        uses: actions/download-artifact@v4
+        with:
+          name: run_36204768034
+          path: staged
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36204768034
+
+      - name: Download frozen Week-3 vacancy state
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-vacancy-opportunity-v1-no-outcome-w3-2026-09-26
+          path: vacancy_lock
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36205201005
+
+      - name: Verify immutable pregame authorities
+        run: |
+          set -euo pipefail
+          test -s staged/data/player_form_consensus.csv
+          test -s staged/data/model_ml_diagnostics.csv
+          test -s staged/data/model_state_diagnostics.csv
+          test -s staged/data/model_ensemble_weights.csv
+          test -s staged/data/current_player_availability.csv
+          test -s vacancy_lock/rb_vacancy_state_no_outcomes.csv
+          test -s vacancy_lock/rb_vacancy_exclusions.csv
+          python - <<'PY'
+          import pandas as pd
+          v=pd.read_csv('vacancy_lock/rb_vacancy_state_no_outcomes.csv')
+          assert len(v)==4 and v['team'].nunique()==2
+          assert set(v['team'])=={'DEN','PIT'}
+          assert set(v['unavailable_players'])=={'jonahcoleman','ricodowdle'}
+          assert pd.to_numeric(v['target_season'],errors='raise').eq(2026).all()
+          assert pd.to_numeric(v['target_week'],errors='raise').eq(3).all()
+          forbidden={'actual','actual_rushes','actual_rush_yards','target_game_snaps','line','odds','sportsbook','bookmaker'}
+          assert not (forbidden & set(map(str.lower,v.columns)))
+          print('PREGAME_AUTHORITY_PASS rows=',len(v))
+          PY
+
+      - name: Install exact Full Slate artifact over production data
+        run: |
+          set -euo pipefail
+          rsync -a staged/data/ production_source/data/
+          mkdir -p production_source/outputs
+
+      - name: Freeze exact baseline and V1 candidate football means
+        run: |
+          set -euo pipefail
+          cd production_source
+          export PYTHONPATH="${PWD}"
+          python ../scripts/research/lock_rb_vacancy_week3_baseline_v1.py             --vacancy ../vacancy_lock/rb_vacancy_state_no_outcomes.csv             --outdir ../rb_vacancy_week3_pregame_lock             --source-run 36204768034             --source-artifact 10892728623             --source-digest sha256:f52b36fb7a9c929fadca473bd8303823fb9f63bd42c884341cd6c3b52c26ed67             --source-sha f7d2011b73950488ea209124ba895b92c401b2b1             --lock-run 36205201005             --lock-artifact 10893677385             --lock-digest sha256:69b55421be779cb474eea0735bfe98490d8c7d5a8e0847e96f1f65d1c5e9e732
+          test -s ../rb_vacancy_week3_pregame_lock/rb_vacancy_week3_pregame_projection_lock.csv
+          test -s ../rb_vacancy_week3_pregame_lock/rb_vacancy_week3_team_allocation_audit.csv
+          test -s ../rb_vacancy_week3_pregame_lock/rb_vacancy_week3_pregame_lock_manifest.json
+
+      - name: Upload immutable pregame projection lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-vacancy-opportunity-v1-week3-pregame-projection-lock
+          path: rb_vacancy_week3_pregame_lock/
+          if-no-files-found: error
+          retention-days: 90
