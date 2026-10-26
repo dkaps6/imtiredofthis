@@ -37,6 +37,7 @@ import pandas as pd
 
 from scripts.research.build_player_identity_card_v1 import (
     DISPOSITION_USABLE,
+    _first_col,
     PARTIAL_PARTICIPATION_RATIO,
     build_cards,
     build_participation,
@@ -195,6 +196,24 @@ def main() -> int:
             "threshold cannot flag fewer weeks")
 
     # Label churn between adjacent thresholds, and named examples of it.
+    # The audit asked for NAMED examples. Weekly rosters carry `full_name`,
+    # not `player_name`, so a strict check for the latter silently produced a
+    # blank column -- a deliverable that passes every gate and answers nothing.
+    r_name = _first_col(rosters, ["player_name", "full_name",
+                                  "player_display_name", "football_name"])
+    r_pos = _first_col(rosters, ["position", "depth_chart_position"])
+    if not r_name:
+        raise RuntimeError(
+            f"roster authority exposes no name column (has: "
+            f"{sorted(c for c in rosters.columns if 'name' in str(c))}); the "
+            "audit asked for named examples and this must not emit blanks")
+    name_by = (rosters.dropna(subset=["gsis_id"])
+               .drop_duplicates("gsis_id")
+               .set_index("gsis_id")
+               .rename(columns={r_name: "name", r_pos: "position"})
+               [["name"] + (["position"] if r_pos else [])]
+               .to_dict("index"))
+
     keys = [f"{r:.2f}" for r in SWEEP]
     churn, examples = [], []
     for k0, k1 in zip(keys, keys[1:]):
@@ -202,27 +221,25 @@ def main() -> int:
         changed = [k for k in a0 if a0[k] != a1.get(k)]
         churn.append({"from_ratio": k0, "to_ratio": k1,
                       "player_weeks_changed": len(changed)})
-        name_by = {}
-        if changed:
-            nm = (rosters[["gsis_id", "player_name", "position"]]
-                  if {"gsis_id", "player_name"} <= set(rosters.columns)
-                  else pd.DataFrame())
-            if not nm.empty:
-                name_by = (nm.dropna(subset=["gsis_id"])
-                           .drop_duplicates("gsis_id")
-                           .set_index("gsis_id")[["player_name", "position"]]
-                           .to_dict("index"))
-        # Order by player then week so "largest change" is reproducible rather
-        # than dependent on dict ordering.
-        for key in sorted(changed, key=lambda t: (str(t[2]), t[0], t[1]))[:15]:
-            info = name_by.get(key[2], {})
-            examples.append({
-                "from_ratio": k0, "to_ratio": k1,
-                "season": key[0], "week": key[1], "gsis_id": key[2],
-                "player": info.get("player_name", ""),
-                "position": info.get("position", ""),
-                "state_at_from": a0[key], "state_at_to": a1.get(key, ""),
-            })
+        # "Largest classification changes" means the players whose state moves
+        # most across the pair, not the first fifteen in id order. Rank by how
+        # many of a player's weeks flip, ties broken by id for reproducibility.
+        by_player: dict[str, list] = {}
+        for key in changed:
+            by_player.setdefault(key[2], []).append(key)
+        ranked = sorted(by_player.items(),
+                        key=lambda kv: (-len(kv[1]), str(kv[0])))[:10]
+        for pid, keys in ranked:
+            info = name_by.get(pid, {})
+            for key in sorted(keys, key=lambda t: (t[0], t[1])):
+                examples.append({
+                    "from_ratio": k0, "to_ratio": k1,
+                    "season": key[0], "week": key[1], "gsis_id": pid,
+                    "player": info.get("name", ""),
+                    "position": info.get("position", ""),
+                    "weeks_changed_for_this_player": len(keys),
+                    "state_at_from": a0[key], "state_at_to": a1.get(key, ""),
+                })
 
     base = table["eligible_cards_with_usable_evidence"]
     spread = int(base.max() - base.min())
@@ -232,12 +249,18 @@ def main() -> int:
                  else "MODERATELY_THRESHOLD_SENSITIVE" if rel < 0.20
                  else "THRESHOLD_SENSITIVE")
 
+    ex = pd.DataFrame(examples)
+    if not ex.empty and not ex["player"].astype(str).str.strip().any():
+        raise RuntimeError(
+            "every named example came out blank; the name lookup is not "
+            "resolving against the roster authority")
+
     a.out_dir.mkdir(parents=True, exist_ok=True)
     table.to_csv(a.out_dir / "player_state_threshold_sweep_v1.csv", index=False)
     pd.DataFrame(churn).to_csv(
         a.out_dir / "player_state_threshold_sweep_v1_churn.csv", index=False)
-    pd.DataFrame(examples).to_csv(
-        a.out_dir / "player_state_threshold_sweep_v1_examples.csv", index=False)
+    ex.to_csv(a.out_dir / "player_state_threshold_sweep_v1_examples.csv",
+              index=False)
 
     status = {
         "version": "PLAYER_STATE_THRESHOLD_SWEEP_V1",

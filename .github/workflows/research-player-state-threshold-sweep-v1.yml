@@ -33,6 +33,11 @@ on:
 permissions:
   contents: write
 
+# Both workflows commit to the same research branch.
+concurrency:
+  group: player-identity-research-commits
+  cancel-in-progress: false
+
 jobs:
   sweep:
     runs-on: ubuntu-latest
@@ -139,7 +144,26 @@ jobs:
 
           Produced by run ${GITHUB_RUN_ID}. Descriptive sensitivity only: no
           fitting, no outcome inspection, no recommended threshold."
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          # Two workflows trigger on the same push and both commit here, so
+          # whichever lands second hits a non-fast-forward. Rebase onto the
+          # other bot's commit and retry rather than failing a run whose
+          # science succeeded.
+          for i in 1 2 3 4 5; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "pushed on attempt $i"
+              exit 0
+            fi
+            echo "push rejected; rebasing onto origin/${GITHUB_REF_NAME}"
+            git fetch origin "${GITHUB_REF_NAME}"
+            if ! git rebase "origin/${GITHUB_REF_NAME}"; then
+              git rebase --abort || true
+              echo "rebase failed; refusing to force"
+              exit 1
+            fi
+            sleep $((i * 3))
+          done
+          echo "could not push after 5 attempts"
+          exit 1
 
       - name: Upload evidence
         if: always()
