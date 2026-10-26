@@ -1,5 +1,5 @@
 {
-  "anomaly_gate_version": "PLAYER_STATE_ANOMALY_GATE_V1_PARTICIPATION_ONLY",
+  "anomaly_gate_version": "PLAYER_STATE_ANOMALY_GATE_V2_INJURY_RESOLVED",
   "audit_corrections_applied": "6420504608_A_through_E",
   "cards": 35196,
   "denominator_contradicted_cards": 24,
@@ -42,11 +42,15 @@
     "unbridged_on_roster_without_gsis": 0,
     "unbridged_only_players": 381
   },
+  "injury_source_state": "available",
   "opportunity_eligible_cards": 10960,
+  "partial_game_source_state": "SOURCE_BLOCKED_NO_2026_PARTICIPATION_DATA",
   "player_week_state_counts": {
     "HEALTHY_FULL": 6786,
+    "INJURY_LIMITED": 67,
     "NO_BASELINE": 1430,
-    "UNRESOLVED_CONTEXT": 1358
+    "RETURN_FROM_INJURY": 213,
+    "UNRESOLVED_CONTEXT": 1078
   },
   "players": 3053,
   "prior_seasons": [
@@ -67,5 +71,7 @@
   ],
   "teams": 32,
   "untrusted_denominator_cards": 0,
-  "version": "PLAYER_IDENTITY_CARD_V1"
+  "version": "PLAYER_IDENTITY_CARD_V1",
+  "withheld_explained_cards": 200,
+  "withheld_unexplained_cards": 1284
 }
