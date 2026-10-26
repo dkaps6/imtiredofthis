@@ -1,6 +1,7 @@
 {
   "audit_corrections_applied": "6420504608_A_through_E",
   "cards": 35196,
+  "denominator_contradicted_cards": 24,
   "history_state_counts": {
     "current_only": 558,
     "no_history": 27928,
@@ -8,14 +9,30 @@
     "prior+current": 2409,
     "prior_only": 2714
   },
+  "history_state_counts_opportunity_eligible": {
+    "current_only": 538,
+    "no_history": 3903,
+    "participation_only_zero_opportunity": 1519,
+    "prior+current": 2407,
+    "prior_only": 2593
+  },
   "identity_bridge": {
     "bridge_match_rate": 0.8117859784663434,
     "bridge_matched": 29631,
     "bridge_state": "ok",
     "bridge_unmatched": 6870,
+    "offensive_player_weeks_total": 14474,
+    "offensive_player_weeks_unmatched": 4906,
+    "partial_bridge_gsis_ids": [
+      "00-0039518"
+    ],
+    "partial_bridge_player_weeks": 3,
+    "partial_bridge_players": 1,
     "participation_player_weeks": 9568,
-    "snap_rows": 36501
+    "snap_rows": 36501,
+    "unbridged_only_players": 384
   },
+  "opportunity_eligible_cards": 10960,
   "players": 3053,
   "prior_seasons": [
     2025
@@ -34,5 +51,6 @@
     7
   ],
   "teams": 32,
+  "untrusted_denominator_cards": 14,
   "version": "PLAYER_IDENTITY_CARD_V1"
 }
