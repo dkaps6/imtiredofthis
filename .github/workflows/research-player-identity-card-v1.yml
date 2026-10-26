@@ -1,0 +1,192 @@
+name: Research Player Identity Card V1
+
+# Builds the descriptive, strictly-prior Player Identity Card specified by
+# docs/research/PLAYER_IDENTITY_ROLE_STATE_ARCHITECTURE_V1.md.
+#
+# Scientific boundary: DESCRIPTIVE STATE ONLY. Fits nothing, scores nothing,
+# promotes nothing, reads no sportsbook data, makes no OddsAPI call. Predictive
+# use of this state is gated by the anti-retest rules in control-room comment
+# 6420198257 and must not be run from here.
+#
+# A card for (player, season, week=w) is built only from weeks < w plus whole
+# prior seasons, so week w never contributes to its own card.
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Target season"
+        required: false
+        default: "2026"
+      weeks:
+        description: "Target weeks, e.g. 1-7"
+        required: false
+        default: "1-7"
+      prior_seasons:
+        description: "Comma list of whole prior seasons used as history"
+        required: false
+        default: "2025"
+  push:
+    branches:
+      - research-prism-player-first-identity-environment-2026-10-26
+    paths:
+      - '.github/workflows/research-player-identity-card-v1.yml'
+      - 'scripts/research/build_player_identity_card_v1.py'
+      - 'tests/test_build_player_identity_card_v1.py'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      SEASON: ${{ github.event.inputs.season || '2026' }}
+      WEEKS: ${{ github.event.inputs.weeks || '1-7' }}
+      PRIOR_SEASONS: ${{ github.event.inputs.prior_seasons || '2025' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest
+          # Full Slate pins pyarrow explicitly for the same numpy-compat reason;
+          # requirements.txt leaves it unbounded, so pin it here too.
+          pip install 'pyarrow==17.0.0'
+
+      - name: Unit tests
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          pytest -q tests/test_build_player_identity_card_v1.py
+
+      - name: Probe the roster/snap identity bridge before building
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          # Establish that the authorities the audit requires actually exist
+          # before spending a full PBP load on them.
+          import nflreadpy as nflv
+          for fn in ("load_rosters_weekly", "load_weekly_rosters",
+                     "load_rosters", "load_snap_counts"):
+              print(f"  {fn}: {'present' if hasattr(nflv, fn) else 'ABSENT'}")
+          for fn in ("load_rosters_weekly", "load_weekly_rosters"):
+              if not hasattr(nflv, fn):
+                  continue
+              try:
+                  df = getattr(nflv, fn)(seasons=[2025])
+                  try: df = df.to_pandas()
+                  except AttributeError: pass
+                  cols = sorted(str(c).lower() for c in df.columns)
+                  print(f"\n{fn}(2025) rows={len(df)}")
+                  print("  id/team/week cols:",
+                        [c for c in cols if any(k in c for k in
+                         ('gsis', 'pfr', 'team', 'week', 'status', 'position'))])
+                  break
+              except Exception as exc:
+                  print(f"{fn} raised {type(exc).__name__}: {exc}")
+          EOF
+
+      - name: Build the descriptive identity cards
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          mkdir -p data/research/player_identity
+          python scripts/research/build_player_identity_card_v1.py \
+            --season "${SEASON}" \
+            --weeks "${WEEKS}" \
+            --prior-seasons "${PRIOR_SEASONS}" \
+            --require-participation \
+            --out "data/research/player_identity/player_identity_card_v1_${SEASON}.csv" \
+            --status-out "data/research/player_identity/player_identity_card_v1_${SEASON}_status.json"
+
+      - name: Assert the audit corrections actually hold
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          import json, os, sys
+          import pandas as pd
+          season = os.environ["SEASON"]
+          base = f"data/research/player_identity/player_identity_card_v1_{season}"
+          cards = pd.read_csv(f"{base}.csv", low_memory=False)
+          status = json.load(open(f"{base}_status.json"))
+          fail = []
+
+          # (A)(E) participation bridge was genuinely used
+          if status["identity_bridge"].get("bridge_state") != "ok":
+              fail.append(f"bridge not ok: {status['identity_bridge']}")
+          if not (cards["participation_source_state"] == "available").all():
+              fail.append("participation source not available on every card")
+
+          # (B) active zero-opportunity weeks are represented, not dropped
+          az = pd.to_numeric(cards["active_zero_opportunity_weeks"],
+                             errors="coerce")
+          if not (az.fillna(-1) >= 0).all():
+              fail.append("active_zero_opportunity_weeks missing/negative")
+          if az.sum() <= 0:
+              fail.append("no active zero-opportunity weeks found at all, "
+                          "which means they are still being dropped")
+
+          # (C) target-week team is populated and distinct from history
+          if cards["team_target_week"].isna().any():
+              fail.append("null team_target_week")
+
+          # (D) universe includes players with no prior opportunity
+          if "no_history" not in set(cards["history_state"]):
+              fail.append("no no_history cards: universe is still "
+                          "opportunity-observed only")
+
+          # boundary
+          if not (pd.to_numeric(cards["sportsbook_inputs_used"]) == 0).all():
+              fail.append("sportsbook inputs present")
+          if status["scientific_boundary"] != \
+             "DESCRIPTIVE_STATE_ONLY_NO_FIT_NO_PROMOTION":
+              fail.append("scientific boundary not stamped")
+
+          print(f"cards={len(cards)} players={status['players']} "
+                f"teams={status['teams']}")
+          print("history_state:", status["history_state_counts"])
+          print("active zero-opportunity player-weeks:", int(az.sum()))
+          print("bridge:", json.dumps(status["identity_bridge"], sort_keys=True))
+          if fail:
+              print("\nFAILED ASSERTIONS:")
+              for f in fail:
+                  print("  -", f)
+              sys.exit(1)
+          print("\nall audit-correction assertions hold")
+          EOF
+
+      - name: Commit the descriptive cards
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/research/player_identity/
+          if git diff --cached --quiet; then
+            echo "identity cards unchanged"
+            exit 0
+          fi
+          git commit -m "Player Identity Card V1: descriptive strictly-prior state, season ${SEASON} weeks ${WEEKS}
+
+          Produced by run ${GITHUB_RUN_ID}. Descriptive state only: no fit, no
+          scoring, no promotion, no sportsbook input."
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player_identity_card_v1_${{ github.run_id }}
+          path: data/research/player_identity/
+          if-no-files-found: warn
+          retention-days: 90
