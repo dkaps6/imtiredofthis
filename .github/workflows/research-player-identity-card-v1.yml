@@ -210,6 +210,9 @@ jobs:
                                    b.get("roster_rows_with_gsis"),
                                    b.get("roster_rows_with_pfr"),
                                    b.get("roster_rows_bridgeable")))
+          print("identity map: players_mapped=%s ambiguous_pfr_ids=%s" % (
+              b.get("bridge_players_mapped"),
+              b.get("bridge_ambiguous_pfr_ids")))
           print("never-bridged players: %s (absent from roster=%s, "
                 "on roster without gsis=%s)" % (
                     b.get("unbridged_only_players"),

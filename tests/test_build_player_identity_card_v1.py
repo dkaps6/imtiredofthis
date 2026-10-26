@@ -289,16 +289,34 @@ def test_cards_never_carry_sportsbook_input():
 
 # -------------------------------------- partial bridge denominator trust
 
-def test_partial_bridge_is_measured_not_just_overall_match_rate():
-    """A bridged-in-week-1-only player with week-2 snaps is partial."""
+def test_player_level_bridge_makes_partial_coverage_impossible():
+    """A week whose roster row omits pfr_id must not strand that week.
+
+    pfr_id is a player-level invariant, so one row carrying it is enough to
+    bridge every week of that player. This is the regression guard for the
+    (season, week, pfr_id) keying that discarded 25% of roster rows.
+    """
     ros = rosters(weeks=(1, 2, 3))
-    # Strip B's week-2 bridge row so his week-2 offensive snaps cannot resolve.
-    ros = ros.drop(ros[(ros.week == 2) & (ros.pfr_id == PFR_B)].index)
-    _, diag = build_participation(
+    # B's week-2 row has no pfr_id, as a quarter of real roster rows do not.
+    ros.loc[(ros.week == 2) & (ros.pfr_id == PFR_B), "pfr_id"] = np.nan
+    part, diag = build_participation(
         ros, snaps({(1, PFR_B): 20, (2, PFR_B): 20, (1, PFR_A): 30}))
-    assert diag["partial_bridge_player_weeks"] == 1
-    assert diag["partial_bridge_players"] == 1
-    assert GSIS_B in diag["partial_bridge_gsis_ids"]
+    # Week 2 still bridges, via the player-level map.
+    assert sorted(part.loc[part.gsis_id == GSIS_B, "week"]) == [1, 2]
+    assert diag["partial_bridge_player_weeks"] == 0
+    assert diag["partial_bridge_players"] == 0
+    assert diag["bridge_ambiguous_pfr_ids"] == 0
+
+
+def test_ambiguous_identity_map_fails_closed():
+    """One pfr_id mapping to two gsis ids would silently merge two players."""
+    ros = rosters(weeks=(1, 2))
+    ros.loc[(ros.week == 2) & (ros.gsis_id == GSIS_B), "pfr_id"] = PFR_A
+    part, diag = build_participation(ros, snaps({(1, PFR_A): 30}))
+    assert part.empty
+    assert diag["bridge_state"] == "unavailable_ambiguous_identity_map"
+    assert diag["bridge_ambiguous_pfr_ids"] == 1
+    assert PFR_A in diag["bridge_ambiguous_examples"]
 
 
 def test_never_bridged_player_is_not_counted_as_partial():

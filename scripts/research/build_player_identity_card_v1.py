@@ -220,16 +220,31 @@ def build_participation(
     diag["roster_rows_bridgeable"] = int(
         (raw["gsis_id"].notna() & raw["pfr_id"].notna()).sum())
 
-    bridge = (raw.dropna(subset=["gsis_id", "pfr_id"])
-              .drop_duplicates(["season", "week", "pfr_id"]))
+    # pfr_id <-> gsis_id is a PLAYER-level invariant, not a weekly fact: a
+    # player's PFR id does not change by week. Keying the bridge on
+    # (season, week, pfr_id) therefore discarded every week whose roster row
+    # happens to omit pfr_id, which is 25% of them. Build the map at player
+    # level from any row carrying both, and fail closed on ambiguity rather
+    # than pick a winner.
+    pairs = (raw.dropna(subset=["gsis_id", "pfr_id"])[["gsis_id", "pfr_id"]]
+             .drop_duplicates())
+    per_pfr = pairs.groupby("pfr_id")["gsis_id"].nunique()
+    ambiguous = sorted(per_pfr.loc[per_pfr > 1].index.astype(str))
+    diag["bridge_ambiguous_pfr_ids"] = len(ambiguous)
+    if ambiguous:
+        # One PFR id mapping to several gsis ids means the identity map itself
+        # is unsound; guessing here would silently merge two players.
+        diag["bridge_state"] = "unavailable_ambiguous_identity_map"
+        diag["bridge_ambiguous_examples"] = ambiguous[:10]
+        return pd.DataFrame(), diag
+    bridge = pairs.drop_duplicates("pfr_id")
+    diag["bridge_players_mapped"] = int(len(bridge))
     s = snaps[["season", "week", s_pfr, s_off]].rename(
         columns={s_pfr: "pfr_id", s_off: "offense_snaps"})
     s["season"] = pd.to_numeric(s["season"], errors="coerce")
     s["week"] = pd.to_numeric(s["week"], errors="coerce")
-    bridge["season"] = pd.to_numeric(bridge["season"], errors="coerce")
-    bridge["week"] = pd.to_numeric(bridge["week"], errors="coerce")
 
-    merged = s.merge(bridge, on=["season", "week", "pfr_id"], how="left")
+    merged = s.merge(bridge, on=["pfr_id"], how="left")
     matched = merged["gsis_id"].notna()
     diag["bridge_matched"] = int(matched.sum())
     diag["bridge_unmatched"] = int((~matched).sum())
