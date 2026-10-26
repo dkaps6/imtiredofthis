@@ -345,3 +345,19 @@ def test_untrusted_flag_does_not_leak_to_other_players():
               & (cards.opportunity_kind == "carry")].iloc[0]
     assert b["participation_source_state"] == "available"
     assert not np.isnan(b["opp_per_participation_week"])
+
+
+def test_roster_coverage_breakdown_distinguishes_the_two_failure_modes():
+    """A pfr_id the roster never lists is a different gap from one it lists
+    without a gsis_id. Collapsing them hides which source to fix."""
+    ros = rosters(weeks=(1,))
+    # B is on the roster but carries no gsis_id -> unbridgeable row.
+    ros.loc[ros.pfr_id == PFR_B, "gsis_id"] = np.nan
+    _, diag = build_participation(
+        ros, snaps({(1, PFR_A): 30, (1, PFR_B): 20, (1, "ZZZ999"): 15}))
+    assert diag["roster_rows"] == 3
+    assert diag["roster_rows_with_pfr"] == 3
+    assert diag["roster_rows_bridgeable"] == 2
+    assert diag["unbridged_only_players"] == 2          # B and ZZZ999
+    assert diag["unbridged_on_roster_without_gsis"] == 1  # B
+    assert diag["unbridged_absent_from_roster"] == 1      # ZZZ999

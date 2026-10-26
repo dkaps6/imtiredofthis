@@ -208,9 +208,19 @@ def build_participation(
         }
         return pd.DataFrame(), diag
 
-    bridge = (rosters[["season", "week", r_gsis, r_pfr]]
-              .rename(columns={r_gsis: "gsis_id", r_pfr: "pfr_id"})
-              .dropna(subset=["gsis_id", "pfr_id"])
+    raw = (rosters[["season", "week", r_gsis, r_pfr]]
+           .rename(columns={r_gsis: "gsis_id", r_pfr: "pfr_id"}))
+    # Why a bridge miss happens matters as much as how often. A roster row can
+    # be missing outright, or present with no pfr_id to join on -- the second
+    # is a roster completeness problem, not a snap-counts problem, and only
+    # this breakdown tells them apart.
+    diag["roster_rows"] = int(len(raw))
+    diag["roster_rows_with_gsis"] = int(raw["gsis_id"].notna().sum())
+    diag["roster_rows_with_pfr"] = int(raw["pfr_id"].notna().sum())
+    diag["roster_rows_bridgeable"] = int(
+        (raw["gsis_id"].notna() & raw["pfr_id"].notna()).sum())
+
+    bridge = (raw.dropna(subset=["gsis_id", "pfr_id"])
               .drop_duplicates(["season", "week", "pfr_id"]))
     s = snaps[["season", "week", s_pfr, s_off]].rename(
         columns={s_pfr: "pfr_id", s_off: "offense_snaps"})
@@ -243,9 +253,16 @@ def build_participation(
     diag["offensive_player_weeks_unmatched"] = int(len(off_unmatched))
     # Never bridges at all -> no card denominator exists, so the card fails
     # closed to NaN. Harmless to rates, but it means the player is invisible.
-    diag["unbridged_only_players"] = int(
-        off_unmatched.loc[~off_unmatched["pfr_id"].isin(bridged_ids),
-                          "pfr_id"].nunique())
+    never = off_unmatched.loc[~off_unmatched["pfr_id"].isin(bridged_ids)]
+    diag["unbridged_only_players"] = int(never["pfr_id"].nunique())
+    # Of those, how many are known to the roster at all? A pfr_id the roster
+    # never lists is a different failure from one it lists without a gsis_id.
+    roster_pfr_ever = set(raw.loc[raw["pfr_id"].notna(), "pfr_id"])
+    never_ids = set(never["pfr_id"].dropna())
+    diag["unbridged_absent_from_roster"] = int(
+        len(never_ids - roster_pfr_ever))
+    diag["unbridged_on_roster_without_gsis"] = int(
+        len(never_ids & roster_pfr_ever))
     # Bridges sometimes -> denominator understated, rates inflated. This is the
     # number that matters, and it must stay at or near zero.
     diag["partial_bridge_player_weeks"] = int(len(partial))

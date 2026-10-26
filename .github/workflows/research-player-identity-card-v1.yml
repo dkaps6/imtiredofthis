@@ -204,6 +204,17 @@ jobs:
                 status["untrusted_denominator_cards"])
           print("denominator contradictions:",
                 status["denominator_contradicted_cards"])
+          b = status["identity_bridge"]
+          print("roster coverage: rows=%s with_gsis=%s with_pfr=%s "
+                "bridgeable=%s" % (b.get("roster_rows"),
+                                   b.get("roster_rows_with_gsis"),
+                                   b.get("roster_rows_with_pfr"),
+                                   b.get("roster_rows_bridgeable")))
+          print("never-bridged players: %s (absent from roster=%s, "
+                "on roster without gsis=%s)" % (
+                    b.get("unbridged_only_players"),
+                    b.get("unbridged_absent_from_roster"),
+                    b.get("unbridged_on_roster_without_gsis")))
           print("bridge:", json.dumps(
               {k: v for k, v in status["identity_bridge"].items()
                if k != "partial_bridge_gsis_ids"}, sort_keys=True))
