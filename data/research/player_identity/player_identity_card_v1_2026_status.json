@@ -2,6 +2,7 @@
   "anomaly_gate_version": "PLAYER_STATE_ANOMALY_GATE_V2_INJURY_RESOLVED",
   "audit_corrections_applied": "6420504608_A_through_E",
   "cards": 35196,
+  "cards_without_target_team_tenure": 29930,
   "denominator_contradicted_cards": 24,
   "evidence_authority_counts": {
     "current_only": 558,
@@ -15,8 +16,8 @@
     "prior+current": 2407,
     "prior_only": 2593
   },
-  "gate_cards_with_withheld_weeks": 1398,
-  "gate_weeks_withheld_total": 1976,
+  "gate_cards_with_withheld_weeks": 1440,
+  "gate_weeks_withheld_total": 2026,
   "history_state_counts": {
     "current_only": 558,
     "no_history": 27928,
@@ -56,14 +57,15 @@
   },
   "injury_source_state": "available",
   "model_facing_rows": 10960,
+  "no_baseline_with_limiting_designation": 0,
   "opportunity_eligible_cards": 10960,
   "partial_game_source_state": "SOURCE_BLOCKED_NO_2026_PARTICIPATION_DATA",
   "player_week_state_counts": {
     "HEALTHY_FULL": 6786,
-    "INJURY_LIMITED": 67,
-    "NO_BASELINE": 1430,
-    "RETURN_FROM_INJURY": 213,
-    "UNRESOLVED_CONTEXT": 1078
+    "INJURY_LIMITED": 110,
+    "NO_BASELINE": 1279,
+    "RETURN_FROM_INJURY": 228,
+    "UNRESOLVED_CONTEXT": 1171
   },
   "players": 3053,
   "population_fallback_cards": 29515,
@@ -84,11 +86,12 @@
     6,
     7
   ],
+  "team_share_semantic": "TARGET_TEAM_TENURE_SHARE_V1",
   "teams": 32,
   "universe_durable": "COMPLETE_ROSTER_UNIVERSE",
   "universe_model_facing": "MODEL_FACING_OPPORTUNITY_UNIVERSE",
   "untrusted_denominator_cards": 0,
   "version": "PLAYER_IDENTITY_CARD_V1",
-  "withheld_explained_cards": 200,
-  "withheld_unexplained_cards": 1284
+  "withheld_explained_cards": 226,
+  "withheld_unexplained_cards": 1308
 }
