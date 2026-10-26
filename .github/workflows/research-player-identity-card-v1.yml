@@ -190,6 +190,11 @@ jobs:
           if status.get("anomaly_gate_version") != \
              "PLAYER_STATE_ANOMALY_GATE_V1_PARTICIPATION_ONLY":
               fail.append("anomaly gate not stamped")
+          # A bye is a gap for every player on an idle team; without the
+          # schedule-aware correction the gate flags whole rosters.
+          if status["identity_bridge"].get("bye_detection") != "available":
+              fail.append("bye detection unavailable: a team bye would be "
+                          "read as an absence for its entire roster")
           sc = status.get("player_week_state_counts") or {}
           if "UNRESOLVED_CONTEXT" not in sc:
               fail.append("gate never fired on real data: no UNRESOLVED_CONTEXT "

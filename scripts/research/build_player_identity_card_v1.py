@@ -234,6 +234,10 @@ def build_participation(
     r_pfr = _first_col(rosters, ["pfr_id", "pfr_player_id"])
     s_pfr = _first_col(snaps, ["pfr_player_id", "pfr_id"])
     s_off = _first_col(snaps, ["offense_snaps", "offense_snap", "off_snaps"])
+    # Needed to tell a bye week from a genuine absence: without it every
+    # player on a team is flagged the week after that team is idle.
+    s_team = _first_col(snaps, ["team", "recent_team", "club_code",
+                                "team_abbr", "posteam"])
     if not (r_gsis and r_pfr and s_pfr and s_off):
         diag["bridge_state"] = "unavailable_missing_columns"
         diag["bridge_columns"] = {
@@ -273,8 +277,11 @@ def build_participation(
         return pd.DataFrame(), diag
     bridge = pairs.drop_duplicates("pfr_id")
     diag["bridge_players_mapped"] = int(len(bridge))
-    s = snaps[["season", "week", s_pfr, s_off]].rename(
-        columns={s_pfr: "pfr_id", s_off: "offense_snaps"})
+    keep = ["season", "week", s_pfr, s_off] + ([s_team] if s_team else [])
+    s = snaps[keep].rename(
+        columns={s_pfr: "pfr_id", s_off: "offense_snaps",
+                 **({s_team: "team"} if s_team else {})})
+    diag["bye_detection"] = "available" if s_team else "unavailable_no_team_col"
     s["season"] = pd.to_numeric(s["season"], errors="coerce")
     s["week"] = pd.to_numeric(s["week"], errors="coerce")
 
@@ -324,9 +331,12 @@ def build_participation(
                 & off["gsis_id"].notna(), "gsis_id"].unique().tolist())
     diag["partial_bridge_gsis_ids"] = partial_gsis
 
+    agg = {"offense_snaps": "max"}
+    if "team" in off.columns:
+        agg["team"] = "first"
     part = (off.loc[off["gsis_id"].notna()]
             .groupby(["season", "week", "gsis_id"], as_index=False)
-            ["offense_snaps"].max())
+            .agg(agg))
     diag["participation_player_weeks"] = int(len(part))
     return part, diag
 
@@ -346,6 +356,7 @@ def label_player_week_states(participation: pd.DataFrame) -> pd.DataFrame:
             baseline_snaps=pd.Series(dtype=float),
             snap_ratio=pd.Series(dtype=float),
             returned_from_absence=pd.Series(dtype=bool),
+            absence_bye_explained=pd.Series(dtype=bool),
             player_state=pd.Series(dtype=object))
 
     pw = participation.sort_values(["gsis_id", "season", "week"]).copy()
@@ -364,12 +375,41 @@ def label_player_week_states(participation: pd.DataFrame) -> pd.DataFrame:
         pw["offense_snaps"] / pw["baseline_snaps"], np.nan)
 
     # A gap in a player's own participation sequence: he played, then did not,
-    # then played again. The gate treats the return as needing explanation.
+    # then played again. The gate treats the return as needing explanation --
+    # but ONLY if his team actually played in the intervening weeks. A bye
+    # week is a gap for every player on the roster and explains itself; left
+    # uncorrected it flags whole teams and makes the gate look like it is
+    # firing when it is mostly reading the schedule.
     prev_week = pw.groupby("gsis_id", sort=False)["week"].shift(1)
     same_season = pw.groupby("gsis_id", sort=False)["season"].shift(1).eq(
         pw["season"])
-    pw["returned_from_absence"] = (
-        same_season & prev_week.notna() & (pw["week"] - prev_week > 1))
+    gap = same_season & prev_week.notna() & (pw["week"] - prev_week > 1)
+
+    if "team" in pw.columns and pw["team"].notna().any():
+        # A (season, week, team) present in participation at all means that
+        # team took offensive snaps that week, i.e. it played.
+        played = set(map(tuple, pw.loc[pw["team"].notna(),
+                                       ["season", "week", "team"]]
+                         .dropna().to_numpy().tolist()))
+
+        def _team_played_during_gap(row) -> bool:
+            lo, hi = int(row["_prev_week"]) + 1, int(row["week"])
+            return any((row["season"], w, row["team"]) in played
+                       for w in range(lo, hi))
+
+        pw["_prev_week"] = prev_week
+        idx = pw.index[gap.fillna(False)]
+        real = pd.Series(False, index=pw.index)
+        if len(idx):
+            real.loc[idx] = pw.loc[idx].apply(_team_played_during_gap, axis=1)
+        pw["returned_from_absence"] = real
+        pw["absence_bye_explained"] = gap.fillna(False) & ~real
+        pw = pw.drop(columns=["_prev_week"])
+    else:
+        # No team column: cannot distinguish a bye from an absence, so keep
+        # the stricter reading rather than silently calling the week clean.
+        pw["returned_from_absence"] = gap.fillna(False)
+        pw["absence_bye_explained"] = False
 
     enough = pw["baseline_weeks"].fillna(0) >= MIN_BASELINE_WEEKS
     abnormal = enough & pw["snap_ratio"].le(PARTIAL_PARTICIPATION_RATIO)

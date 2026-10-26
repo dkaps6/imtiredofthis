@@ -492,3 +492,57 @@ def test_rate_is_reconstructible_from_its_own_published_inputs():
               & (cards.opportunity_kind == "carry")].iloc[0]
     assert (r["opp_in_gate_weeks"] / r["gate_weeks_used"]
             == pytest.approx(r["opp_per_participation_week"]))
+
+
+def _team_part(spec):
+    """spec: {(week, gsis_id): (snaps, team)}"""
+    return pd.DataFrame([
+        {"season": 2026, "week": w, "gsis_id": g,
+         "offense_snaps": n, "team": t}
+        for (w, g), (n, t) in spec.items()])
+
+
+def test_bye_week_gap_is_not_an_absence():
+    """A team's bye is a gap for every player on it and explains itself.
+    Uncorrected, this flags whole rosters and the gate looks like it is
+    firing when it is really just reading the schedule."""
+    spec = {}
+    for g in ("A", "B"):                       # PHI idle in week 5
+        for w in (3, 4, 6, 7):
+            spec[(w, g)] = (60, "PHI")
+    for g in ("E", "F"):                       # DAL plays every week
+        for w in (3, 4, 5, 6, 7):
+            spec[(w, g)] = (60, "DAL")
+    out = label_player_week_states(_team_part(spec))
+    phi6 = out[(out.week == 6) & out.team.eq("PHI")]
+    assert not phi6["returned_from_absence"].any()
+    assert phi6["absence_bye_explained"].all()
+    assert (phi6["player_state"] == STATE_HEALTHY).all()
+
+
+def test_absence_while_the_team_played_is_still_unresolved():
+    """The bye correction must not excuse a real missed game."""
+    spec = {(w, "E"): (60, "DAL") for w in (3, 4, 5, 6, 7)}
+    for w in (3, 4, 6, 7):                     # D missed week 5; DAL played
+        spec[(w, "D")] = (60, "DAL")
+    out = label_player_week_states(_team_part(spec))
+    d6 = out[(out.week == 6) & out.gsis_id.eq("D")].iloc[0]
+    assert bool(d6["returned_from_absence"])
+    assert not bool(d6["absence_bye_explained"])
+    assert d6["player_state"] == STATE_UNRESOLVED
+
+
+def test_without_a_team_column_the_stricter_reading_is_kept():
+    """No team means a bye cannot be told from an absence; fail closed to
+    UNRESOLVED rather than silently calling the week clean."""
+    part = pd.DataFrame([
+        {"season": 2026, "week": w, "gsis_id": GSIS_A, "offense_snaps": 60}
+        for w in (3, 4, 6)])
+    out = label_player_week_states(part).set_index("week")
+    assert bool(out.loc[6, "returned_from_absence"])
+    assert out.loc[6, "player_state"] == STATE_UNRESOLVED
+
+
+def test_participation_reports_whether_bye_detection_is_possible():
+    _, diag = build_participation(rosters(), snaps({(1, PFR_A): 30}))
+    assert diag["bye_detection"] == "unavailable_no_team_col"
