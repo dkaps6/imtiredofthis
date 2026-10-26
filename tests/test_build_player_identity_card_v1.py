@@ -46,12 +46,23 @@ def rosters(weeks=(1, 2, 3), season=2026, team="PHI"):
     return pd.DataFrame(rows)
 
 
-def snaps(spec, season=2026):
-    """spec: {(week, pfr_id): offense_snaps}"""
+def snaps(spec, season=2026, team="PHI"):
+    """spec: {(week, pfr_id): offense_snaps}
+
+    Carries `team`, as real snap counts do: it is the authority for which club
+    a player took snaps for in a given week, which the target-team-tenure
+    share depends on. Use snaps_no_team() to exercise the degraded path.
+    """
     return pd.DataFrame([
-        {"season": season, "week": w, "pfr_player_id": p, "offense_snaps": n}
+        {"season": season, "week": w, "pfr_player_id": p,
+         "offense_snaps": n, "team": team}
         for (w, p), n in spec.items()
     ])
+
+
+def snaps_no_team(spec, season=2026):
+    """Snap counts without a team column, for the degraded-source paths."""
+    return snaps(spec, season=season).drop(columns=["team"])
 
 
 def pbp(spec, season=2026, team="PHI"):
@@ -545,8 +556,10 @@ def test_without_a_team_column_the_stricter_reading_is_kept():
 
 
 def test_participation_reports_whether_bye_detection_is_possible():
-    _, diag = build_participation(rosters(), snaps({(1, PFR_A): 30}))
+    _, diag = build_participation(rosters(), snaps_no_team({(1, PFR_A): 30}))
     assert diag["bye_detection"] == "unavailable_no_team_col"
+    _, ok = build_participation(rosters(), snaps({(1, PFR_A): 30}))
+    assert ok["bye_detection"] == "available"
 
 
 def test_efficiency_excludes_opportunities_from_unexplained_weeks():
@@ -913,3 +926,140 @@ def test_guard_does_not_flag_negative_attestations():
 def test_guard_still_catches_a_real_market_column_beside_an_attestation():
     mixed = pd.DataFrame(columns=["sportsbook_inputs_used", "over_odds"])
     assert _market_shaped_columns(mixed) == ["over_odds"]
+
+
+# ------------------- audit 6425282770 BLOCKER A: NO_BASELINE contamination
+
+def test_first_weeks_with_a_limiting_designation_are_withheld():
+    """Blocker A. A player in his first/second participation week with a KNOWN
+    limiting designation must not enter trajectory as usable just because
+    there is no baseline to judge a snap collapse against."""
+    part = _snaps_pw({**TEAMMATE, (1, GSIS_A): 20, (2, GSIS_A): 18})
+    out = label_player_week_states(
+        part, _inj([(1, GSIS_A, "Questionable", None)]))
+    out = out[out.gsis_id == GSIS_A].set_index("week")
+    assert out.loc[1, "player_state"] == STATE_INJURY_LIMITED
+    assert out.loc[1, "gate_disposition"] == DISPOSITION_WITHHELD
+    # The uncontaminated early week is still NO_BASELINE and still usable.
+    assert out.loc[2, "player_state"] == STATE_NO_BASELINE
+    assert out.loc[2, "gate_disposition"] == DISPOSITION_USABLE
+
+
+def test_return_from_injury_with_insufficient_baseline_is_withheld():
+    """Blocker A. The return state needs no baseline to be meaningful."""
+    part = _snaps_pw({**TEAMMATE, (1, GSIS_A): 30, (3, GSIS_A): 30})
+    out = label_player_week_states(part, _inj([(2, GSIS_A, "Out", None)]))
+    out = out[out.gsis_id == GSIS_A].set_index("week")
+    assert out.loc[3, "player_state"] == STATE_RETURN_FROM_INJURY
+    assert out.loc[3, "gate_disposition"] == DISPOSITION_WITHHELD
+
+
+def test_sparse_player_without_contamination_stays_no_baseline():
+    """Blocker A, the other direction: absence of a baseline must not be
+    read as evidence of being unhealthy."""
+    part = _snaps_pw({**TEAMMATE, (1, GSIS_A): 25, (2, GSIS_A): 25})
+    out = label_player_week_states(part, _inj([(1, GSIS_B, "Out", None)]))
+    out = out[out.gsis_id == GSIS_A].set_index("week")
+    assert (out["player_state"] == STATE_NO_BASELINE).all()
+    assert (out["gate_disposition"] == DISPOSITION_USABLE).all()
+    assert not out["has_limiting_designation"].any()
+
+
+def test_designation_with_a_normal_snap_count_is_not_contamination():
+    """A questionable tag that did not move his workload is not contamination,
+    and the fix for blocker A must not start withholding healthy weeks."""
+    part = _snaps_pw({**TEAMMATE, **{(w, GSIS_A): 60 for w in (1, 2, 3, 4)}})
+    out = label_player_week_states(
+        part, _inj([(4, GSIS_A, "Questionable", None)]))
+    out = out[out.gsis_id == GSIS_A].set_index("week")
+    assert out.loc[4, "player_state"] == STATE_HEALTHY
+    assert out.loc[4, "gate_disposition"] == DISPOSITION_USABLE
+    assert bool(out.loc[4, "has_limiting_designation"])  # seen, not acted on
+
+
+def test_no_baseline_is_not_a_bypass_for_the_disposition_rule():
+    """Belt and braces: no USABLE card may carry a limiting designation in a
+    week the builder could not assess."""
+    part = _snaps_pw({**TEAMMATE, (1, GSIS_A): 20, (2, GSIS_A): 20,
+                      (3, GSIS_A): 20})
+    out = label_player_week_states(
+        part, _inj([(1, GSIS_A, "Out", None), (2, GSIS_A, "Doubtful", None)]))
+    a = out[out.gsis_id == GSIS_A]
+    bypassed = a[(a.gate_disposition == DISPOSITION_USABLE)
+                 & a.has_limiting_designation
+                 & a.player_state.eq(STATE_NO_BASELINE)]
+    assert bypassed.empty, bypassed[["week", "player_state"]].to_dict("records")
+
+
+# -------------------- audit 6425282770 BLOCKER B: trade share semantics
+
+def test_in_season_trade_cannot_mix_old_team_numerator_with_new_team_denominator():
+    """Blocker B, the test the audit asked for: large old-team workload, sparse
+    new-team tenure. No old-team opportunity may enter the target-team share.
+
+    A plays weeks 1-3 for NYG with heavy volume, is traded, and plays week 4
+    for PHI sparsely. His week-6 card has team_target_week = PHI.
+
+      old team  3 weeks x 10 carries = 30   (must NOT count)
+      new team  1 week  x  2 carries =  2
+      PHI team total in week 4       =  2 + 8 (teammate) = 10
+
+      target-team-tenure share = 2/10 = 0.20
+      the old broken form would have been 32/10 = 3.2, or 2/10 vs a
+      season-wide PHI denominator -- either way not a current-role share.
+    """
+    ros = rosters(weeks=WK, team="PHI")          # target-week roster says PHI
+    s_old = snaps({(w, PFR_A): 60 for w in (1, 2, 3)}, team="NYG")
+    s_new = snaps({(4, PFR_A): 60, (4, PFR_B): 60}, team="PHI")
+    part, diag = build_participation(ros, pd.concat([s_old, s_new],
+                                                   ignore_index=True))
+    assert diag["bridge_state"] == "ok"
+
+    ev = ([(w, GSIS_A, 50, 4) for w in (1, 1, 2, 2, 3, 3)] * 5)[:30]
+    old_rows = pbp(ev, team="NYG")
+    new_rows = pbp([(4, GSIS_A, 50, 4)] * 2 + [(4, GSIS_B, 50, 4)] * 8,
+                   team="PHI")
+    cards, _ = build_cards(pd.concat([old_rows, new_rows], ignore_index=True),
+                           ros, part, 2026, [6], [])
+    a = cards[(cards.gsis_id == GSIS_A)
+              & (cards.opportunity_kind == "carry")].iloc[0]
+
+    assert a["team_target_week"] == "PHI"
+    assert "NYG" in a["teams_in_history"]
+    assert a["team_share_semantic"] == "TARGET_TEAM_TENURE_SHARE_V1"
+    # Only the PHI week counts as tenure.
+    assert a["target_team_tenure_weeks"] == 1
+    assert a["opp_total_current_season_target_team"] == 2
+    # ...while the raw all-teams count is untouched, being a fact not a claim.
+    assert a["opp_total_current_season"] == 32
+    # The share is PHI-only on both sides.
+    assert a["player_opp_in_gate_weeks_current"] == 2
+    assert a["team_opp_in_gate_weeks"] == 10
+    assert a["team_share_current"] == pytest.approx(0.2)
+    assert a["team_share_current_all_weeks"] == pytest.approx(0.2)
+    assert not bool(a["no_target_team_tenure_evidence"])
+
+
+def test_no_target_team_tenure_yields_nan_not_the_previous_team_role():
+    """A player with history but no tenure on his target-week team must not
+    import his old role. NaN, explicitly flagged."""
+    ros = rosters(weeks=WK, team="PHI")
+    part, _ = build_participation(
+        ros, snaps({(w, PFR_A): 60 for w in (1, 2, 3)}, team="NYG"))
+    cards, _ = build_cards(pbp([(w, GSIS_A, 50, 4) for w in (1, 2, 3)],
+                               team="NYG"),
+                           ros, part, 2026, [6], [])
+    a = cards[(cards.gsis_id == GSIS_A)
+              & (cards.opportunity_kind == "carry")].iloc[0]
+    assert bool(a["no_target_team_tenure_evidence"])
+    assert a["target_team_tenure_weeks"] == 0
+    assert np.isnan(a["team_share_current"])
+    assert np.isnan(a["team_share_current_all_weeks"])
+    # His own history is still visible; only the role CLAIM is withheld.
+    assert a["opp_total_current_season"] == 3
+    assert a["opp_total_current_season_target_team"] == 0
+
+
+def test_tenure_source_is_reported():
+    c = _cards({(1, PFR_A): 30}, [(1, GSIS_A, 50, 4)])
+    assert (c["target_team_tenure_source"] == "participation_team").all()

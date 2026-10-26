@@ -449,6 +449,7 @@ def label_player_week_states(participation: pd.DataFrame,
             injury_source_state=pd.Series(dtype=object),
             injury_designation=pd.Series(dtype=object),
             partial_game_source_state=pd.Series(dtype=object),
+            has_limiting_designation=pd.Series(dtype=bool),
             gate_disposition=pd.Series(dtype=object))
 
     pw = participation.sort_values(["gsis_id", "season", "week"]).copy()
@@ -508,12 +509,15 @@ def label_player_week_states(participation: pd.DataFrame,
              else float(partial_ratio))
     abnormal = enough & pw["snap_ratio"].le(ratio)
 
-    pw["player_state"] = np.where(
-        ~enough, STATE_NO_BASELINE,
-        np.where(abnormal | pw["returned_from_absence"],
-                 STATE_UNRESOLVED, STATE_HEALTHY))
-
-    # ---- source-qualified resolution of the unexplained weeks -------------
+    # Injury flags are resolved BEFORE the state assignment, because an
+    # independent contamination signal must not be gated behind having a
+    # baseline. Audit 6425282770 blocker A: the previous ordering sent every
+    # baseline-short week to NO_BASELINE, the resolver only revisited
+    # UNRESOLVED_CONTEXT, and NO_BASELINE mapped to USABLE -- so a player in
+    # his first or second participation week with a KNOWN limiting
+    # designation entered trajectory and efficiency as usable evidence. That
+    # is precisely the sparse-history population that needs fail-closed
+    # handling most.
     inj = pd.DataFrame() if injuries is None else injuries
     limiting, absent_cause = _injury_flags(inj)
     pw["injury_source_state"] = ("available" if limiting or absent_cause
@@ -521,6 +525,27 @@ def label_player_week_states(participation: pd.DataFrame,
     pw["injury_designation"] = ""
     pw["partial_game_source_state"] = PARTIAL_GAME_SOURCE_STATE
     pw["partial_participation_ratio"] = ratio
+
+    has_limiting = pd.Series(False, index=pw.index)
+    if limiting:
+        has_limiting = pd.Series(
+            [(int(a), int(b), c) in limiting for a, b, c in
+             zip(pw["season"], pw["week"], pw["gsis_id"])], index=pw.index)
+    pw["has_limiting_designation"] = has_limiting
+
+    # Baseline insufficiency may prevent a SNAP-COLLAPSE judgment; it may not
+    # override an independent source-qualified signal. Where the baseline IS
+    # sufficient and the snap count is normal, a designation is observably
+    # non-limiting in effect and the week stays healthy -- a questionable tag
+    # that did not move his workload is not contamination. Where the baseline
+    # is short we cannot assess that, so the designation forces the week out.
+    contaminated = (abnormal
+                    | pw["returned_from_absence"].fillna(False)
+                    | (~enough & has_limiting))
+
+    pw["player_state"] = np.where(
+        contaminated, STATE_UNRESOLVED,
+        np.where(~enough, STATE_NO_BASELINE, STATE_HEALTHY))
 
     if limiting or absent_cause:
         prev_w = pw.groupby("gsis_id", sort=False, group_keys=False)["week"] \
@@ -777,6 +802,19 @@ def build_cards(
                 lambda x: sorted(set(x.astype(int)))).to_dict()
             state_counts = (pw.groupby(["gsis_id", "player_state"]).size()
                             .unstack(fill_value=0))
+            # Audit 6425282770 blocker B. A team share must not mix an OLD
+            # team's numerator with the CURRENT team's denominator. Tenure
+            # comes from the participation authority, which carries the team a
+            # player actually took snaps for in each week -- stronger than
+            # inferring it from opportunity, since a player can be on the
+            # roster and never touch the ball.
+            if "team" in pw.columns and pw["team"].notna().any():
+                tenure_by = (pw.dropna(subset=["team"])
+                             .groupby(["gsis_id", "team"])["week"]
+                             .apply(lambda x: {int(v) for v in x}).to_dict())
+                tenure_src = "participation_team"
+            else:
+                tenure_by, tenure_src = {}, "opportunity_posteam_fallback"
             # The gate names EFFICIENCY as well as trajectory. A carry taken
             # in an unexplained week is a real carry, but its yardage is not
             # representative evidence of what this player is, so the same
@@ -798,6 +836,7 @@ def build_cards(
             state_counts = pd.DataFrame()
             withheld_pw = set()
             wh_expl, wh_unexpl = {}, {}
+            tenure_by, tenure_src = {}, "unavailable_no_participation"
 
         # Week-grained team totals, so a share can be built over the SAME
         # accepted player-week set as its numerator. Gating only the numerator
@@ -809,11 +848,6 @@ def build_cards(
         team_wk_i5 = cur.loc[cur["is_inside_5"]].groupby(
             ["posteam", "opportunity_kind", "week"]).size()
 
-        team_tot = cur.groupby(["posteam", "opportunity_kind"]).size()
-        team_rz = cur.loc[cur["is_red_zone"]].groupby(
-            ["posteam", "opportunity_kind"]).size()
-        team_i5 = cur.loc[cur["is_inside_5"]].groupby(
-            ["posteam", "opportunity_kind"]).size()
 
         hist_by = dict(tuple(hist.groupby(["gsis_id", "opportunity_kind"])))
         cur_by = dict(tuple(cur.groupby(["gsis_id", "opportunity_kind"])))
@@ -871,26 +905,53 @@ def build_cards(
                 per_week_recent, per_week_earlier = (gated["recent"],
                                                     gated["earlier"])
 
-                tn = team_tot.get((team_now, kind), 0)
-                trz = team_rz.get((team_now, kind), 0)
-                ti5 = team_i5.get((team_now, kind), 0)
+                # TARGET-TEAM-TENURE SHARE (audit 6425282770 blocker B).
+                # Numerator, accepted weeks and denominator all restricted to
+                # team_now. An in-season traded player previously contributed
+                # OLD-team opportunities against the NEW team's denominator,
+                # which is not a current-role share even when it stays <= 1.
+                # No tenure evidence yet -> NaN, never the previous team's role.
+                tenure = tenure_by.get((pid, team_now))
+                if tenure is None and not tenure_by:
+                    # No participation team authority: fall back to the weeks
+                    # the player demonstrably played FOR team_now.
+                    tenure = ({int(w) for w in
+                               gc.loc[gc["posteam"].eq(team_now), "week"]}
+                              if n_cur else set())
+                tenure = tenure or set()
 
-                # Gated shares: numerator and denominator over the identical
-                # accepted week set. Empty set -> NaN, never a fabricated 0.
-                acc = weeks_clean.get(pid, []) if trusted else []
-                def _team_sum(idx, weeks=acc, t=team_now, k=kind):
+                gc_team = (gc.loc[gc["posteam"].eq(team_now)]
+                           if n_cur else gc.iloc[0:0])
+                acc = ([w for w in weeks_clean.get(pid, []) if w in tenure]
+                       if trusted else [])
+                acc_all = sorted(tenure)
+
+                def _team_sum(idx, weeks, t=team_now, k=kind):
                     return float(sum(idx.get((t, k, int(w)), 0) for w in weeks))
-                g_tn = _team_sum(team_wk)
-                g_trz = _team_sum(team_wk_rz)
-                g_ti5 = _team_sum(team_wk_i5)
-                if acc and n_cur:
-                    acc_set = set(acc)
-                    gca = gc.loc[gc["week"].astype(int).isin(acc_set)]
-                else:
-                    gca = gc.iloc[0:0]
+
+                def _player_sum(weeks):
+                    if not weeks or not len(gc_team):
+                        return gc_team.iloc[0:0]
+                    return gc_team.loc[gc_team["week"].astype(int).isin(set(weeks))]
+
+                g_tn = _team_sum(team_wk, acc)
+                g_trz = _team_sum(team_wk_rz, acc)
+                g_ti5 = _team_sum(team_wk_i5, acc)
+                gca = _player_sum(acc)
                 g_num = float(len(gca))
                 g_num_rz = float(gca["is_red_zone"].sum()) if len(gca) else 0.0
                 g_num_i5 = float(gca["is_inside_5"].sum()) if len(gca) else 0.0
+
+                # Ungated-by-the-anomaly-gate, but still team-correct: all
+                # tenure weeks rather than accepted weeks only. The old
+                # all-weeks figure carried the same trade mismatch and is gone.
+                u_tn = _team_sum(team_wk, acc_all)
+                u_num = float(len(_player_sum(acc_all)))
+                u_rz = _team_sum(team_wk_rz, acc_all)
+                u_i5 = _team_sum(team_wk_i5, acc_all)
+                gu = _player_sum(acc_all)
+                u_num_rz = float(gu["is_red_zone"].sum()) if len(gu) else 0.0
+                u_num_i5 = float(gu["is_inside_5"].sum()) if len(gu) else 0.0
 
                 rows.append({
                     "season": season,
@@ -948,12 +1009,20 @@ def build_cards(
                     "participation_denominator_contradicted": (
                         bool(trusted and n_part < len(obs))),
                     "opp_per_participation_week": per_week,
-                    # Gated (canonical) and ungated, plus the exact numerator
-                    # and denominator used, so the share is reconstructible.
+                    # TARGET-TEAM-TENURE share, gated and ungated, plus the
+                    # exact numerator and denominator so it is reconstructible.
+                    # `opp_total_current_season` below stays ALL-TEAMS: it is a
+                    # raw fact, not a role claim.
                     "team_share_current": _rate(g_num, g_tn),
-                    "team_share_current_all_weeks": _rate(n_cur, tn),
+                    "team_share_current_all_weeks": _rate(u_num, u_tn),
+                    "team_share_semantic": "TARGET_TEAM_TENURE_SHARE_V1",
                     "team_opp_in_gate_weeks": g_tn,
                     "player_opp_in_gate_weeks_current": g_num,
+                    "target_team_tenure_weeks": len(acc_all),
+                    "target_team_tenure_weeks_accepted": len(acc),
+                    "no_target_team_tenure_evidence": bool(not acc_all),
+                    "target_team_tenure_source": tenure_src,
+                    "opp_total_current_season_target_team": int(len(gc_team)),
                     # --- trajectory / stability ---------------------------
                     "opp_per_week_recent2": per_week_recent,
                     "opp_per_week_earlier": per_week_earlier,
@@ -999,9 +1068,9 @@ def build_cards(
                     "team_red_zone_share_current": _rate(g_num_rz, g_trz),
                     "team_inside_5_share_current": _rate(g_num_i5, g_ti5),
                     "team_red_zone_share_current_all_weeks": _rate(
-                        gc["is_red_zone"].sum() if n_cur else 0, trz),
+                        u_num_rz, u_rz),
                     "team_inside_5_share_current_all_weeks": _rate(
-                        gc["is_inside_5"].sum() if n_cur else 0, ti5),
+                        u_num_i5, u_i5),
                     "team_rz_opp_in_gate_weeks": g_trz,
                     "team_i5_opp_in_gate_weeks": g_ti5,
                     "player_rz_opp_in_gate_weeks": g_num_rz,
@@ -1084,6 +1153,19 @@ def build_cards(
             k: int(v) for k, v in
             (participation["player_state"].value_counts().items()
              if have_part and "player_state" in participation.columns else [])},
+        # Blocker A invariant: a baseline-short week carrying a known limiting
+        # designation must never be labelled NO_BASELINE (which is USABLE).
+        # Reported so CI can enforce it, not only the unit tests.
+        "no_baseline_with_limiting_designation": int(
+            (participation["player_state"].eq(STATE_NO_BASELINE)
+             & participation["has_limiting_designation"].astype(bool)).sum())
+        if have_part and "has_limiting_designation" in participation.columns
+        else 0,
+        # Blocker B: how many cards have no tenure on their target-week team,
+        # and therefore correctly publish no role share at all.
+        "cards_without_target_team_tenure": int(
+            out["no_target_team_tenure_evidence"].astype(bool).sum()),
+        "team_share_semantic": "TARGET_TEAM_TENURE_SHARE_V1",
         "anomaly_gate_version": (
             "PLAYER_STATE_ANOMALY_GATE_V2_INJURY_RESOLVED"
             if inj_state == "available"

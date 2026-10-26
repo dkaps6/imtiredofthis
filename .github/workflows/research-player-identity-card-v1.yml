@@ -251,6 +251,46 @@ jobs:
               fail.append(f"{int(bad.sum())} cards publish a rate that does "
                           "not equal opp_in_gate_weeks / gate_weeks_used")
 
+          # BLOCKER A (audit 6425282770): baseline insufficiency must not
+          # override an independent contamination signal.
+          if int(status.get("no_baseline_with_limiting_designation", -1)) != 0:
+              fail.append(
+                  f"{status.get('no_baseline_with_limiting_designation')} "
+                  "player-weeks are NO_BASELINE despite a known limiting "
+                  "designation, i.e. usable despite known contamination")
+
+          # BLOCKER B: target-team-tenure share semantics.
+          if status.get("team_share_semantic") != "TARGET_TEAM_TENURE_SHARE_V1":
+              fail.append("team share semantic not stamped")
+          if not (cards["team_share_semantic"]
+                  == "TARGET_TEAM_TENURE_SHARE_V1").all():
+              fail.append("per-card team share semantic missing")
+          no_ten = cards["no_target_team_tenure_evidence"].astype(bool)
+          leaked_share = no_ten & pd.to_numeric(
+              cards["team_share_current"], errors="coerce").notna()
+          if leaked_share.any():
+              fail.append(f"{int(leaked_share.sum())} cards publish a role "
+                          "share with no target-team tenure evidence")
+          leaked_ung = no_ten & pd.to_numeric(
+              cards["team_share_current_all_weeks"], errors="coerce").notna()
+          if leaked_ung.any():
+              fail.append(f"{int(leaked_ung.sum())} cards publish an ungated "
+                          "role share with no target-team tenure evidence")
+          # Numerator must never exceed the all-teams raw count.
+          tgt = pd.to_numeric(cards["opp_total_current_season_target_team"],
+                              errors="coerce").fillna(0)
+          allt = pd.to_numeric(cards["opp_total_current_season"],
+                               errors="coerce").fillna(0)
+          if (tgt > allt).any():
+              fail.append("target-team opportunity exceeds all-teams count")
+          if not (cards["target_team_tenure_source"]
+                  == "participation_team").all():
+              fail.append("tenure not sourced from the participation authority")
+          print("cards without target-team tenure:",
+                status.get("cards_without_target_team_tenure"))
+          print("NO_BASELINE despite limiting designation:",
+                status.get("no_baseline_with_limiting_designation"))
+
           # Week-matched team-share denominators (audit 6425282770 #2).
           ts = pd.to_numeric(cards["team_share_current"], errors="coerce")
           tsa = pd.to_numeric(cards["team_share_current_all_weeks"],
