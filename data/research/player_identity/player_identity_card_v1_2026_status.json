@@ -1,0 +1,38 @@
+{
+  "audit_corrections_applied": "6420504608_A_through_E",
+  "cards": 35196,
+  "history_state_counts": {
+    "current_only": 558,
+    "no_history": 27928,
+    "participation_only_zero_opportunity": 1587,
+    "prior+current": 2409,
+    "prior_only": 2714
+  },
+  "identity_bridge": {
+    "bridge_match_rate": 0.8117859784663434,
+    "bridge_matched": 29631,
+    "bridge_state": "ok",
+    "bridge_unmatched": 6870,
+    "participation_player_weeks": 9568,
+    "snap_rows": 36501
+  },
+  "players": 3053,
+  "prior_seasons": [
+    2025
+  ],
+  "scientific_boundary": "DESCRIPTIVE_STATE_ONLY_NO_FIT_NO_PROMOTION",
+  "season": 2026,
+  "sportsbook_inputs_used": 0,
+  "strict_prior": true,
+  "target_weeks": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "teams": 32,
+  "version": "PLAYER_IDENTITY_CARD_V1"
+}
