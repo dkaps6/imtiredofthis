@@ -1333,3 +1333,56 @@ def test_column_inventory_is_recorded_for_non_market_columns(tmp_path):
     inv = diag["scanned"][0]["all_non_market_column_names"]
     assert "mystery_entitlement" in inv
     assert "vegas_line" not in inv
+
+
+# ---------------- five-part Week-7 materiality report (6428042413)
+
+def test_materiality_report_reproduces_both_audit_figures():
+    """The report is only credible if it reproduces the auditor's independently
+    derived numbers from the preserved trace."""
+    import json, pathlib
+    p = pathlib.Path("data/research/week7_opportunity_trace/"
+                     "week7_fallback_materiality_report_v1.json")
+    if not p.exists():
+        pytest.skip("report not generated in this checkout")
+    d = json.loads(p.read_text())
+    assert d["part3_rush_allocator_materiality"]["reproduces_audit_1_824446"]
+    assert d["part4_target_room_materiality"]["reproduces_audit_1_264686"]
+    assert d["part3_rush_allocator_materiality"][
+        "zero_history_rows_admitted_to_top_five"] == 13
+    assert d["part4_target_room_materiality"][
+        "zero_history_players_entitlement_ge_0_05"] == 17
+
+
+def test_report_keeps_the_priced_board_as_availability_only():
+    """Part 5 must carry its own warning: using the priced board to bound a
+    football population is the §3 error that produced a wrong conclusion."""
+    import json, pathlib
+    p = pathlib.Path("data/research/week7_opportunity_trace/"
+                     "week7_fallback_materiality_report_v1.json")
+    if not p.exists():
+        pytest.skip("report not generated in this checkout")
+    d = json.loads(p.read_text())
+    p5 = d["part5_priced_board_subset_sportsbook_availability_only"]
+    assert "WARNING" in p5
+    assert "availability" in p5["WARNING"].lower()
+    assert "§3" in p5["WARNING"] or "section 3" in p5["WARNING"].lower()
+
+
+def test_production_posterior_has_no_exact_zeros_unlike_the_defaults_table():
+    """The finding that retired my 'zero-prior cannot move allocation' claim:
+    DEFAULTS lists rush_share[TE]=0.00 and tgt_share[QB]=0.0, but production's
+    posterior for every fallback row is nonzero in both markets."""
+    import json, pathlib
+    p = pathlib.Path("data/research/week7_opportunity_trace/"
+                     "week7_fallback_materiality_report_v1.json")
+    if not p.exists():
+        pytest.skip("report not generated in this checkout")
+    d = json.loads(p.read_text())["part2_nonzero_posterior_fallback"]
+    assert d["rows_with_exactly_zero_rush_posterior"] == 0
+    assert d["rows_with_exactly_zero_tgt_posterior"] == 0
+    post = d["posterior_by_position_group"]
+    assert post["TE"]["bayes_rush_share"] > 0          # DEFAULTS says 0.00
+    assert post["QB"]["bayes_tgt_share"] > 0           # DEFAULTS says 0.0
+    assert PROD_DEFAULTS["rush_share"]["TE"] == 0.0    # the constant, for contrast
+    assert PROD_DEFAULTS["tgt_share"]["QB"] == 0.0

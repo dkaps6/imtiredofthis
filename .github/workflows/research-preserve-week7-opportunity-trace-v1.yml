@@ -133,6 +133,56 @@ jobs:
           print("\ntrace is pre-sportsbook explanatory state only")
           EOF
 
+      - name: Build the five-part materiality report
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/report_week7_fallback_materiality_v1.py \
+            --trace-dir data/research/week7_opportunity_trace \
+            --out-dir data/research/week7_opportunity_trace \
+            --week "${WEEK}"
+
+      - name: Assert the report reproduces the audit and keeps part 5 separate
+        run: |
+          set -euo pipefail
+          python - <<'EOF'
+          import json, os
+          d = json.load(open("data/research/week7_opportunity_trace/"
+                             f"week{os.environ['WEEK']}_fallback_materiality_report_v1.json"))
+          fail = []
+          if d.get("outcomes_inspected"):
+              fail.append("outcomes inspected")
+          p3, p4 = (d["part3_rush_allocator_materiality"],
+                    d["part4_target_room_materiality"])
+          if not p3["reproduces_audit_1_824446"]:
+              fail.append(f"rush route does not reproduce the audit: "
+                          f"{p3['final_rush_allocation_probability']}")
+          if not p4["reproduces_audit_1_264686"]:
+              fail.append(f"target route does not reproduce the audit: "
+                          f"{p4['zero_history_final_target_entitlement']}")
+          p5 = d["part5_priced_board_subset_sportsbook_availability_only"]
+          if "WARNING" not in p5:
+              fail.append("part 5 lost its sportsbook-availability warning")
+          print("part1 universe rows:",
+                d["part1_full_football_universe_population_fallback"]["football_universe_rows"])
+          print("part2 exactly-zero posteriors: rush=%s tgt=%s" % (
+              d["part2_nonzero_posterior_fallback"]["rows_with_exactly_zero_rush_posterior"],
+              d["part2_nonzero_posterior_fallback"]["rows_with_exactly_zero_tgt_posterior"]))
+          print("part3 rush allocation probability:",
+                p3["final_rush_allocation_probability"])
+          print("part4 target entitlement:",
+                p4["zero_history_final_target_entitlement"],
+                f"({p4['zero_history_share_of_total']:.4%})")
+          print("part5 priced fallback players:",
+                p5["position_prior_only_priced_players"])
+          if fail:
+              print("\nFAILED ASSERTIONS:")
+              for f in fail:
+                  print("  -", f)
+              raise SystemExit(1)
+          print("\nreport reproduces the audit on both routes")
+          EOF
+
       - name: Commit the durable trace
         run: |
           set -euo pipefail
