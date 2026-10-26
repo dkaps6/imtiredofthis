@@ -125,8 +125,33 @@ jobs:
           # (A)(E) participation bridge was genuinely used
           if status["identity_bridge"].get("bridge_state") != "ok":
               fail.append(f"bridge not ok: {status['identity_bridge']}")
-          if not (cards["participation_source_state"] == "available").all():
-              fail.append("participation source not available on every card")
+          # Three-valued now: a partially-bridged player keeps his raw counts
+          # but his rates fail closed, so that state is expected and allowed.
+          # "unavailable" is the one that means the denominator never existed.
+          states = set(cards["participation_source_state"].unique())
+          if "unavailable" in states:
+              n_un = int((cards["participation_source_state"]
+                          == "unavailable").sum())
+              fail.append(f"{n_un} cards have no participation denominator")
+          unknown = states - {"available", "unavailable",
+                              "available_untrusted_partial_bridge"}
+          if unknown:
+              fail.append(f"unexpected participation_source_state: {unknown}")
+
+          # An understated denominator must never surface as a confident rate.
+          untrusted = cards["participation_source_state"].eq(
+              "available_untrusted_partial_bridge")
+          leaked = untrusted & pd.to_numeric(
+              cards["opp_per_participation_week"], errors="coerce").notna()
+          if leaked.any():
+              fail.append(f"{int(leaked.sum())} untrusted-denominator cards "
+                          "still published a per-week rate")
+          # With those excluded, a remaining contradiction is a real
+          # inconsistency rather than a known bridge gap.
+          if bool(cards["participation_denominator_contradicted"].any()):
+              n_c = int(cards["participation_denominator_contradicted"].sum())
+              fail.append(f"{n_c} cards have fewer participation weeks than "
+                          "weeks in which opportunity was observed")
 
           # (B) active zero-opportunity weeks are represented, not dropped
           az = pd.to_numeric(cards["active_zero_opportunity_weeks"],
@@ -155,9 +180,19 @@ jobs:
 
           print(f"cards={len(cards)} players={status['players']} "
                 f"teams={status['teams']}")
-          print("history_state:", status["history_state_counts"])
+          print("history_state (all):", status["history_state_counts"])
+          print("opportunity-eligible cards:",
+                status["opportunity_eligible_cards"])
+          print("history_state (opportunity-eligible):",
+                status["history_state_counts_opportunity_eligible"])
           print("active zero-opportunity player-weeks:", int(az.sum()))
-          print("bridge:", json.dumps(status["identity_bridge"], sort_keys=True))
+          print("untrusted-denominator cards:",
+                status["untrusted_denominator_cards"])
+          print("denominator contradictions:",
+                status["denominator_contradicted_cards"])
+          print("bridge:", json.dumps(
+              {k: v for k, v in status["identity_bridge"].items()
+               if k != "partial_bridge_gsis_ids"}, sort_keys=True))
           if fail:
               print("\nFAILED ASSERTIONS:")
               for f in fail:

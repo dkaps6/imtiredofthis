@@ -285,3 +285,63 @@ def test_cards_never_carry_sportsbook_input():
     c = _cards({(1, PFR_A): 30}, [(1, GSIS_A, 50, 4)])
     assert (c["sportsbook_inputs_used"] == 0).all()
     assert c["strict_prior"].all()
+
+
+# -------------------------------------- partial bridge denominator trust
+
+def test_partial_bridge_is_measured_not_just_overall_match_rate():
+    """A bridged-in-week-1-only player with week-2 snaps is partial."""
+    ros = rosters(weeks=(1, 2, 3))
+    # Strip B's week-2 bridge row so his week-2 offensive snaps cannot resolve.
+    ros = ros.drop(ros[(ros.week == 2) & (ros.pfr_id == PFR_B)].index)
+    _, diag = build_participation(
+        ros, snaps({(1, PFR_B): 20, (2, PFR_B): 20, (1, PFR_A): 30}))
+    assert diag["partial_bridge_player_weeks"] == 1
+    assert diag["partial_bridge_players"] == 1
+    assert GSIS_B in diag["partial_bridge_gsis_ids"]
+
+
+def test_never_bridged_player_is_not_counted_as_partial():
+    _, diag = build_participation(
+        rosters(), snaps({(1, "ZZZ999"): 20, (1, PFR_A): 30}))
+    assert diag["partial_bridge_player_weeks"] == 0
+    assert diag["unbridged_only_players"] == 1
+
+
+def test_untrusted_denominator_fails_rates_closed_rather_than_inflating():
+    """An understated denominator must yield NaN, never a confident rate."""
+    ros = rosters()
+    part, _ = build_participation(
+        ros, snaps({(1, PFR_A): 30, (2, PFR_A): 30}))
+    ev = [(1, GSIS_A, 50, 4), (1, GSIS_A, 40, 6)]
+
+    clean, _ = build_cards(pbp(ev), ros, part, 2026, [3], [])
+    r_clean = clean[(clean.gsis_id == GSIS_A)
+                    & (clean.opportunity_kind == "carry")].iloc[0]
+    assert r_clean["opp_per_participation_week"] == pytest.approx(1.0)
+    assert r_clean["participation_source_state"] == "available"
+
+    flagged, _ = build_cards(pbp(ev), ros, part, 2026, [3], [],
+                             untrusted_denominator_ids={GSIS_A})
+    r_flag = flagged[(flagged.gsis_id == GSIS_A)
+                     & (flagged.opportunity_kind == "carry")].iloc[0]
+    assert np.isnan(r_flag["opp_per_participation_week"])
+    assert np.isnan(r_flag["opp_week_to_week_sd"])
+    assert np.isnan(r_flag["active_zero_opportunity_weeks"])
+    assert (r_flag["participation_source_state"]
+            == "available_untrusted_partial_bridge")
+    # Raw counts stay visible — only the rates built on a short denominator go.
+    assert r_flag["opp_total_current_season"] == 2
+
+
+def test_untrusted_flag_does_not_leak_to_other_players():
+    ros = rosters()
+    part, _ = build_participation(
+        ros, snaps({(1, PFR_A): 30, (2, PFR_A): 30, (1, PFR_B): 30}))
+    cards, _ = build_cards(
+        pbp([(1, GSIS_A, 50, 4), (1, GSIS_B, 30, 3)]), ros, part, 2026, [3], [],
+        untrusted_denominator_ids={GSIS_A})
+    b = cards[(cards.gsis_id == GSIS_B)
+              & (cards.opportunity_kind == "carry")].iloc[0]
+    assert b["participation_source_state"] == "available"
+    assert not np.isnan(b["opp_per_participation_week"])

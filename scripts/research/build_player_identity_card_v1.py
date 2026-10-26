@@ -97,6 +97,12 @@ def _nflv():
 # "10 carries with 3 inside the 5", which is the distinction it exists to carry.
 _QUALITY_COLS = ("yardline_100", "down", "goal_to_go", "half_seconds_remaining")
 
+# Positions that can plausibly be allocated a carry or a target. Cards are
+# still emitted for everyone on the roster -- fix (D) forbids narrowing the
+# universe -- but a punter's "no rushing history" is not a finding, and
+# without this flag it is 69% of the rows.
+_OPPORTUNITY_POSITIONS = frozenset({"QB", "RB", "FB", "HB", "WR", "TE"})
+
 RED_ZONE = 20
 INSIDE_10 = 10
 INSIDE_5 = 5
@@ -221,10 +227,38 @@ def build_participation(
                                  if len(merged) else float("nan"))
     diag["bridge_state"] = "ok" if matched.any() else "unavailable_no_matches"
 
-    part = merged.loc[matched].copy()
-    part["offense_snaps"] = pd.to_numeric(part["offense_snaps"],
-                                          errors="coerce").fillna(0)
-    part = (part.loc[part["offense_snaps"] > 0]
+    merged["offense_snaps"] = pd.to_numeric(merged["offense_snaps"],
+                                            errors="coerce").fillna(0)
+
+    # A bridge miss is only harmful where it drops an OFFENSIVE player-week for
+    # a player who bridges in some other week: his participation denominator is
+    # then understated, which inflates every per-week rate built on it. That is
+    # the same upward bias fix (B) exists to remove, re-entering by another
+    # door, so measure it rather than trust the overall match rate.
+    off = merged.loc[merged["offense_snaps"] > 0]
+    off_unmatched = off.loc[off["gsis_id"].isna()]
+    bridged_ids = set(off.loc[off["gsis_id"].notna(), "pfr_id"].dropna())
+    partial = off_unmatched.loc[off_unmatched["pfr_id"].isin(bridged_ids)]
+    diag["offensive_player_weeks_total"] = int(len(off))
+    diag["offensive_player_weeks_unmatched"] = int(len(off_unmatched))
+    # Never bridges at all -> no card denominator exists, so the card fails
+    # closed to NaN. Harmless to rates, but it means the player is invisible.
+    diag["unbridged_only_players"] = int(
+        off_unmatched.loc[~off_unmatched["pfr_id"].isin(bridged_ids),
+                          "pfr_id"].nunique())
+    # Bridges sometimes -> denominator understated, rates inflated. This is the
+    # number that matters, and it must stay at or near zero.
+    diag["partial_bridge_player_weeks"] = int(len(partial))
+    diag["partial_bridge_players"] = int(partial["pfr_id"].nunique())
+    # Resolve the affected players to gsis so the card layer can fail their
+    # rates closed, the same way it already does for a player with no
+    # participation at all. An inflated rate is worse than a missing one.
+    partial_gsis = sorted(
+        off.loc[off["pfr_id"].isin(set(partial["pfr_id"].dropna()))
+                & off["gsis_id"].notna(), "gsis_id"].unique().tolist())
+    diag["partial_bridge_gsis_ids"] = partial_gsis
+
+    part = (off.loc[off["gsis_id"].notna()]
             .groupby(["season", "week", "gsis_id"], as_index=False)
             ["offense_snaps"].max())
     diag["participation_player_weeks"] = int(len(part))
@@ -314,6 +348,7 @@ def build_cards(
     season: int,
     weeks: list[int],
     prior_seasons: list[int],
+    untrusted_denominator_ids: set | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     ev = player_opportunity_rows(pbp)
     if ev.empty:
@@ -330,6 +365,10 @@ def build_cards(
     ros["week"] = pd.to_numeric(ros["week"], errors="coerce")
 
     have_part = not participation.empty
+    # Players whose participation weeks are only partially bridged. Their
+    # denominator is short, so any rate built on it is inflated; fail those
+    # rates closed per player rather than publish a confident overstatement.
+    untrusted = set(untrusted_denominator_ids or ())
     kinds = ("carry", "target")
     rows = []
 
@@ -367,6 +406,7 @@ def build_cards(
             pid = pr[r_gsis]
             team_now = pr[r_team]  # (C) target-week team authority
             n_part = int(part_weeks.get(pid, 0)) if have_part else 0
+            trusted = have_part and pid not in untrusted
 
             for kind in kinds:
                 g = hist_by.get((pid, kind), ev.iloc[0:0])
@@ -390,7 +430,7 @@ def build_cards(
                 # with zero touches counts as a real zero. Without a
                 # participation source these fail closed to NaN rather than
                 # silently reverting to opportunity-observed weeks.
-                if have_part and n_part > 0:
+                if trusted and n_part > 0:
                     per_week = _rate(n_cur, n_part)
                     wk_counts = (gc.groupby("week").size()
                                  if n_cur else pd.Series(dtype=int))
@@ -427,6 +467,9 @@ def build_cards(
                                else (g["pbp_name"].dropna().iloc[0]
                                      if n and g["pbp_name"].notna().any() else "")),
                     "roster_position": pr[r_pos] if r_pos else "",
+                    "can_receive_opportunity": bool(
+                        r_pos and str(pr[r_pos]).strip().upper()
+                        in _OPPORTUNITY_POSITIONS),
                     "team_target_week": team_now,
                     "teams_in_history": ",".join(
                         sorted({str(t) for t in g["posteam"].dropna().unique()})),
@@ -435,13 +478,21 @@ def build_cards(
                     # --- participation (A)(B) -----------------------------
                     "participation_weeks_prior": n_part,
                     "participation_source_state": (
-                        "available" if have_part else "unavailable"),
+                        "unavailable" if not have_part
+                        else "available_untrusted_partial_bridge"
+                        if pid in untrusted else "available"),
                     # --- opportunity QUANTITY -----------------------------
                     "opp_total_all_sources": n,
                     "opp_total_current_season": n_cur,
                     "opp_weeks_observed_current": len(obs),
                     "active_zero_opportunity_weeks": (
-                        max(0, n_part - len(obs)) if have_part else np.nan),
+                        max(0, n_part - len(obs)) if trusted else np.nan),
+                    # n_part < observed weeks is impossible on consistent
+                    # inputs: it means the participation denominator is
+                    # provably short, so flag it rather than let max(0, ...)
+                    # hide it behind a clean-looking zero.
+                    "participation_denominator_contradicted": (
+                        bool(trusted and n_part < len(obs))),
                     "opp_per_participation_week": per_week,
                     "team_share_current": _rate(n_cur, tn),
                     # --- trajectory / stability ---------------------------
@@ -492,6 +543,18 @@ def build_cards(
         "teams": int(out["team_target_week"].nunique()),
         "history_state_counts": {
             k: int(v) for k, v in out["history_state"].value_counts().items()},
+        # Composition, so "27,928 no_history" is not read as a finding when
+        # most of it is linemen and defensive backs with no rushing history.
+        "opportunity_eligible_cards": int(out["can_receive_opportunity"].sum()),
+        "history_state_counts_opportunity_eligible": {
+            k: int(v) for k, v in
+            out.loc[out["can_receive_opportunity"], "history_state"]
+            .value_counts().items()},
+        "untrusted_denominator_cards": int(
+            (out["participation_source_state"]
+             == "available_untrusted_partial_bridge").sum()),
+        "denominator_contradicted_cards": int(
+            out["participation_denominator_contradicted"].sum()),
     }
     out = out.sort_values(
         ["season", "target_week", "team_target_week", "opportunity_kind",
@@ -535,7 +598,9 @@ def main() -> int:
     pbp = load_pbp(seasons)
     print(f"[identity] pbp rows={len(pbp)}")
 
-    cards, diag = build_cards(pbp, rosters, participation, a.season, weeks, priors)
+    cards, diag = build_cards(
+        pbp, rosters, participation, a.season, weeks, priors,
+        untrusted_denominator_ids=set(bridge.get("partial_bridge_gsis_ids", [])))
     a.out.parent.mkdir(parents=True, exist_ok=True)
     cards.to_csv(a.out, index=False)
 
