@@ -425,6 +425,57 @@ jobs:
           print("\nall audit-correction assertions hold")
           EOF
 
+      - name: Decompose position-prior fallback materiality
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/decompose_position_prior_fallback_materiality_v1.py \
+            --cards "data/research/player_identity/player_identity_card_v1_${SEASON}.csv" \
+            --out-dir data/research/player_identity \
+            --focus-week 7
+
+      - name: Assert the decomposition stayed descriptive
+        run: |
+          set -euo pipefail
+          python - <<'EOF'
+          import json
+          base = ("data/research/player_identity/"
+                  "position_prior_fallback_materiality_v1_status.json")
+          d = json.load(open(base))
+          fail = []
+          if d.get("outcomes_inspected"):
+              fail.append("outcomes inspected")
+          if int(d.get("sportsbook_inputs_used", 1)) != 0:
+              fail.append("sportsbook inputs reported")
+          if d.get("prior_table_source") != "scripts/modeling/bayesian_v2.DEFAULTS":
+              fail.append("priors not sourced from production")
+          # The whole point of the correction: the pooled figure must be
+          # separated from the allocation-moving one.
+          if d["pooled_allocation_moving"] > d["pooled_position_prior_only"]:
+              fail.append("allocation-moving exceeds total fallback")
+          if d["zero_prior_fallback_cards"] <= 0:
+              fail.append("no zero-prior fallback rows identified, so the "
+                          "pooled figure is still being reported as severity")
+          print("pooled fallback %s (%.1f%%) | allocation-moving %s (%.1f%%) | "
+                "zero-prior %s" % (
+                    d["pooled_position_prior_only"],
+                    100 * d["pooled_position_prior_only_pct"],
+                    d["pooled_allocation_moving"],
+                    100 * d["pooled_allocation_moving_pct"],
+                    d["zero_prior_fallback_cards"]))
+          print("week %s: fallback %s (%.1f%%) | allocation-moving %s (%.1f%%)" % (
+              d["focus_week"], d["focus_week_position_prior_only"],
+              100 * d["focus_week_position_prior_only_pct"],
+              d["focus_week_allocation_moving"],
+              100 * d["focus_week_allocation_moving_pct"]))
+          if fail:
+              print("\nFAILED ASSERTIONS:")
+              for f in fail:
+                  print("  -", f)
+              raise SystemExit(1)
+          print("\ndecomposition descriptive and internally consistent")
+          EOF
+
       - name: Commit the descriptive cards
         run: |
           set -euo pipefail

@@ -1063,3 +1063,65 @@ def test_no_target_team_tenure_yields_nan_not_the_previous_team_role():
 def test_tenure_source_is_reported():
     c = _cards({(1, PFR_A): 30}, [(1, GSIS_A, 50, 4)])
     assert (c["target_team_tenure_source"] == "participation_team").all()
+
+
+# ------------- audit 6425282770 MATERIALITY: fallback decomposition
+
+from scripts.research.decompose_position_prior_fallback_materiality_v1 import (  # noqa: E402
+    DEFAULTS as PROD_DEFAULTS,
+    _position_group as prod_position_group,
+    _prior_value,
+    annotate,
+)
+
+
+def test_priors_come_from_productions_own_table():
+    """Retyping the audit's illustrative values would let them drift from what
+    production applies. These are read out of bayesian_v2."""
+    assert PROD_DEFAULTS["tgt_share"]["QB"] == 0.0
+    assert PROD_DEFAULTS["rush_share"]["TE"] == 0.0
+    assert PROD_DEFAULTS["rush_share"]["WR"] == 0.02
+    assert PROD_DEFAULTS["rush_share"]["RB"] == 0.32
+    assert PROD_DEFAULTS["tgt_share"]["RB"] == 0.08
+
+
+def test_fullback_and_halfback_map_to_rb_like_production():
+    for p in ("FB", "HB", "RB"):
+        assert prod_position_group(p) == "RB"
+    assert _prior_value("carry", "FB") == 0.32
+
+
+def test_zero_prior_fallback_cannot_move_allocation():
+    """The correction the audit asked for: a QB with no target history and a TE
+    with no rush history are position_prior_only, but their production priors
+    are 0.0, so counting them as architecture severity overstates it."""
+    assert _prior_value("target", "QB") == 0.0
+    assert _prior_value("carry", "TE") == 0.0
+    cards = pd.DataFrame([
+        {"gsis_id": "a", "roster_position": "QB", "opportunity_kind": "target",
+         "evidence_authority": "position_prior_only",
+         "can_receive_opportunity": True},
+        {"gsis_id": "b", "roster_position": "TE", "opportunity_kind": "carry",
+         "evidence_authority": "position_prior_only",
+         "can_receive_opportunity": True},
+        {"gsis_id": "c", "roster_position": "RB", "opportunity_kind": "carry",
+         "evidence_authority": "position_prior_only",
+         "can_receive_opportunity": True},
+    ])
+    out = annotate(cards)
+    assert out["is_position_prior_only"].all()
+    assert out.loc[0, "fallback_can_move_allocation"] == False   # noqa: E712
+    assert out.loc[1, "fallback_can_move_allocation"] == False   # noqa: E712
+    assert out.loc[2, "fallback_can_move_allocation"] == True    # noqa: E712
+    assert out["fallback_prior_mass"].tolist() == [0.0, 0.0, 0.32]
+
+
+def test_player_evidence_rows_contribute_no_fallback_mass():
+    cards = pd.DataFrame([
+        {"gsis_id": "a", "roster_position": "RB", "opportunity_kind": "carry",
+         "evidence_authority": "prior+current", "can_receive_opportunity": True},
+    ])
+    out = annotate(cards)
+    assert not out["is_position_prior_only"].any()
+    assert out["fallback_prior_mass"].iloc[0] == 0.0
+    assert not out["fallback_can_move_allocation"].any()
