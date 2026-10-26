@@ -152,11 +152,16 @@ def main() -> int:
     ap.add_argument("--run-id", default="39849371821")
     ap.add_argument("--artifact-id", default="12456298985")
     ap.add_argument("--source-head", default="4dc178b59da8708dbea978b8e54e753b1e2f75c5")
+    # Lets the Full Slate archive reuse this extractor for the forward-looking
+    # contract instead of a second implementation of the §3 denylist.
+    ap.add_argument("--stem-prefix", default=None,
+                    help="output filename prefix; defaults to week<N>")
     a = ap.parse_args()
 
     if not a.artifact_dir.exists():
         raise RuntimeError(f"artifact dir {a.artifact_dir} not found")
 
+    prefix = a.stem_prefix or f"week{a.week}"
     man = manifest(a.artifact_dir)
     found, diag = extract(a.artifact_dir, a.week)
     if not found:
@@ -174,7 +179,7 @@ def main() -> int:
                 f"{src}: {leaked}; §3 forbids a sportsbook variable upstream "
                 "of a football projection")
         safe = src.replace("/", "__").replace(".csv", "")
-        out = a.out_dir / f"week{a.week}_trace__{safe}.csv"
+        out = a.out_dir / f"{prefix}_trace__{safe}.csv"
         df.to_csv(out, index=False)
         written.append({"source_in_artifact": src, "durable_file": out.name,
                         "rows": int(len(df)),
@@ -198,7 +203,7 @@ def main() -> int:
         "durable_files": written,
         "extraction_diagnostics": diag,
     }
-    (a.out_dir / f"week{a.week}_opportunity_trace_v1_status.json").write_text(
+    (a.out_dir / f"{prefix}_opportunity_trace_v1_status.json").write_text(
         json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     print(f"=== WEEK {a.week} PRODUCTION OPPORTUNITY TRACE V1 ===")

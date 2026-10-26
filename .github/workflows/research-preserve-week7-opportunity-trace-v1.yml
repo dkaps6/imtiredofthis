@@ -87,6 +87,7 @@ jobs:
             --artifact-dir /tmp/wk7 \
             --week "${WEEK}" \
             --out-dir "data/research/week7_opportunity_trace" \
+            --stem-prefix "week${WEEK}" \
             --run-id "${RUN_ID}"
 
       - name: Assert the trace carries no sportsbook or decision column

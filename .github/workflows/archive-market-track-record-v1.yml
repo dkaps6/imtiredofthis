@@ -136,6 +136,40 @@ jobs:
             fi
           done
 
+      - name: Preserve the PRE-SPORTSBOOK explanatory state
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          # Forward-looking half of the §5a fix required by audit response
+          # 6428042413. Weeks 3-5 taught that an unarchived paid boundary is
+          # unrecoverable; Week 7 taught the same about the EXPLANATORY state.
+          # prior_games, current_games, bayes_*_share, post-rule opportunity
+          # shares, allocator admission and target entitlement are what make
+          # a projection's route auditable, and no run was committing them --
+          # so artifact 12456298985 was the only copy, expiring 2027-01-20.
+          #
+          # Reuses the research extractor rather than reimplementing the §3
+          # denylist: every sportsbook and decision column is stripped, and
+          # the extractor raises if one survives.
+          #
+          # Soft-fails on purpose. The archive's first duty is the paid
+          # boundary preserved above, and that must never be jeopardised by
+          # an enrichment -- but the failure is loud, per AGENTS.md §4.
+          mkdir -p data/market_track_record/explanatory
+          if python scripts/research/preserve_week7_opportunity_trace_v1.py \
+               --artifact-dir /tmp/fs_artifact \
+               --week "${ARCH_WEEK}" \
+               --stem-prefix "${ARCH_STEM}" \
+               --out-dir data/market_track_record/explanatory \
+               --run-id "${SOURCE_RUN_ID}"; then
+            echo "preserved explanatory state for ${ARCH_STEM}"
+          else
+            echo "::warning::explanatory-state preservation FAILED for ${ARCH_STEM};"\
+                 "the paid boundary above is unaffected, but this slate's"\
+                 "projection route will not be auditable once the run"\
+                 "artifact expires"
+          fi
+
       - name: Archive priced board, if this run produced one
         run: |
           set -euo pipefail
