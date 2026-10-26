@@ -23,6 +23,28 @@ so the numbers cannot drift from what production would actually apply.
 
 It is not a new predictive experiment. It reads the committed descriptive card
 and the prior table. It inspects no outcome, no market and no result.
+
+IMPORTANT -- WHAT THIS SCRIPT DOES NOT ESTABLISH (re-audit 6427742545).
+
+Every quantity here is derived from the STATIC `DEFAULTS` table, and
+production does not normally hand a zero-evidence player that constant.
+`_weighted_group_mean()` first takes a `prior_games`-weighted mean of the
+position group's own priors, then a median, and reaches `DEFAULTS` only when
+no usable prior data exists at all. So a `position_prior_only` player's actual
+posterior is the group mean -- measured at 0.359568 for zero-history RB/FB
+rush share against a 0.32 default, and 0.165842 for WR target share against
+0.16.
+
+Consequently the fields here are named as the PROXIES they are:
+`nonzero_default_prior_candidate` and `default_prior_mass_proxy`. They do NOT
+mean "this row enters production's finite allocator", and the mass sums are
+NOT production fallback mass. Production routing admits only a team's top five
+`rules_rush_share` rows to the rush allocator and conserves target entitlement
+to the finite room; a nonzero default on a broad card row proves neither.
+
+The production-faithful counterpart lives in
+`reconcile_production_fallback_admission_v1.py`, which reconciles against the
+durable priced board rather than inferring from constants.
 """
 from __future__ import annotations
 
@@ -90,11 +112,11 @@ def annotate(cards: pd.DataFrame) -> pd.DataFrame:
     out["is_position_prior_only"] = out["evidence_authority"].eq(FALLBACK)
     # The distinction the audit asked for: a fallback whose prior is 0.0
     # cannot move finite allocation at all.
-    out["fallback_can_move_allocation"] = (
+    out["nonzero_default_prior_candidate"] = (
         out["is_position_prior_only"]
         & pd.to_numeric(out["production_prior_value"],
                         errors="coerce").fillna(0).gt(0))
-    out["fallback_prior_mass"] = np.where(
+    out["default_prior_mass_proxy"] = np.where(
         out["is_position_prior_only"],
         pd.to_numeric(out["production_prior_value"],
                       errors="coerce").fillna(0.0), 0.0)
@@ -106,13 +128,13 @@ def _by(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
     t = g.agg(
         cards=("gsis_id", "size"),
         position_prior_only=("is_position_prior_only", "sum"),
-        fallback_can_move_allocation=("fallback_can_move_allocation", "sum"),
-        fallback_prior_mass=("fallback_prior_mass", "sum"),
+        nonzero_default_prior_candidate=("nonzero_default_prior_candidate", "sum"),
+        default_prior_mass_proxy=("default_prior_mass_proxy", "sum"),
         production_prior_value=("production_prior_value", "max"),
     ).reset_index()
     t["pct_position_prior_only"] = (t["position_prior_only"]
                                     / t["cards"].replace(0, np.nan)).round(4)
-    t["pct_allocation_moving"] = (t["fallback_can_move_allocation"]
+    t["pct_nonzero_default_candidate"] = (t["nonzero_default_prior_candidate"]
                                   / t["cards"].replace(0, np.nan)).round(4)
     return t
 
@@ -152,18 +174,18 @@ def main() -> int:
                           dropna=False)
             .agg(players=("gsis_id", "size"),
                  fallback_players=("is_position_prior_only", "sum"),
-                 allocation_moving_players=("fallback_can_move_allocation",
+                 nonzero_default_candidate_players=("nonzero_default_prior_candidate",
                                             "sum"),
-                 fallback_prior_mass=("fallback_prior_mass", "sum"))
+                 default_prior_mass_proxy=("default_prior_mass_proxy", "sum"))
             .reset_index()
-            .sort_values("fallback_prior_mass", ascending=False))
+            .sort_values("default_prior_mass_proxy", ascending=False))
 
     pooled_n = int(elig["is_position_prior_only"].sum())
     pooled_pct = pooled_n / max(1, len(elig))
-    moving_n = int(elig["fallback_can_move_allocation"].sum())
+    moving_n = int(elig["nonzero_default_prior_candidate"].sum())
     moving_pct = moving_n / max(1, len(elig))
     f_pooled = int(focus["is_position_prior_only"].sum())
-    f_moving = int(focus["fallback_can_move_allocation"].sum())
+    f_moving = int(focus["nonzero_default_prior_candidate"].sum())
 
     a.out_dir.mkdir(parents=True, exist_ok=True)
     stem = "position_prior_fallback_materiality_v1"
@@ -185,16 +207,16 @@ def main() -> int:
         "opportunity_eligible_cards": int(len(elig)),
         "pooled_position_prior_only": pooled_n,
         "pooled_position_prior_only_pct": round(pooled_pct, 4),
-        "pooled_allocation_moving": moving_n,
-        "pooled_allocation_moving_pct": round(moving_pct, 4),
+        "pooled_nonzero_default_candidate": moving_n,
+        "pooled_nonzero_default_candidate_pct": round(moving_pct, 4),
         "zero_prior_fallback_cards": pooled_n - moving_n,
         "focus_week": a.focus_week,
         "focus_week_eligible_cards": int(len(focus)),
         "focus_week_position_prior_only": f_pooled,
         "focus_week_position_prior_only_pct": round(
             f_pooled / max(1, len(focus)), 4),
-        "focus_week_allocation_moving": f_moving,
-        "focus_week_allocation_moving_pct": round(
+        "focus_week_nonzero_default_candidate": f_moving,
+        "focus_week_nonzero_default_candidate_pct": round(
             f_moving / max(1, len(focus)), 4),
         "by_week": by_week.to_dict("records"),
         "by_kind_position": by_kind_pos.to_dict("records"),

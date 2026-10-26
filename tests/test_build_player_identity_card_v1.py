@@ -1120,7 +1120,7 @@ def test_fullback_and_halfback_map_to_rb_like_production():
     assert _prior_value("carry", "FB") == 0.32
 
 
-def test_zero_prior_fallback_cannot_move_allocation():
+def test_zero_default_prior_is_not_a_nonzero_candidate():
     """The correction the audit asked for: a QB with no target history and a TE
     with no rush history are position_prior_only, but their production priors
     are 0.0, so counting them as architecture severity overstates it."""
@@ -1139,18 +1139,109 @@ def test_zero_prior_fallback_cannot_move_allocation():
     ])
     out = annotate(cards)
     assert out["is_position_prior_only"].all()
-    assert out.loc[0, "fallback_can_move_allocation"] == False   # noqa: E712
-    assert out.loc[1, "fallback_can_move_allocation"] == False   # noqa: E712
-    assert out.loc[2, "fallback_can_move_allocation"] == True    # noqa: E712
-    assert out["fallback_prior_mass"].tolist() == [0.0, 0.0, 0.32]
+    assert out.loc[0, "nonzero_default_prior_candidate"] == False   # noqa: E712
+    assert out.loc[1, "nonzero_default_prior_candidate"] == False   # noqa: E712
+    assert out.loc[2, "nonzero_default_prior_candidate"] == True    # noqa: E712
+    assert out["default_prior_mass_proxy"].tolist() == [0.0, 0.0, 0.32]
 
 
-def test_player_evidence_rows_contribute_no_fallback_mass():
+def test_player_evidence_rows_contribute_no_proxy_mass():
     cards = pd.DataFrame([
         {"gsis_id": "a", "roster_position": "RB", "opportunity_kind": "carry",
          "evidence_authority": "prior+current", "can_receive_opportunity": True},
     ])
     out = annotate(cards)
     assert not out["is_position_prior_only"].any()
-    assert out["fallback_prior_mass"].iloc[0] == 0.0
-    assert not out["fallback_can_move_allocation"].any()
+    assert out["default_prior_mass_proxy"].iloc[0] == 0.0
+    assert not out["nonzero_default_prior_candidate"].any()
+
+
+# ------------- re-audit 6427742545: production fallback admission
+
+from scripts.research.reconcile_production_fallback_admission_v1 import (  # noqa: E402
+    _BOARD_COLS_ALLOWED, _UNCERTIFIED_MARKETS, reconcile,
+)
+
+
+def _board(rows):
+    """rows: (player, team, market, bayes_evidence_state)"""
+    return pd.DataFrame([
+        {"player": p, "team": t, "market": m, "bayes_evidence_state": s,
+         "season": 2026, "week": 7}
+        for p, t, m, s in rows])
+
+
+_CARD7_COLS = ["gsis_id", "player", "evidence_authority", "target_week",
+               "can_receive_opportunity", "opportunity_kind"]
+
+
+def _card7(rows):
+    """rows: (gsis_id, player, evidence_authority)"""
+    if not rows:
+        return pd.DataFrame(columns=_CARD7_COLS)
+    return pd.DataFrame([
+        {"gsis_id": g, "player": p, "evidence_authority": e,
+         "target_week": 7, "can_receive_opportunity": True,
+         "opportunity_kind": "carry"}
+        for g, p, e in rows])
+
+
+def test_production_admission_comes_from_the_boards_own_label():
+    """The board carries production's bayes_evidence_state, so admission needs
+    no inference from DEFAULTS -- the error the re-audit caught."""
+    board = _board([
+        ("Deep Reserve", "SEA", "anytime_td", "position_prior_only"),
+        ("Deep Reserve", "SEA", "rec_yards", "position_prior_only"),
+        ("Star Back", "SEA", "rush_yards", "prior+current"),
+    ])
+    card = _card7([("1", "Deep Reserve", "position_prior_only"),
+                   ("2", "Star Back", "prior+current"),
+                   ("3", "Never Priced", "position_prior_only")])
+    st, detail = reconcile(card, board, 7)
+    assert st["production_fallback_rows"] == 2
+    assert st["production_fallback_players"] == 1
+    # The card says two fallback players; production admitted one.
+    assert st["card_fallback_players"] == 2
+    assert st["production_fallback_also_fallback_in_card"] == 1
+    assert len(detail) == 2
+
+
+def test_uncertified_market_rows_are_counted_separately():
+    """A fallback row in anytime_td is a different problem from one in a
+    graded yardage market, and the audit has ruled ATD uncertified."""
+    assert "anytime_td" in _UNCERTIFIED_MARKETS
+    board = _board([
+        ("A", "SEA", "anytime_td", "position_prior_only"),
+        ("A", "SEA", "anytime_td", "position_prior_only"),
+        ("B", "SEA", "rec_yards", "position_prior_only"),
+    ])
+    st, detail = reconcile(_card7([]), board, 7)
+    assert st["production_fallback_rows_uncertified_market"] == 2
+    assert st["production_fallback_rows_certified_market"] == 1
+    assert detail.loc[detail.market.eq("anytime_td"),
+                      "market_uncertified"].all()
+
+
+def test_fallback_posterior_is_declared_not_established():
+    """The quantity the re-audit actually wanted cannot be computed from this
+    repo, and the script must say so rather than substituting DEFAULTS."""
+    st, _ = reconcile(_card7([]), _board([("A", "SEA", "rec_yards",
+                                           "prior+current")]), 7)
+    assert st["fallback_posterior_established"] is False
+    assert "player_form_consensus" in st["fallback_posterior_blocker"]
+    assert "DEFAULTS" in st["fallback_posterior_blocker"]
+
+
+def test_reconciliation_reads_no_decision_columns():
+    """Outcome-blind: the allowlist must contain no line/odds/edge column."""
+    banned = ("line", "odds", "price", "edge", "prob", "proj")
+    assert not [c for c in _BOARD_COLS_ALLOWED
+                if any(k in c.lower() for k in banned)]
+
+
+def test_production_fallback_player_missing_from_card_is_surfaced():
+    """Disagreement in that direction is a finding, not something to hide."""
+    board = _board([("Ghost", "SEA", "rec_yards", "position_prior_only")])
+    card = _card7([("1", "Ghost", "prior_only")])
+    st, _ = reconcile(card, board, 7)
+    assert st["production_fallback_not_fallback_in_card"] == ["Ghost"]

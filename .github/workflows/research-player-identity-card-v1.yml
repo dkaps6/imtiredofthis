@@ -493,6 +493,54 @@ jobs:
           print("\ndecomposition descriptive and internally consistent")
           EOF
 
+      - name: Reconcile fallback against production's durable board
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/reconcile_production_fallback_admission_v1.py \
+            --cards "data/research/player_identity/player_identity_card_v1_${SEASON}.csv" \
+            --board data/market_track_record/boards/2026_wk07.csv \
+            --week 7 \
+            --out-dir data/research/player_identity
+
+      - name: Assert the reconciliation claims only what it establishes
+        run: |
+          set -euo pipefail
+          python - <<'EOF'
+          import json
+          d = json.load(open("data/research/player_identity/"
+                             "production_fallback_admission_v1_week7_status.json"))
+          fail = []
+          if d.get("outcomes_inspected"):
+              fail.append("outcomes inspected")
+          banned = ("line", "odds", "price", "edge", "prob", "proj")
+          leaked = [c for c in d["board_columns_read"]
+                    if any(k in c.lower() for k in banned)]
+          if leaked:
+              fail.append(f"decision columns read: {leaked}")
+          # The posterior is NOT computable from this repo. Claiming otherwise
+          # would re-commit the exact error re-audit 6427742545 caught.
+          if d.get("fallback_posterior_established") is not False:
+              fail.append("fallback posterior claimed as established")
+          if d["production_fallback_players"] > d["production_priced_players"]:
+              fail.append("more fallback players than priced players")
+          print("week %s | card fallback %s players | production fallback %s "
+                "players across %s rows (%s in uncertified markets)" % (
+                    d["week"], d["card_fallback_players"],
+                    d["production_fallback_players"],
+                    d["production_fallback_rows"],
+                    d["production_fallback_rows_uncertified_market"]))
+          print("agreement: %s of %s" % (
+              d["production_fallback_also_fallback_in_card"],
+              d["production_fallback_players"]))
+          if fail:
+              print("\nFAILED ASSERTIONS:")
+              for f in fail:
+                  print("  -", f)
+              raise SystemExit(1)
+          print("\nreconciliation claims only what it establishes")
+          EOF
+
       - name: Commit the descriptive cards
         run: |
           set -euo pipefail
