@@ -224,6 +224,20 @@ jobs:
               fail.append(f"{int(bad.sum())} cards publish a rate that does "
                           "not equal opp_in_gate_weeks / gate_weeks_used")
 
+          # The gate names efficiency as well as trajectory.
+          effw = pd.to_numeric(cards["efficiency_opp_withheld"],
+                               errors="coerce").fillna(0)
+          if (effw < 0).any():
+              fail.append("negative efficiency_opp_withheld")
+          if effw.sum() <= 0:
+              fail.append("efficiency gate withheld no opportunity anywhere")
+          yg = pd.to_numeric(cards["yards_per_opp"], errors="coerce")
+          ya = pd.to_numeric(cards["yards_per_opp_all_weeks"], errors="coerce")
+          bb = yg.notna() & ya.notna()
+          if not (yg[bb] != ya[bb]).any():
+              fail.append("gated and all-weeks efficiency identical on every "
+                          "card: the efficiency gate has no effect")
+
           # boundary
           if not (pd.to_numeric(cards["sportsbook_inputs_used"]) == 0).all():
               fail.append("sportsbook inputs present")

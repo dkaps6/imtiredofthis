@@ -597,10 +597,20 @@ def build_cards(
                 lambda x: sorted(set(x.astype(int)))).to_dict()
             state_counts = (pw.groupby(["gsis_id", "player_state"]).size()
                             .unstack(fill_value=0))
+            # The gate names EFFICIENCY as well as trajectory. A carry taken
+            # in an unexplained week is a real carry, but its yardage is not
+            # representative evidence of what this player is, so the same
+            # weeks are withheld from the efficiency aggregates. Prior seasons
+            # are labelled too, so this is not current-season-only.
+            unres = participation.loc[
+                participation["player_state"].eq(STATE_UNRESOLVED),
+                ["gsis_id", "season", "week"]]
+            withheld_pw = set(map(tuple, unres.to_numpy().tolist()))
         else:
             part_weeks = pd.Series(dtype=int)
             weeks_all, weeks_clean = {}, {}
             state_counts = pd.DataFrame()
+            withheld_pw = set()
 
         team_tot = cur.groupby(["posteam", "opportunity_kind"]).size()
         team_rz = cur.loc[cur["is_red_zone"]].groupby(
@@ -639,6 +649,16 @@ def build_cards(
                 # with zero touches counts as a real zero. Without a
                 # participation source these fail closed to NaN rather than
                 # silently reverting to opportunity-observed weeks.
+                # Gate-clean opportunity rows, for the EFFICIENCY aggregates.
+                if n and withheld_pw:
+                    keep = ~pd.Series(
+                        list(zip(g["gsis_id"], g["season"], g["week"])),
+                        index=g.index).isin(withheld_pw)
+                    g_clean = g.loc[keep]
+                else:
+                    g_clean = g
+                n_clean = len(g_clean)
+
                 wk_counts = (gc.groupby("week").size()
                              if n_cur else pd.Series(dtype=float))
                 obs = sorted(wk_counts.index.astype(int).tolist()) if n_cur else []
@@ -735,16 +755,30 @@ def build_cards(
                     "team_inside_5_share_current": _rate(
                         gc["is_inside_5"].sum() if n_cur else 0, ti5),
                     # --- efficiency identity ------------------------------
-                    "yards_per_opp": (float(g["yards"].mean())
-                                      if n and g["yards"].notna().any() else np.nan),
-                    "yards_per_opp_sd": (float(g["yards"].std())
-                                         if n and g["yards"].notna().sum() > 1 else np.nan),
-                    "catch_rate": (float(g["complete"].mean())
-                                   if kind == "target" and n
-                                   and g["complete"].notna().any() else np.nan),
-                    "mean_air_yards": (float(g["air_yards"].mean())
-                                       if kind == "target" and n
-                                       and g["air_yards"].notna().any() else np.nan),
+                    # Gate-compliant: opportunities taken in weeks whose state
+                    # is unexplained are excluded, because their yardage is not
+                    # representative evidence of what this player is. The
+                    # ungated figures stay below under _all_weeks.
+                    "yards_per_opp": (float(g_clean["yards"].mean())
+                                      if n_clean and g_clean["yards"].notna().any()
+                                      else np.nan),
+                    "yards_per_opp_sd": (float(g_clean["yards"].std())
+                                         if n_clean and g_clean["yards"].notna().sum() > 1
+                                         else np.nan),
+                    "catch_rate": (float(g_clean["complete"].mean())
+                                   if kind == "target" and n_clean
+                                   and g_clean["complete"].notna().any() else np.nan),
+                    "mean_air_yards": (float(g_clean["air_yards"].mean())
+                                       if kind == "target" and n_clean
+                                       and g_clean["air_yards"].notna().any() else np.nan),
+                    "efficiency_opp_used": n_clean,
+                    "efficiency_opp_withheld": n - n_clean,
+                    "yards_per_opp_all_weeks": (float(g["yards"].mean())
+                                                if n and g["yards"].notna().any()
+                                                else np.nan),
+                    "catch_rate_all_weeks": (float(g["complete"].mean())
+                                             if kind == "target" and n
+                                             and g["complete"].notna().any() else np.nan),
                     # --- provenance ---------------------------------------
                     "strict_prior": True,
                     "history_seasons": ",".join(

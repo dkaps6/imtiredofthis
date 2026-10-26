@@ -546,3 +546,32 @@ def test_without_a_team_column_the_stricter_reading_is_kept():
 def test_participation_reports_whether_bye_detection_is_possible():
     _, diag = build_participation(rosters(), snaps({(1, PFR_A): 30}))
     assert diag["bye_detection"] == "unavailable_no_team_col"
+
+
+def test_efficiency_excludes_opportunities_from_unexplained_weeks():
+    """The gate names efficiency, not just trajectory. A carry taken in an
+    8-snap week is a real carry, but its yardage is not representative."""
+    snap = {(w, PFR_A): n for w, n in
+            [(1, 60), (2, 60), (3, 60), (4, 8), (5, 60)]}
+    # 5 yards a carry in the healthy weeks, 0 in the collapsed week.
+    ev = ([(w, GSIS_A, 50, 5) for w in (1, 1, 2, 2, 3, 3, 5, 5)]
+          + [(4, GSIS_A, 50, 0), (4, GSIS_A, 50, 0)])
+    cards, _ = _gated_cards(snap, ev)
+    r = cards[(cards.gsis_id == GSIS_A)
+              & (cards.opportunity_kind == "carry")].iloc[0]
+    assert r["yards_per_opp"] == pytest.approx(5.0)        # gated
+    assert r["yards_per_opp_all_weeks"] == pytest.approx(4.0)  # 40/10
+    assert r["efficiency_opp_used"] == 8
+    assert r["efficiency_opp_withheld"] == 2
+    # The raw opportunity count is a per-play fact and stays whole.
+    assert r["opp_total_current_season"] == 10
+
+
+def test_efficiency_gate_is_a_no_op_when_no_week_is_withheld():
+    snap = {(w, PFR_A): 60 for w in (1, 2, 3, 4, 5)}
+    ev = [(w, GSIS_A, 50, 5) for w in (1, 2, 3, 4, 5)]
+    cards, _ = _gated_cards(snap, ev)
+    r = cards[(cards.gsis_id == GSIS_A)
+              & (cards.opportunity_kind == "carry")].iloc[0]
+    assert r["efficiency_opp_withheld"] == 0
+    assert r["yards_per_opp"] == pytest.approx(r["yards_per_opp_all_weeks"])
