@@ -1245,3 +1245,66 @@ def test_production_fallback_player_missing_from_card_is_surfaced():
     card = _card7([("1", "Ghost", "prior_only")])
     st, _ = reconcile(card, board, 7)
     assert st["production_fallback_not_fallback_in_card"] == ["Ghost"]
+
+
+# ---------- audit response 6428042413: week-7 opportunity trace preservation
+
+from scripts.research.preserve_week7_opportunity_trace_v1 import (  # noqa: E402
+    _DENY_EXEMPT, _WANTED, _denied, extract,
+)
+
+
+def test_sportsbook_and_decision_columns_are_denied():
+    """The artifact contains the priced board, so exclusion must be active."""
+    for c in ("vegas_line", "vegas_over_odds", "edge_pct", "fair_prob",
+              "market_prob", "model_proj", "mc_proj", "model_sd", "book",
+              "implied_prob", "edge_abs"):
+        assert _denied(c), c
+
+
+def test_football_explanatory_columns_are_not_denied():
+    for c in ("prior_games", "current_games", "bayes_rush_share",
+              "bayes_tgt_share", "rules_rush_share", "rush_share_prior",
+              "target_entitlement", "analytic_expected_carries", "rules_role"):
+        assert not _denied(c), c
+
+
+def test_provenance_attestations_are_exempt_from_the_denylist():
+    """`sportsbook_inputs_used` proves the boundary held; denying it would
+    strip the evidence. `bayes_evidence_state` contains no market data."""
+    for c in sorted(_DENY_EXEMPT):
+        assert not _denied(c), c
+    assert "sportsbook_inputs_used" in _WANTED
+
+
+def test_extraction_refuses_a_file_with_too_few_explanatory_columns(tmp_path):
+    (tmp_path / "noise.csv").write_text("a,b,c\n1,2,3\n")
+    found, diag = extract(tmp_path, 7)
+    assert found == {}
+    assert diag["scanned"][0]["explanatory_columns_matched"] == 0
+
+
+def test_extraction_keeps_football_state_and_drops_market_columns(tmp_path):
+    (tmp_path / "metrics.csv").write_text(
+        "player,team,week,prior_games,current_games,bayes_rush_share,"
+        "vegas_line,edge_pct\n"
+        "Back A,SEA,7,0,0,0.359568,72.5,4.1\n"
+        "Back B,SEA,6,3,2,0.210000,60.5,1.0\n")
+    found, diag = extract(tmp_path, 7)
+    assert list(found) == ["metrics.csv"]
+    df = found["metrics.csv"]
+    assert "vegas_line" not in df.columns and "edge_pct" not in df.columns
+    assert "bayes_rush_share" in df.columns
+    # Week filter applied: only the week-7 row survives.
+    assert len(df) == 1
+    assert df["prior_games"].iloc[0] == 0
+    assert df["bayes_rush_share"].iloc[0] == pytest.approx(0.359568)
+
+
+def test_extraction_reports_columns_absent_from_the_artifact(tmp_path):
+    (tmp_path / "m.csv").write_text(
+        "player,team,prior_games,current_games\nA,SEA,0,0\n")
+    _, diag = extract(tmp_path, 7)
+    missing = diag["required_columns_missing_from_artifact"]
+    assert "bayes_rush_share" in missing
+    assert "player" not in missing
