@@ -25,6 +25,15 @@ on:
         description: "Target week"
         required: false
         default: "7"
+  # workflow_dispatch only resolves for files on the default branch, and this
+  # lives on the research branch, so a push trigger is how it actually runs --
+  # matching the other research workflows in this lane.
+  push:
+    branches:
+      - research-prism-player-first-identity-environment-2026-10-26
+    paths:
+      - '.github/workflows/research-preserve-week7-opportunity-trace-v1.yml'
+      - 'scripts/research/preserve_week7_opportunity_trace_v1.py'
 
 permissions:
   contents: write
