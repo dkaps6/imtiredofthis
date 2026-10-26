@@ -1,0 +1,3689 @@
+{
+  "artifact_file_count": 213,
+  "artifact_manifest": [
+    {
+      "bytes": 364286,
+      "path": "data/_debug/_build_cb_coverage_player.py.html",
+      "sha256": "420b38573567c7b539b062c2518b72454d54ab2d745cdbf66bedb951c98c2f02"
+    },
+    {
+      "bytes": 2592,
+      "path": "data/_debug/team_form_prior_bridge.csv",
+      "sha256": "19ced769e388159873dffc7cda117c006f517a272d2350876634b49e3f7dc41e"
+    },
+    {
+      "bytes": 164420,
+      "path": "data/_sharp_dump_coverage_pos_2026.html",
+      "sha256": "2333908c4699c228f91acdd44bcf382e426716bf9c1b5ec930223fb112e3dba6"
+    },
+    {
+      "bytes": 163095,
+      "path": "data/_sharp_dump_coverage_scheme_2026.html",
+      "sha256": "4224fc949b89a2c32146c3968d4a34a0cf9b18eab3cbb711973d28b31f7fdac3"
+    },
+    {
+      "bytes": 163131,
+      "path": "data/_sharp_dump_def_tend_2026.html",
+      "sha256": "357ccd075cee1534231f3caacf19bd0526b06056d87635f4e880368d942d2ffe"
+    },
+    {
+      "bytes": 163241,
+      "path": "data/_sharp_dump_dl_2026.html",
+      "sha256": "637028e28c36a6e2d2881cd41595a44383af6395f2ec3310705ed97caa7fa6b5"
+    },
+    {
+      "bytes": 165702,
+      "path": "data/_sharp_dump_off_tend_2026.html",
+      "sha256": "bca7c7cf18849471cee0ca5b9733fd04f3627062d526e52725466dd9c10fed43"
+    },
+    {
+      "bytes": 165666,
+      "path": "data/_sharp_dump_ol_2026.html",
+      "sha256": "de7f6f81cec519bd70a0f532f5ccb0402c5d03d353fa1bc7143d9964343c025e"
+    },
+    {
+      "bytes": 157630,
+      "path": "data/_sharp_dump_pace_2026.html",
+      "sha256": "351223b9fa9c60f8fd839d0f4ad76d737c3e7547f78a6ae451cf45ab1767c9ec"
+    },
+    {
+      "bytes": 466,
+      "path": "data/anytime_td_model_status_v1.csv",
+      "sha256": "9914ad4cd13eed9cfb4c73d517e9875ea32403917b7bdee2a03994d7ed9cbe2e"
+    },
+    {
+      "bytes": 799,
+      "path": "data/anytime_td_model_status_v1.json",
+      "sha256": "ae8484d123d6ba6255c3a0eff7003e33756e032a81b4e43917c3978b1a214eab"
+    },
+    {
+      "bytes": 6938,
+      "path": "data/backtests/full_stack_vegas_benchmark_v1/README.md",
+      "sha256": "a66ba4a2569aa5a5a2a6b0030ac5c95f7b9dd1699cdb4003aa8385c439bc7e9d"
+    },
+    {
+      "bytes": 6211273,
+      "path": "data/backtests/full_stack_vegas_benchmark_v1/non_qb_detail.csv",
+      "sha256": "1c8ecd2f2861ecf47c3dbec630149ca0b8cfc487aeaaaff7b475210f120c8375"
+    },
+    {
+      "bytes": 2288,
+      "path": "data/backtests/full_stack_vegas_benchmark_v1/non_qb_summary.csv",
+      "sha256": "d305d02e4dbacc1d1a47cf97d83e449e01d6c73d087cb7d93e3051de8772049e"
+    },
+    {
+      "bytes": 935,
+      "path": "data/backtests/full_stack_vegas_benchmark_v1/qb_base_summary.csv",
+      "sha256": "ec8efb4593f48d58015ee0d34d0309eba6cfcc89ea8b89e05b761ea3f1af7bf8"
+    },
+    {
+      "bytes": 931,
+      "path": "data/backtests/full_stack_vegas_benchmark_v1/qb_market_assisted_summary.csv",
+      "sha256": "dda54fbce7b0eabdb70604f8b8eba63e03619d5030b0553b4a8b8fe953649294"
+    },
+    {
+      "bytes": 1351,
+      "path": "data/backtests/full_stack_vegas_benchmark_v1/qb_synthesis_gates_reconstruction_v1.json",
+      "sha256": "984e39748dfc1f7a90027dc3ac949489bb238bb998c0a27e3488dc0a18f7b974"
+    },
+    {
+      "bytes": 1196,
+      "path": "data/backtests/full_stack_vegas_benchmark_v1/qb_synthesis_scoreboard_reconstruction_v1.csv",
+      "sha256": "85ecd3b9a643e6fd57e6a5a47b22695c18992a5e0dace927852cad6e9c0dbfb8"
+    },
+    {
+      "bytes": 941,
+      "path": "data/backtests/full_stack_vegas_benchmark_v1/qb_synthesis_summary.csv",
+      "sha256": "662da1b5ca79eed28d58774a41566a04fef9b9ee4aed33e53224753b4f00dbec"
+    },
+    {
+      "bytes": 3449,
+      "path": "data/backtests/historical_market_vegas_benchmark_v1/README.md",
+      "sha256": "bfe4418b3b85629849afcb3d669c7e5239eaa0f63a73134c937083d4db17056e"
+    },
+    {
+      "bytes": 3399073,
+      "path": "data/backtests/historical_market_vegas_benchmark_v1/historical_market_vegas_benchmark_detail.csv",
+      "sha256": "89e42b5e9bf2477abe113274f338a56b3d6d606aa9e276d0359c7e03e602d50a"
+    },
+    {
+      "bytes": 1159,
+      "path": "data/backtests/historical_market_vegas_benchmark_v1/historical_market_vegas_benchmark_summary.csv",
+      "sha256": "73f46f760151e7dcbe2fc2ab8649d1367e0adf2726d552530cc4d4d13ae62993"
+    },
+    {
+      "bytes": 650,
+      "path": "data/backtests/historical_market_vegas_benchmark_v1/market_archive_source_audit.csv",
+      "sha256": "55aca4afd3b2e65a11548754685589146adb0769a0adbf60aa68d7406ff94425"
+    },
+    {
+      "bytes": 2463,
+      "path": "data/backtests/qb_frontier_canonical_v1/manifest.json",
+      "sha256": "5027e631a5367e410a0ff7fe8e5e43ff44f46b6dbaf2053f0765f24de952128c"
+    },
+    {
+      "bytes": 807481,
+      "path": "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv",
+      "sha256": "396d924a308fb05baff9a44d7485fe87d3bf008a9134b65a66c06a7704a8f87c"
+    },
+    {
+      "bytes": 95012,
+      "path": "data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv",
+      "sha256": "c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742"
+    },
+    {
+      "bytes": 516,
+      "path": "data/backtests/qb_m78_official_inactives_corrected/README.md",
+      "sha256": "a3eba29e54fe239fec92f4263821301753b538d4bfd9ebfbeae71f951bba3552"
+    },
+    {
+      "bytes": 136900,
+      "path": "data/backtests/qb_m78_official_inactives_corrected/m78_corrected_candidate_teamweek.csv",
+      "sha256": "d39aaf0feea101f3e0d2721ebd4118ef33fb1a4d3c76670e2a4f17734e37b609"
+    },
+    {
+      "bytes": 560,
+      "path": "data/backtests/qb_m78_official_inactives_corrected/manifest.json",
+      "sha256": "8fa582d2b250d4ab6d220a69a056e2e2036dfccf68ab6cd97860abbfee18374e"
+    },
+    {
+      "bytes": 1072,
+      "path": "data/backtests/qb_m78_official_inactives_frozen/manifest.json",
+      "sha256": "b7a6ddd371d20aabdd95c67d6a50e02f1f4c1e12b8ee40ec8271ab271be4ca74"
+    },
+    {
+      "bytes": 6030,
+      "path": "data/backtests/qb_m78_official_inactives_frozen/part_00.json",
+      "sha256": "b3b98084645f59a5804d3985ff1f41448551592004cd2b090eb4860315a6c69c"
+    },
+    {
+      "bytes": 6031,
+      "path": "data/backtests/qb_m78_official_inactives_frozen/part_01.json",
+      "sha256": "97875ff480050d2902902a50d6c0de7e68616cea50f4b23aae607b9cd8f29a31"
+    },
+    {
+      "bytes": 6031,
+      "path": "data/backtests/qb_m78_official_inactives_frozen/part_02.json",
+      "sha256": "8bb372b492ae659becf7395400a15f026a107570e164205a12df5863599687b8"
+    },
+    {
+      "bytes": 6031,
+      "path": "data/backtests/qb_m78_official_inactives_frozen/part_03.json",
+      "sha256": "0b1b02d81678caf5992cfa1e1a4aa7eff21158f4fa920a4f41d854d91a7c42f8"
+    },
+    {
+      "bytes": 6031,
+      "path": "data/backtests/qb_m78_official_inactives_frozen/part_04.json",
+      "sha256": "78fcd1586bf0446cd022c1d2b97c3e4012c0f0cfc2c636ffb79bc309b56d9f76"
+    },
+    {
+      "bytes": 6031,
+      "path": "data/backtests/qb_m78_official_inactives_frozen/part_05.json",
+      "sha256": "aad45beadf29e909b0adf28762ce1fd47c5dbcbdcd7c08a1485d88e222a06985"
+    },
+    {
+      "bytes": 5811,
+      "path": "data/backtests/qb_m78_official_inactives_frozen/part_06.json",
+      "sha256": "f165eabb2b1b17daa6e69a5c682947d83970c268867a4464cb34e3fdab022543"
+    },
+    {
+      "bytes": 418,
+      "path": "data/bet_evidence_v0_audit.json",
+      "sha256": "2aace113b2d5af6dba46237e274111ea00521d9041db708e04d52300358662e0"
+    },
+    {
+      "bytes": 14788,
+      "path": "data/cb_coverage_player.csv",
+      "sha256": "b28e9cc3eb3ebf0c8651d72f7041cdd23475a627a95750cef9b689b003e66749"
+    },
+    {
+      "bytes": 1387,
+      "path": "data/cb_coverage_team.csv",
+      "sha256": "4964acdd6bcb0062052e301d710e7f9861cc896600ebb7cb27a3dcf0df20cacf"
+    },
+    {
+      "bytes": 2162,
+      "path": "data/certified_full_slate_stack_audit.json",
+      "sha256": "1d4b68c5287fbbdeeaa0371801c73e3365252480289738d708d036777fd14d92"
+    },
+    {
+      "bytes": 2926,
+      "path": "data/coverage_penalties.csv",
+      "sha256": "973d798b85a8c7da52e4db35af86190e59cf93055d8a118ce7225a2cc17ac4cc"
+    },
+    {
+      "bytes": 249,
+      "path": "data/current_injury_nflcom_refresh_audit.json",
+      "sha256": "014ebb2295ef3957fab93e22c8aed670033bacae961fcbe562248d52a47d74e5"
+    },
+    {
+      "bytes": 142665,
+      "path": "data/current_player_availability.csv",
+      "sha256": "2c0eec2999205d80f488b23e718a7023a48bed99dab3ae5a054735f8443b3046"
+    },
+    {
+      "bytes": 2316,
+      "path": "data/current_player_availability_game_certification.csv",
+      "sha256": "1e73334451a64f12659e1b8ae51adb585427732e5ff93d2dee1ee64ef024f061"
+    },
+    {
+      "bytes": 263,
+      "path": "data/current_player_availability_game_certification.json",
+      "sha256": "865e99151dae3cf9cd7aa0e509928f58f937f1a72dcef78fc450c5355c13ff58"
+    },
+    {
+      "bytes": 247,
+      "path": "data/current_player_availability_status.json",
+      "sha256": "5e59cf60c81ab0455210c754c4392e4a7154afbac9c5bf983d60d6407db7dcbd"
+    },
+    {
+      "bytes": 151,
+      "path": "data/final_priced_props_quarantine_status.json",
+      "sha256": "6c91be2eeafd2e865194842de43e5cd352e951d8d3a9383e28f508a744770f3f"
+    },
+    {
+      "bytes": 418501,
+      "path": "data/football_simulation_universe.csv",
+      "sha256": "a16d8d68180a241ecdd98b2069efc09a670c9a74272fae71cff6d4df924570fa"
+    },
+    {
+      "bytes": 1733,
+      "path": "data/football_simulation_universe_audit.csv",
+      "sha256": "6580871a40f8c2edd98d101ea393a739f4e10016de479d589757acd5ae74eb6e"
+    },
+    {
+      "bytes": 2325,
+      "path": "data/football_simulation_universe_audit.json",
+      "sha256": "016f978c90f1c6a46d30dc9c2bcb5064ff96a915b79a951b91e802e4b5557226"
+    },
+    {
+      "bytes": 1238,
+      "path": "data/full_slate_data_quality_audit.csv",
+      "sha256": "06e76d35f121c576d625b2eabc0d80e3c7ab7fc66c023b6d1af18d73db7495ee"
+    },
+    {
+      "bytes": 2178,
+      "path": "data/full_slate_data_quality_audit.json",
+      "sha256": "a7ba462ef9f9413f804c1451cc9efd224d99eaf6ebac9656f1a00de69bcb842a"
+    },
+    {
+      "bytes": 26575,
+      "path": "data/game_lines.csv",
+      "sha256": "a5bce43e25fa346bf18d8beb5e2d04fd3b4e5aa31e9f4aa2b93e262788f80949"
+    },
+    {
+      "bytes": 22725,
+      "path": "data/injuries.csv",
+      "sha256": "8647a584febe984afb605cc39914cc35fea49edf331b6e01c4a9bc6064d01220"
+    },
+    {
+      "bytes": 17400,
+      "path": "data/injuries_identity_audit.csv",
+      "sha256": "0b48d6a5edb74e846b2e357b466bb55b182c22aaa15dbf0d81fc8288427f7f73"
+    },
+    {
+      "bytes": 557,
+      "path": "data/injuries_source_status.json",
+      "sha256": "ff6a034fd92fd782c8c27b467b4047ae6c734e1b8f5d4baf380268afacf6cad2"
+    },
+    {
+      "bytes": 2355,
+      "path": "data/injury_team_scope.csv",
+      "sha256": "3b42d0e8f1c2f72d28d794d342ade37d25159f55f4a9bc952d4aa35024b94480"
+    },
+    {
+      "bytes": 766,
+      "path": "data/live_odds_artifact_hardening.json",
+      "sha256": "9a14cd9ef51322b94b90c86908b6a4a06fba55dc87a7c5d7e257a0a8f84f70a2"
+    },
+    {
+      "bytes": 55588,
+      "path": "data/live_odds_placeholder_rows.csv",
+      "sha256": "3e114f960033aff4e3feb07390ae9febec273969ca5a6db65c18865e6a610fab"
+    },
+    {
+      "bytes": 1805,
+      "path": "data/live_odds_status.json",
+      "sha256": "1f0ad335923d4edfbf0315a53b81d7f5f2d8c446830a5270e57e7e90b0318196"
+    },
+    {
+      "bytes": 677,
+      "path": "data/live_pricing_offer_audit.json",
+      "sha256": "49754819b27514f0ec6a1eaf2390eb7648613b77e33611b80113720e63dabb47"
+    },
+    {
+      "bytes": 28330,
+      "path": "data/live_prop_identity_audit.csv",
+      "sha256": "aa9d12e1697ed920335469dbe38cfc12c6708557164dafcc2e3273164fceac4e"
+    },
+    {
+      "bytes": 591,
+      "path": "data/live_prop_identity_status.json",
+      "sha256": "5e05627545d18d9fcac5c93efc342a58a0b2c9e883956a7b0b1b6fe60191c8d9"
+    },
+    {
+      "bytes": 1902,
+      "path": "data/logs/validate_build.log",
+      "sha256": "acacd3a4c1adae66aacabab39b70b99bf9bb9d070d99e8ca7c08e9f8a906daf4"
+    },
+    {
+      "bytes": 4597010,
+      "path": "data/make_metrics_output.csv",
+      "sha256": "3989aee279df0f47298b335f59cd786ceada1e6e28a82d240910d418247ab158"
+    },
+    {
+      "bytes": 5765,
+      "path": "data/manual_final_board_quarantine.csv",
+      "sha256": "440d8f442b64db8af791ff268e7ac1220e8acb6ec3e2e810a220929a69e0edd7"
+    },
+    {
+      "bytes": 6433,
+      "path": "data/manual_name_overrides.csv",
+      "sha256": "6a1d46a304e8a5bca5f6ea2b7d1792887c5ddf92e0db2d8971d226aa08de93b7"
+    },
+    {
+      "bytes": 134,
+      "path": "data/manual_name_overrides_audit.json",
+      "sha256": "0d16ac63aa1ce7e190339dd2f00aca49630989b7377db9d61ea5748726e69cc6"
+    },
+    {
+      "bytes": 1301,
+      "path": "data/manual_prop_quarantine.csv",
+      "sha256": "33def3d50f16261ea27d1a1de98450efb9fb87425ce105aa40084aa182c41952"
+    },
+    {
+      "bytes": 376,
+      "path": "data/manual_roster_overrides.csv",
+      "sha256": "03d6f6a251343b2e891f1cb4426f8fbe48ecc7054d5d69a0c70c88a34673ad54"
+    },
+    {
+      "bytes": 5185,
+      "path": "data/market_model_lineage_current.csv",
+      "sha256": "e3f64ce9e0fbcfd24fb7d0d6cb05e9f3dbf0ca255650834445532137f64f04e3"
+    },
+    {
+      "bytes": 2732,
+      "path": "data/market_model_lineage_current.json",
+      "sha256": "ca23ae8f581152b671269d6d04e9f027668bfcbb5f7f5b668a5870a4b8f513fb"
+    },
+    {
+      "bytes": 1755,
+      "path": "data/market_track_record/IMMUTABLE_ORIGIN_ANCHORS_V1.json",
+      "sha256": "10d45c6c89c99ba97212f834f74374c5b910299acc557a39b71952886df82a7b"
+    },
+    {
+      "bytes": 2371,
+      "path": "data/market_track_record/ORIGIN_PROVENANCE_V1.json",
+      "sha256": "0dae4c9e7fa093f1df9233acf95c58d58a9a31bf510b0266e1dcbf1204375cb1"
+    },
+    {
+      "bytes": 3369,
+      "path": "data/market_track_record/PRODUCTION_DECISION_GATES_V1.json",
+      "sha256": "cb373f8b6b2812c954b718e99dba77f104edb1b6e423576c99347b63185438ee"
+    },
+    {
+      "bytes": 2059618,
+      "path": "data/market_track_record/boards/2026_wk01.csv",
+      "sha256": "cf6882e3174640449af38e4189712b7ef07aea7b26373efc1f723dbb629a5947"
+    },
+    {
+      "bytes": 2010198,
+      "path": "data/market_track_record/boards/2026_wk02.csv",
+      "sha256": "3558b9641ffa617dd7154563a586c484730e1da1a6bdf0c2d8df32f40cf6360d"
+    },
+    {
+      "bytes": 1671212,
+      "path": "data/market_track_record/boards/2026_wk06.csv",
+      "sha256": "e4c67906ac399382e31414ae66ee590f0353e1a210817e3d63acf75bd250ac85"
+    },
+    {
+      "bytes": 27120,
+      "path": "data/market_track_record/game_odds/2026_wk06.csv",
+      "sha256": "ddc6aaac6d60cc92b27ab958826edc3097f8c23f2c9ef014da0dc04666e93ce4"
+    },
+    {
+      "bytes": 699764,
+      "path": "data/market_track_record/graded/2026_wk01_wk02_graded.csv",
+      "sha256": "fb6cc518e05b3a5dd098cf254de56dbc0b1a84213e65a1c8277c47f8e099bfd6"
+    },
+    {
+      "bytes": 323380,
+      "path": "data/market_track_record/raw_props/2026_wk06.csv",
+      "sha256": "dbb3a945defa83441f9898fe9e66c038e3b33da94138cbeaa2d21a9cfc0a0737"
+    },
+    {
+      "bytes": 434,
+      "path": "data/master_betting_workbook_audit.json",
+      "sha256": "3647f9c64e3c1527d190e273adfe02490fa79a3f0b7b21c4ca133e6246282a36"
+    },
+    {
+      "bytes": 4597010,
+      "path": "data/metrics_ready.csv",
+      "sha256": "3989aee279df0f47298b335f59cd786ceada1e6e28a82d240910d418247ab158"
+    },
+    {
+      "bytes": 166681,
+      "path": "data/model_bayesian_diagnostics.csv",
+      "sha256": "06450644e09388e2f2193e88f2cae4d55949107c04a075842703cdb7c663b534"
+    },
+    {
+      "bytes": 60958,
+      "path": "data/model_context_bridge.csv",
+      "sha256": "aeb5ff8f1d113daa240e3df875fa8d9170d1fb03a061ce7964022f48635de8cb"
+    },
+    {
+      "bytes": 740,
+      "path": "data/model_ensemble_diagnostics.csv",
+      "sha256": "dfb4fdee8edd3a06cad4deecaf9614a576e7dd09f60d2d4cdc924e4cbb9efdc3"
+    },
+    {
+      "bytes": 1151,
+      "path": "data/model_ensemble_weights.csv",
+      "sha256": "bc525ecdfe5ef792c1655866e823de78667c7efe7f8f51ea1cf3ec98693313e5"
+    },
+    {
+      "bytes": 117237,
+      "path": "data/model_ml_diagnostics.csv",
+      "sha256": "533b7c2b73d9aa806f49d45f0e719be8427698de2c7a7f95dc2bcaefaefa9e7b"
+    },
+    {
+      "bytes": 1871097,
+      "path": "data/model_ml_v2.joblib",
+      "sha256": "1c653727dd56651df86fe004efff1d6b37310014a51e13c6e177c6aa7a078afe"
+    },
+    {
+      "bytes": 66358,
+      "path": "data/model_rule_diagnostics.csv",
+      "sha256": "5115204c8aa3b13fd0c1b7a66960276d7aee3d13067c6b2f12de3317a6f53c54"
+    },
+    {
+      "bytes": 5822634,
+      "path": "data/model_rule_simulation_inputs.csv",
+      "sha256": "8f6fc580a1fa10f08734400d2192b2123b58477c333e04d995e4c6c5af533ddf"
+    },
+    {
+      "bytes": 168831,
+      "path": "data/model_state_diagnostics.csv",
+      "sha256": "e951e32c766b01d92486002614c477fbfa4159ca328fdd2b4faa7eaef3ea7c53"
+    },
+    {
+      "bytes": 3752,
+      "path": "data/model_state_v2.joblib",
+      "sha256": "f186eea320d466018f82e46b64b07d37cefae63b013cc457b679a7e2f0805380"
+    },
+    {
+      "bytes": 617,
+      "path": "data/models/rb_r19_production_v1/PROVENANCE.json",
+      "sha256": "37b0fe24b9f91f55750e70985964368cd160fa1b3ea18ccac72709d1b70f58b5"
+    },
+    {
+      "bytes": 31581,
+      "path": "data/models/rb_r19_production_v1/rb_r19_residual_pools_v1.npz",
+      "sha256": "c69a268a5a1683e846bcb5f59fe55bcae20d70c679792449ea77e6548b37a362"
+    },
+    {
+      "bytes": 8255,
+      "path": "data/models/rb_r19_production_v1/rb_r19_tail_scorer_model_v1.json",
+      "sha256": "9ed6a98b0022e86992fb468df40a9fd79a54bc87885777ac5955a898b5c292ba"
+    },
+    {
+      "bytes": 1877,
+      "path": "data/models/rb_r26_production_v1/rb_r26_week1_room_state_v1.csv",
+      "sha256": "27ad7bad8fcdfa6b0b1090994e0c0d2bdc4c0e45209d2409abc9574b5d354258"
+    },
+    {
+      "bytes": 2885,
+      "path": "data/models/te_r5p_production_model_v1/te_r5p_production_model_v1.json",
+      "sha256": "a47730312a6d7ea8de2c4034ddd2be5ebbac72c67647dfbfa7b1985305e1249b"
+    },
+    {
+      "bytes": 3231,
+      "path": "data/models/wr_r15_production_model_v1/wr_r15_production_model_v1.json",
+      "sha256": "ac1058f534c7923e8ad41e52a92e7001c1de309bb04874d76ae60a83e3a1b2ff"
+    },
+    {
+      "bytes": 27041,
+      "path": "data/odds_game.csv",
+      "sha256": "a1a656216422559c2e90374a5d9d89bd824ccd9b52ca611cf81f23987e60868c"
+    },
+    {
+      "bytes": 6680,
+      "path": "data/official_inactives_v1.csv",
+      "sha256": "e6b0cc22771f87b5013c9703d3181bb4dfce3adf36b109b07542970d0824b8a3"
+    },
+    {
+      "bytes": 686,
+      "path": "data/official_inactives_v1_status.json",
+      "sha256": "b863a12fec3d4ab5945aa2e32a5287fbc16770358a42bf88ebf21c9494e0a23e"
+    },
+    {
+      "bytes": 24569,
+      "path": "data/opponent_map_from_props.csv",
+      "sha256": "6242fc775c706daa1e14a4d3a31a84670bfbc3b695eec8fcb9566192a9563406"
+    },
+    {
+      "bytes": 8540,
+      "path": "data/play_volume_splits.csv",
+      "sha256": "227ef2b2357e15939d9483a9d0545abaef9b1d1ed19c6ebdab23c72a423ed0a5"
+    },
+    {
+      "bytes": 195704,
+      "path": "data/player_form.csv",
+      "sha256": "68d80a2f2ae531f5c452634bf5095a40d66f7298df54993ee50998c91e88daf3"
+    },
+    {
+      "bytes": 195704,
+      "path": "data/player_form_consensus.csv",
+      "sha256": "68d80a2f2ae531f5c452634bf5095a40d66f7298df54993ee50998c91e88daf3"
+    },
+    {
+      "bytes": 4957712,
+      "path": "data/player_game_logs.csv",
+      "sha256": "3a82be02e7bed434e7f4e596f8eb55da0848f017dc208881dc8b6304a4283fd5"
+    },
+    {
+      "bytes": 496,
+      "path": "data/player_identity_aliases.csv",
+      "sha256": "f250f1f84985e4eee2566efe9e3d48d255bd5c9bb091030568b339dec834f7e5"
+    },
+    {
+      "bytes": 305237,
+      "path": "data/player_identity_registry.csv",
+      "sha256": "473bb4b874fc74deda74a05d272f55dd7cff185123f690085a218ac307917b5d"
+    },
+    {
+      "bytes": 6697553,
+      "path": "data/player_identity_roster_history.csv",
+      "sha256": "1592043b029f609d512d49984c287dfc88653f500ed63229230fc6ee9a3c140e"
+    },
+    {
+      "bytes": 466,
+      "path": "data/player_identity_roster_history_audit.json",
+      "sha256": "a1979d38285a7e3c20477c92237cf0ad1dad97bf298306507aa6bf3ef0181cec"
+    },
+    {
+      "bytes": 51677,
+      "path": "data/player_identity_semantic_audit.csv",
+      "sha256": "43c182d157c8b53abc0f6c87bc9f33f05c2da1f1fa2a471398871d20be5f2747"
+    },
+    {
+      "bytes": 536,
+      "path": "data/player_identity_semantic_audit.json",
+      "sha256": "29a6a1e1f09f76ce7b771a1aa3911f79a623454b02b9b4e84d34ba1f1d7d0d17"
+    },
+    {
+      "bytes": 38341,
+      "path": "data/player_identity_slate.csv",
+      "sha256": "66b59a4348947381f96c961773935f5b29b07bb2416c5f839283032fa15a53d5"
+    },
+    {
+      "bytes": 308,
+      "path": "data/player_identity_validation.csv",
+      "sha256": "00a519cb0bfc7e8218c08b1a90320e1df954cb04e7d5a4c629bff6a252f353b1"
+    },
+    {
+      "bytes": 29538,
+      "path": "data/player_name_map_from_props.csv",
+      "sha256": "f02d2cb2d1ece4e10d0c3a094d6778a0192a789a5513d7805f5e8687568e72af"
+    },
+    {
+      "bytes": 458,
+      "path": "data/player_scoring_td_position_priors.csv",
+      "sha256": "d04b679f14d6ec71f9ac2a08a268377c94a41e5aada88cb27576d9b33e17a00a"
+    },
+    {
+      "bytes": 458,
+      "path": "data/player_scoring_td_prior_status.json",
+      "sha256": "26c352e64c3c19f08edf9146d5374233986e95465fa7849fc0c039d655a82cf0"
+    },
+    {
+      "bytes": 203687,
+      "path": "data/player_season_totals.csv",
+      "sha256": "ab32b083a21dbd71ee90335464647b7ec7ec9396cd5a4f0abf3114200c0d9d28"
+    },
+    {
+      "bytes": 2645,
+      "path": "data/preserved_replay/WEEK2_INJURY_SCOPE_2026_WK02.csv",
+      "sha256": "3a4b7977e53e41a845cb7507af151050d6f26e258c1ea11a0e6acb9978b9d3e4"
+    },
+    {
+      "bytes": 881,
+      "path": "data/preserved_replay/WEEK2_INJURY_SCOPE_PROVENANCE_V1.json",
+      "sha256": "930c9d275f1ca691e40eed27116043e57238ef8c2db60ae93a0b557f91ffcd85"
+    },
+    {
+      "bytes": 629886,
+      "path": "data/props_enriched.csv",
+      "sha256": "ec07d1bc2f97a42654dd0febcb914e1bed99a99eb151ffc4b1c54c4ca8243b18"
+    },
+    {
+      "bytes": 795416,
+      "path": "data/props_raw.csv",
+      "sha256": "33901aaccbcdb0077d91b917b7184e12f7ec82a37ba6ba8daeefa247d12fb6a9"
+    },
+    {
+      "bytes": 589,
+      "path": "data/provider_readiness_v3.csv",
+      "sha256": "473fe24ad535b338887d98610252e8cc5bf3f55d619a54a272628f03cf2f0f22"
+    },
+    {
+      "bytes": 1183,
+      "path": "data/qb_c2_pricing_lineage_stamp_audit.json",
+      "sha256": "ecafe426a4e290be7b0734f86872ed047a1242798f2bde0822303ef5dd555fe9"
+    },
+    {
+      "bytes": 10203,
+      "path": "data/qb_c2_production_integration_audit.csv",
+      "sha256": "4b62917ff2bdf646148ac16f8542d0cd8050fb0c160992868969dc7a0541926d"
+    },
+    {
+      "bytes": 1296,
+      "path": "data/qb_c2_production_integration_audit.json",
+      "sha256": "c491f6818eac212782a74098accaf8fb2161b5ff48120ca927bd57a3f426840b"
+    },
+    {
+      "bytes": 5412,
+      "path": "data/qb_c2_production_starter_audit.csv",
+      "sha256": "c1739fe6f5a914d38934d415b295ea331b057038fe05eb2097c3cd4812c21159"
+    },
+    {
+      "bytes": 179493,
+      "path": "data/qb_c2_state_capture_parity.csv",
+      "sha256": "9e5eb873deeaaf3a74dbdcc6748bc2353768bf510435879dab9fd7a9eb6bd476"
+    },
+    {
+      "bytes": 6959,
+      "path": "data/qb_designed_runs.csv",
+      "sha256": "a7656272220d8b5ddc1b3aaed562a8303f9099d399ef1c1f8444f84d9d9323c5"
+    },
+    {
+      "bytes": 22180,
+      "path": "data/qb_distribution_state_context.csv",
+      "sha256": "d03cc83af59c270ee64465e55dcbbd5c51b15e9c79a8669fc231d838e76b358b"
+    },
+    {
+      "bytes": 2947,
+      "path": "data/qb_distribution_state_context_audit.csv",
+      "sha256": "44567191fe3a6d117e4f91a41f8f030eaacc018dc9e1f6ab78dc8dd80f7607cc"
+    },
+    {
+      "bytes": 692,
+      "path": "data/qb_promoted_context_audit.csv",
+      "sha256": "4af7a77761d6257fb9226d9dd5386d19736139a6040bdb83468d388da3910b1f"
+    },
+    {
+      "bytes": 12417,
+      "path": "data/qb_promoted_team_context.csv",
+      "sha256": "9c2b75cd4b63f1322b5b5db65937c4b424b718dc727617a61e0127b8dc31d1c5"
+    },
+    {
+      "bytes": 11920,
+      "path": "data/qb_run_metrics.csv",
+      "sha256": "2a2f0a90b4c24bc84d393ef6d9a82e7f350e2a7415b1b0e425dda2600d09b34c"
+    },
+    {
+      "bytes": 6879,
+      "path": "data/qb_scramble_rates.csv",
+      "sha256": "2fd0a1099b7975024333652b5ecd642e0b1baad2b3bb64b5f2efaaa4788bf127"
+    },
+    {
+      "bytes": 261,
+      "path": "data/rb_p3_nonweek1_scope_audit.json",
+      "sha256": "8009869144149399c368d259a4c35f616d08ecdddd6dfe7fe617b6f5408f923d"
+    },
+    {
+      "bytes": 305,
+      "path": "data/rb_r26_receptions_pricing_lineage_audit.json",
+      "sha256": "ae2029a9c1db388adcd7c9f561110f189ca4227301b09604d28c3f10715396a3"
+    },
+    {
+      "bytes": 327,
+      "path": "data/rb_receiving_tail_pricing_lineage_audit.json",
+      "sha256": "428fe7ae520897f414071bc13ed69d46cba6f1cbeb34b4a6888bb1018c3e2e15"
+    },
+    {
+      "bytes": 576,
+      "path": "data/rb_receiving_tail_production_audit.json",
+      "sha256": "720cc96649347b6e35f6b245c8527d61794a5bc6867f56331c4581d96c7b5951"
+    },
+    {
+      "bytes": 85,
+      "path": "data/rb_rush_rec_conservation_final_audit.csv",
+      "sha256": "a38295535d7866c77b8b8ec1fff28a4fca10ee6a649c0ee26840feaa09acd199"
+    },
+    {
+      "bytes": 12,
+      "path": "data/rb_rush_rec_conservation_input_audit.csv",
+      "sha256": "22bf0ffa4671860f0ca5c2e382eeeeedf169412d178aff4b53f88192d4c305be"
+    },
+    {
+      "bytes": 134,
+      "path": "data/rb_rush_rec_conservation_input_audit.json",
+      "sha256": "27ad01ae174408f9c7af1328eff6aebd6f32fe15dbdbdd8e75e5a91bdb7c1f83"
+    },
+    {
+      "bytes": 4789,
+      "path": "data/rb_rush_rec_conservation_v2_integration_audit.csv",
+      "sha256": "ad6e09162c87bb9752919342930f64eb6190fb70218af07537beb36674b05b91"
+    },
+    {
+      "bytes": 277,
+      "path": "data/rb_rush_rec_conservation_v2_integration_audit.json",
+      "sha256": "e7ed221da6b09056b5481f90eda22381815b88851ff87180319ef354395dd89b"
+    },
+    {
+      "bytes": 693,
+      "path": "data/rb_rush_rec_conservation_v2_production_audit.json",
+      "sha256": "01b2b1ec19e026a3538fe58d93a30ec85306c2f6ac3d803d96f6c1cb3cacddd7"
+    },
+    {
+      "bytes": 157,
+      "path": "data/rb_rush_synthesis_context.csv",
+      "sha256": "4a07c70be06434c6cb44e7e77416e7881519c95ce64a448f19e0def102b3785d"
+    },
+    {
+      "bytes": 62754,
+      "path": "data/roles_current_production_eligible_v1.csv",
+      "sha256": "c7d9120f1ac9803036ed8d6275bca65c107171278058a8ee5c4121f9cf97fa29"
+    },
+    {
+      "bytes": 591,
+      "path": "data/roles_current_production_eligible_v1_status.json",
+      "sha256": "4ca3ed101d3630c8fda4e325c1c0cc36512f1948dde99d3c5201c8b540e92e19"
+    },
+    {
+      "bytes": 31333,
+      "path": "data/roles_ourlads.csv",
+      "sha256": "143636e821e6fe5ca1aee63b4fded5ece8893ae7558e0f8d3424a34144b51eb9"
+    },
+    {
+      "bytes": 72133,
+      "path": "data/roles_ourlads_active_v1.csv",
+      "sha256": "825f4e22b0a02347a132fd20d07406b41e05b01c0c6eb21eeb9001c771722802"
+    },
+    {
+      "bytes": 186,
+      "path": "data/roles_ourlads_active_v1_status.json",
+      "sha256": "f02f4858f9e573ff9af611649dac1b23ef5fa03d1a5c1dfdd637cc5d61ade943"
+    },
+    {
+      "bytes": 80741,
+      "path": "data/roles_ourlads_status_v1.csv",
+      "sha256": "ead191fbd90fbc857a42dd94a6666808d5ccba8544184e6f34261c072995ad80"
+    },
+    {
+      "bytes": 218,
+      "path": "data/roles_ourlads_status_v1.json",
+      "sha256": "d9ff3f531963dbaa7e67199e7d1b10db7cff0500b03814147cc3f107c45d6c5f"
+    },
+    {
+      "bytes": 22434,
+      "path": "data/run_pass_funnel.csv",
+      "sha256": "eb6e4438f2c99729c9c0668e0617bfb9653bb306a18d65067a5311dfe961407b"
+    },
+    {
+      "bytes": 15433,
+      "path": "data/schedules/schedule_2026.csv",
+      "sha256": "e4c913f3311da119c9ebd254f2b2f2fef7f70f67884d7dcc315b4c1b789f2edf"
+    },
+    {
+      "bytes": 9423,
+      "path": "data/script_escalators.csv",
+      "sha256": "23ae81b506a89ec266c8c18fbe74fead842192c414fd0de507cbc5b87230d630"
+    },
+    {
+      "bytes": 1433,
+      "path": "data/sharp_coverage_pos_2026.csv",
+      "sha256": "ef386124b56df8648bd63d25f97dc1066bcd15fadc978067ebaa2f385fe177e9"
+    },
+    {
+      "bytes": 1406,
+      "path": "data/sharp_coverage_scheme_2026.csv",
+      "sha256": "6f891548c5bcc25afbe348bd48118a9f8ea0cb69cf89879737c91be6a6405b27"
+    },
+    {
+      "bytes": 1398,
+      "path": "data/sharp_def_tend_2026.csv",
+      "sha256": "2e8f4d11d6d96a9cbe93167209c430f9165def337fd056c9442f8df9ac4bc57c"
+    },
+    {
+      "bytes": 1394,
+      "path": "data/sharp_dl_2026.csv",
+      "sha256": "233fd94bbbeb762cd61f9f382f9edccfbcfa7a544cbc56f58a05975f34c9db5e"
+    },
+    {
+      "bytes": 1510,
+      "path": "data/sharp_off_tend_2026.csv",
+      "sha256": "b4895e7b8fcf054a4a30cede9d5ba68d8dd9d32600c2f2db886d4d521083974d"
+    },
+    {
+      "bytes": 1552,
+      "path": "data/sharp_ol_2026.csv",
+      "sha256": "74b4df7a10a750173091760a3263223fe2d686cb3f075dd0edce536deb9a811e"
+    },
+    {
+      "bytes": 1778,
+      "path": "data/sharp_pace_2026.csv",
+      "sha256": "2abba7b51786a26da36aa024a2bc6ee6218850ee8b8116a1b8b2353eb914f6b8"
+    },
+    {
+      "bytes": 9492,
+      "path": "data/sharp_team_form.csv",
+      "sha256": "1b34118372009eb3ab120c6c203fd81bf4e383831779eaa4e1f09abaffcf41bf"
+    },
+    {
+      "bytes": 1875,
+      "path": "data/stadiums.csv",
+      "sha256": "0ad1f88fe342c1e92d48daddfdaf9dff710a1af1972534f39d88e7195b3e03bc"
+    },
+    {
+      "bytes": 2253,
+      "path": "data/target_entitlement_v1_audit.json",
+      "sha256": "8b9ebe34d962fdea7a34670d367d282a97c0696ca7287b19ed28b6a5f450b676"
+    },
+    {
+      "bytes": 179495,
+      "path": "data/target_entitlement_v1_projection_invariance.csv",
+      "sha256": "83823afe9de91b7355181f7b274f197fc7a0eac6034bcabc790764a99497ac04"
+    },
+    {
+      "bytes": 125412,
+      "path": "data/target_entitlement_v1_trace.csv",
+      "sha256": "ba5db299b8267c30258f4ca5eda665418d6df8234eed9ec6393852518d6f9299"
+    },
+    {
+      "bytes": 1478,
+      "path": "data/te_r5p_full_slate_entitlement_audit.json",
+      "sha256": "5e56ad0283a3d183171ca3bc2be48daf59ed0efb492b29fab56ce704981f55d3"
+    },
+    {
+      "bytes": 22620,
+      "path": "data/te_r5p_full_slate_entitlement_trace.csv",
+      "sha256": "89fa3cd7c389ab0629882af2bc00ff2f058c33c624777c3e5873d681e8babd9d"
+    },
+    {
+      "bytes": 288578,
+      "path": "data/te_r5p_full_slate_simulation_delta.csv",
+      "sha256": "2e1a9f8ff57f98ed5fbcd4acf901d30cb4ca7378262ce37ca8ed748d749247f2"
+    },
+    {
+      "bytes": 19166,
+      "path": "data/team_context_v3.csv",
+      "sha256": "fc52eb2328e854bd788c9e3a02a1a65c25641a5bf92cfa5fadc5bdcc5632a2fe"
+    },
+    {
+      "bytes": 118324,
+      "path": "data/team_context_v3_provenance.csv",
+      "sha256": "e7901b27faf8027f0896f13acae3542113841e3ae5dcaa1ea1f1640d3f544f75"
+    },
+    {
+      "bytes": 38971,
+      "path": "data/team_form.csv",
+      "sha256": "c8e0b27437bbf550a42d832d4504051d81b2444cd2fecf9dc1f92c760b276f94"
+    },
+    {
+      "bytes": 6814,
+      "path": "data/team_target_pool_audit.csv",
+      "sha256": "6c3f1f72cac0fdd32655afa13b0fc9b5ccd763a1c5a80781a5de849102472718"
+    },
+    {
+      "bytes": 1351,
+      "path": "data/team_target_pool_audit.json",
+      "sha256": "d7f6bdb10fa68d2ade7d892b781792a7a519d464f481a8561e70f3fcaf12cd6d"
+    },
+    {
+      "bytes": 39326,
+      "path": "data/team_week_map.csv",
+      "sha256": "c64d51441908d7c5009e39a82e4ae97ca5521626ea0dc76c0c360990b27d5c6e"
+    },
+    {
+      "bytes": 11508,
+      "path": "data/volatility_widening.csv",
+      "sha256": "acff046a6447ac1edae42d2a37f2beecd40672b9d3bca10eb08a0e4388fc2541"
+    },
+    {
+      "bytes": 3849,
+      "path": "data/weather_week.csv",
+      "sha256": "1df83f66ef8226780321868d824f2d30e0f06d67396e548ad1132bb1e6fd5f4b"
+    },
+    {
+      "bytes": 19121,
+      "path": "data/wr_cb_exposure.csv",
+      "sha256": "ba392ab1c2d4e58d74f5614cc4148fa55a20454b97b8c32bb5dc9078bc6da704"
+    },
+    {
+      "bytes": 1861,
+      "path": "data/wr_r15_full_slate_entitlement_audit.json",
+      "sha256": "ba77067ca1dcabe48e7c5eb94568251da441f061e0c41044d6beabc7fba773f5"
+    },
+    {
+      "bytes": 35924,
+      "path": "data/wr_r15_full_slate_entitlement_trace.csv",
+      "sha256": "d62fda27f29f557a369456e4c10f377e9c005e30e148944a728112583e8c1b65"
+    },
+    {
+      "bytes": 288036,
+      "path": "data/wr_r15_full_slate_simulation_delta.csv",
+      "sha256": "7dca013b1d818d67cdc33c94392b1b64dbedcc6b0ceabfdd3b1e6c6c77d25dc7"
+    },
+    {
+      "bytes": 631827,
+      "path": "outputs/NFL_BETTING_MODEL_MASTER.xlsx",
+      "sha256": "c2dd3f86e57a4ea9293d0d73c6fcf34278f50af63f179611818973a4a6e2348f"
+    },
+    {
+      "bytes": 142665,
+      "path": "outputs/current_player_availability.csv",
+      "sha256": "2c0eec2999205d80f488b23e718a7023a48bed99dab3ae5a054735f8443b3046"
+    },
+    {
+      "bytes": 2316,
+      "path": "outputs/current_player_availability_game_certification.csv",
+      "sha256": "1e73334451a64f12659e1b8ae51adb585427732e5ff93d2dee1ee64ef024f061"
+    },
+    {
+      "bytes": 27041,
+      "path": "outputs/odds_game.csv",
+      "sha256": "a1a656216422559c2e90374a5d9d89bd824ccd9b52ca611cf81f23987e60868c"
+    },
+    {
+      "bytes": 29538,
+      "path": "outputs/player_name_map_from_props.csv",
+      "sha256": "f02d2cb2d1ece4e10d0c3a094d6778a0192a789a5513d7805f5e8687568e72af"
+    },
+    {
+      "bytes": 759187,
+      "path": "outputs/props_enriched.csv",
+      "sha256": "9495b14caa3ae799ee98cc8102eecc84188ae84eead28599eeb03f0237acacd0"
+    },
+    {
+      "bytes": 162797,
+      "path": "outputs/props_player_anytime_td.csv",
+      "sha256": "2b3bf7bf6fa81cb0205c2a7986166c2c5eeec58caa8959eb8019b668a0a42063"
+    },
+    {
+      "bytes": 21975,
+      "path": "outputs/props_player_pass_tds.csv",
+      "sha256": "099fad9bfac97c82ba9045e9725f1e3bcf774404bd232c9cd7dd90ec8de259e6"
+    },
+    {
+      "bytes": 22240,
+      "path": "outputs/props_player_pass_yds.csv",
+      "sha256": "7187c1a0e2fe135ec60ed28f6fccd2db9d66dd389dec4a2f7ca140188054616d"
+    },
+    {
+      "bytes": 118241,
+      "path": "outputs/props_player_reception_yds.csv",
+      "sha256": "8426c9376c838e0c1de5d711395a12c920ced6b6b17e85a80b8bfbab734b69a0"
+    },
+    {
+      "bytes": 115915,
+      "path": "outputs/props_player_receptions.csv",
+      "sha256": "4d093a71ecaca5184343e99fbb92095966b05c9e89faca475c92dafce7eb51c7"
+    },
+    {
+      "bytes": 23857,
+      "path": "outputs/props_player_rush_reception_yds.csv",
+      "sha256": "5b35f3a58298ed8c46b6c420fd6efe7f951c402b2cc779fa5b713467d85e55e6"
+    },
+    {
+      "bytes": 57107,
+      "path": "outputs/props_player_rush_yds.csv",
+      "sha256": "7bb4e942413e3f07048b0c3087c85ad7a87cfc37398f9a950e9cabfaef348933"
+    },
+    {
+      "bytes": 1690265,
+      "path": "outputs/props_priced_clean.csv",
+      "sha256": "c2045d978822fa966db6420babc848c18b15099645d7359941f492cbf7540275"
+    },
+    {
+      "bytes": 368521,
+      "path": "outputs/props_pricing_offers.csv",
+      "sha256": "176769f1a9d7e9be2bfa1edd3a942842896ce1a46299cafc1c1614e185729031"
+    },
+    {
+      "bytes": 163477,
+      "path": "outputs/props_raw/player_anytime_td.csv",
+      "sha256": "a56af1f9755c9064385fccce49a878b523449dc150e4809ec3883e71369a82c6"
+    },
+    {
+      "bytes": 16641,
+      "path": "outputs/props_raw/player_pass_tds.csv",
+      "sha256": "a0ceceee44bd0c57afd96d8595e109c6b60c1749ff653b6bc8d6e3707720de65"
+    },
+    {
+      "bytes": 16906,
+      "path": "outputs/props_raw/player_pass_yds.csv",
+      "sha256": "fb0a6ed1e9ba3722ba0fea6c099c629b17e20530891b4b47edf4d03e6a3bed71"
+    },
+    {
+      "bytes": 86612,
+      "path": "outputs/props_raw/player_reception_yds.csv",
+      "sha256": "d4f14b5eda9821379b8e8d943ea966ed7dd32cef6dabc8528bcb3175c04cc9cd"
+    },
+    {
+      "bytes": 85519,
+      "path": "outputs/props_raw/player_receptions.csv",
+      "sha256": "f4da06713dd9a5d22ec70590cdec4d9b2cf0d4066e0f45cafc8367f91c6c2cc6"
+    },
+    {
+      "bytes": 17439,
+      "path": "outputs/props_raw/player_rush_reception_yds.csv",
+      "sha256": "65e168f217775a49d2bce978d126c9ace549ac1e80310b73303523eebfd5749c"
+    },
+    {
+      "bytes": 1628,
+      "path": "outputs/props_raw/player_rush_tds.csv",
+      "sha256": "d7534cd22fcc15ab9760529c6b001adb25ba69703456926b572f0a49c1782470"
+    },
+    {
+      "bytes": 43025,
+      "path": "outputs/props_raw/player_rush_yds.csv",
+      "sha256": "4f12b50d86fba5e5e9bc0c97d4961804826f2ac09a462c87629052a2f12915b3"
+    },
+    {
+      "bytes": 368521,
+      "path": "outputs/props_raw.csv",
+      "sha256": "176769f1a9d7e9be2bfa1edd3a942842896ce1a46299cafc1c1614e185729031"
+    },
+    {
+      "bytes": 384179,
+      "path": "outputs/props_raw_compact.csv",
+      "sha256": "92b56e995bae2e5fda8e89c4561c7d7f5b358c55e5749db72c18e09dca1ac84b"
+    },
+    {
+      "bytes": 106058,
+      "path": "outputs/props_raw_wide.csv",
+      "sha256": "3258cb3846a87b7742e5c559f18038c97033fd9f9f202cfb22220957c6f87de6"
+    },
+    {
+      "bytes": 62754,
+      "path": "outputs/roles_current_production_eligible_v1.csv",
+      "sha256": "c7d9120f1ac9803036ed8d6275bca65c107171278058a8ee5c4121f9cf97fa29"
+    },
+    {
+      "bytes": 31333,
+      "path": "outputs/roles_ourlads.csv",
+      "sha256": "143636e821e6fe5ca1aee63b4fded5ece8893ae7558e0f8d3424a34144b51eb9"
+    }
+  ],
+  "authorized_by": "GPT_AUDIT_RESPONSE_6428042413",
+  "durable_files": [
+    {
+      "columns": [
+        "opponent",
+        "player_clean_key",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__backtests__full_stack_vegas_benchmark_v1__non_qb_detail.csv",
+      "rows": 974,
+      "source_in_artifact": "data/backtests/full_stack_vegas_benchmark_v1/non_qb_detail.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__backtests__historical_market_vegas_benchmark_v1__historical_market_vegas_benchmark_detail.csv",
+      "rows": 1023,
+      "source_in_artifact": "data/backtests/historical_market_vegas_benchmark_v1/historical_market_vegas_benchmark_detail.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "player_clean_key",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__backtests__qb_frontier_canonical_v1__qb_frontier_canonical_v1.csv",
+      "rows": 45,
+      "source_in_artifact": "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "player_clean_key",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__backtests__qb_frontier_canonical_v3_football_only__qb_frontier_canonical_v3_football_only.csv",
+      "rows": 48,
+      "source_in_artifact": "data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv"
+    },
+    {
+      "columns": [
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__backtests__qb_m78_official_inactives_corrected__m78_corrected_candidate_teamweek.csv",
+      "rows": 60,
+      "source_in_artifact": "data/backtests/qb_m78_official_inactives_corrected/m78_corrected_candidate_teamweek.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "player",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__cb_coverage_player.csv",
+      "rows": 147,
+      "source_in_artifact": "data/cb_coverage_player.csv"
+    },
+    {
+      "columns": [
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__cb_coverage_team.csv",
+      "rows": 28,
+      "source_in_artifact": "data/cb_coverage_team.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "position",
+        "source",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__current_player_availability.csv",
+      "rows": 458,
+      "source_in_artifact": "data/current_player_availability.csv"
+    },
+    {
+      "columns": [
+        "bayes_applied",
+        "bayes_evidence_state",
+        "bayes_position_group",
+        "bayes_rush_share",
+        "bayes_tgt_share",
+        "current_games",
+        "opponent",
+        "player",
+        "player_clean_key",
+        "position",
+        "prior_games",
+        "role",
+        "rules_applied",
+        "rules_role",
+        "rules_rush_share",
+        "rules_tgt_share",
+        "rush_share",
+        "rush_share_current",
+        "rush_share_prior",
+        "season",
+        "target_share",
+        "team",
+        "tgt_share",
+        "tgt_share_current",
+        "tgt_share_prior",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__football_simulation_universe.csv",
+      "rows": 396,
+      "source_in_artifact": "data/football_simulation_universe.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "season",
+        "source",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__injuries.csv",
+      "rows": 274,
+      "source_in_artifact": "data/injuries.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "source",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__injuries_identity_audit.csv",
+      "rows": 274,
+      "source_in_artifact": "data/injuries_identity_audit.csv"
+    },
+    {
+      "columns": [
+        "season",
+        "source",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__injury_team_scope.csv",
+      "rows": 28,
+      "source_in_artifact": "data/injury_team_scope.csv"
+    },
+    {
+      "columns": [
+        "current_games",
+        "opponent",
+        "player",
+        "player_clean_key",
+        "position",
+        "prior_games",
+        "role",
+        "rush_share",
+        "rush_share_current",
+        "rush_share_prior",
+        "season",
+        "source",
+        "target_share",
+        "team",
+        "tgt_share",
+        "tgt_share_current",
+        "tgt_share_prior",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__make_metrics_output.csv",
+      "rows": 1447,
+      "source_in_artifact": "data/make_metrics_output.csv"
+    },
+    {
+      "columns": [
+        "current_games",
+        "opponent",
+        "player",
+        "player_clean_key",
+        "position",
+        "prior_games",
+        "role",
+        "rush_share",
+        "rush_share_current",
+        "rush_share_prior",
+        "season",
+        "source",
+        "target_share",
+        "team",
+        "tgt_share",
+        "tgt_share_current",
+        "tgt_share_prior",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__metrics_ready.csv",
+      "rows": 1447,
+      "source_in_artifact": "data/metrics_ready.csv"
+    },
+    {
+      "columns": [
+        "bayes_evidence_state",
+        "bayes_position_group",
+        "bayes_rush_share",
+        "bayes_tgt_share",
+        "current_games",
+        "player",
+        "player_clean_key",
+        "position",
+        "prior_games",
+        "season",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__model_bayesian_diagnostics.csv",
+      "rows": 396,
+      "source_in_artifact": "data/model_bayesian_diagnostics.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "player",
+        "position",
+        "role",
+        "rush_share",
+        "season",
+        "team",
+        "tgt_share",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__model_context_bridge.csv",
+      "rows": 396,
+      "source_in_artifact": "data/model_context_bridge.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "position",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__model_ml_diagnostics.csv",
+      "rows": 396,
+      "source_in_artifact": "data/model_ml_diagnostics.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "player",
+        "position",
+        "role",
+        "rules_role",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__model_rule_diagnostics.csv",
+      "rows": 396,
+      "source_in_artifact": "data/model_rule_diagnostics.csv"
+    },
+    {
+      "columns": [
+        "bayes_applied",
+        "bayes_evidence_state",
+        "bayes_position_group",
+        "bayes_rush_share",
+        "bayes_tgt_share",
+        "current_games",
+        "opponent",
+        "player",
+        "player_clean_key",
+        "position",
+        "prior_games",
+        "role",
+        "rules_applied",
+        "rules_role",
+        "rules_rush_share",
+        "rules_tgt_share",
+        "rush_share",
+        "rush_share_current",
+        "rush_share_prior",
+        "season",
+        "source",
+        "target_share",
+        "team",
+        "tgt_share",
+        "tgt_share_current",
+        "tgt_share_prior",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__model_rule_simulation_inputs.csv",
+      "rows": 1447,
+      "source_in_artifact": "data/model_rule_simulation_inputs.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "position",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__model_state_diagnostics.csv",
+      "rows": 396,
+      "source_in_artifact": "data/model_state_diagnostics.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "player",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__opponent_map_from_props.csv",
+      "rows": 303,
+      "source_in_artifact": "data/opponent_map_from_props.csv"
+    },
+    {
+      "columns": [
+        "current_games",
+        "opponent",
+        "player",
+        "player_clean_key",
+        "position",
+        "prior_games",
+        "role",
+        "rush_share",
+        "rush_share_current",
+        "rush_share_prior",
+        "season",
+        "target_share",
+        "team",
+        "tgt_share",
+        "tgt_share_current",
+        "tgt_share_prior",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__player_form.csv",
+      "rows": 396,
+      "source_in_artifact": "data/player_form.csv"
+    },
+    {
+      "columns": [
+        "current_games",
+        "opponent",
+        "player",
+        "player_clean_key",
+        "position",
+        "prior_games",
+        "role",
+        "rush_share",
+        "rush_share_current",
+        "rush_share_prior",
+        "season",
+        "target_share",
+        "team",
+        "tgt_share",
+        "tgt_share_current",
+        "tgt_share_prior",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__player_form_consensus.csv",
+      "rows": 396,
+      "source_in_artifact": "data/player_form_consensus.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "player",
+        "player_clean_key",
+        "player_display_name",
+        "position",
+        "season",
+        "target_share",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__player_game_logs.csv",
+      "rows": 299,
+      "source_in_artifact": "data/player_game_logs.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "position",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__player_identity_registry.csv",
+      "rows": 3762,
+      "source_in_artifact": "data/player_identity_registry.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "position",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__player_identity_roster_history.csv",
+      "rows": 3463,
+      "source_in_artifact": "data/player_identity_roster_history.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "position",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__player_identity_semantic_audit.csv",
+      "rows": 396,
+      "source_in_artifact": "data/player_identity_semantic_audit.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "player",
+        "player_clean_key",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__player_identity_slate.csv",
+      "rows": 396,
+      "source_in_artifact": "data/player_identity_slate.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "rush_share",
+        "season",
+        "tgt_share"
+      ],
+      "durable_file": "week7_trace__data__player_season_totals.csv",
+      "rows": 1079,
+      "source_in_artifact": "data/player_season_totals.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "player",
+        "player_clean_key",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__props_raw.csv",
+      "rows": 2476,
+      "source_in_artifact": "data/props_raw.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "player",
+        "player_clean_key",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__qb_c2_production_integration_audit.csv",
+      "rows": 28,
+      "source_in_artifact": "data/qb_c2_production_integration_audit.csv"
+    },
+    {
+      "columns": [
+        "season",
+        "sportsbook_inputs_used",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__qb_c2_production_starter_audit.csv",
+      "rows": 28,
+      "source_in_artifact": "data/qb_c2_production_starter_audit.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "season",
+        "sportsbook_inputs_used",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__qb_distribution_state_context.csv",
+      "rows": 28,
+      "source_in_artifact": "data/qb_distribution_state_context.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "season",
+        "sportsbook_inputs_used",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__qb_distribution_state_context_audit.csv",
+      "rows": 28,
+      "source_in_artifact": "data/qb_distribution_state_context_audit.csv"
+    },
+    {
+      "columns": [
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__qb_promoted_team_context.csv",
+      "rows": 32,
+      "source_in_artifact": "data/qb_promoted_team_context.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "sportsbook_inputs_used",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__rb_rush_rec_conservation_v2_integration_audit.csv",
+      "rows": 28,
+      "source_in_artifact": "data/rb_rush_rec_conservation_v2_integration_audit.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "position",
+        "role",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__roles_current_production_eligible_v1.csv",
+      "rows": 396,
+      "source_in_artifact": "data/roles_current_production_eligible_v1.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "position",
+        "role",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__roles_ourlads.csv",
+      "rows": 458,
+      "source_in_artifact": "data/roles_ourlads.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "position",
+        "role",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__roles_ourlads_active_v1.csv",
+      "rows": 455,
+      "source_in_artifact": "data/roles_ourlads_active_v1.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "position",
+        "role",
+        "source",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__roles_ourlads_status_v1.csv",
+      "rows": 458,
+      "source_in_artifact": "data/roles_ourlads_status_v1.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "position",
+        "rules_tgt_share",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__target_entitlement_v1_trace.csv",
+      "rows": 396,
+      "source_in_artifact": "data/target_entitlement_v1_trace.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__te_r5p_full_slate_entitlement_trace.csv",
+      "rows": 83,
+      "source_in_artifact": "data/te_r5p_full_slate_entitlement_trace.csv"
+    },
+    {
+      "columns": [
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__team_context_v3.csv",
+      "rows": 32,
+      "source_in_artifact": "data/team_context_v3.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__team_week_map.csv",
+      "rows": 28,
+      "source_in_artifact": "data/team_week_map.csv"
+    },
+    {
+      "columns": [
+        "opponent",
+        "player",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__wr_cb_exposure.csv",
+      "rows": 147,
+      "source_in_artifact": "data/wr_cb_exposure.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__data__wr_r15_full_slate_entitlement_trace.csv",
+      "rows": 117,
+      "source_in_artifact": "data/wr_r15_full_slate_entitlement_trace.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "position",
+        "source",
+        "team"
+      ],
+      "durable_file": "week7_trace__outputs__current_player_availability.csv",
+      "rows": 458,
+      "source_in_artifact": "outputs/current_player_availability.csv"
+    },
+    {
+      "columns": [
+        "bayes_applied",
+        "bayes_evidence_state",
+        "opponent",
+        "player",
+        "player_clean_key",
+        "rules_applied",
+        "rules_role",
+        "season",
+        "team",
+        "week"
+      ],
+      "durable_file": "week7_trace__outputs__props_priced_clean.csv",
+      "rows": 2894,
+      "source_in_artifact": "outputs/props_priced_clean.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "position",
+        "role",
+        "team"
+      ],
+      "durable_file": "week7_trace__outputs__roles_current_production_eligible_v1.csv",
+      "rows": 396,
+      "source_in_artifact": "outputs/roles_current_production_eligible_v1.csv"
+    },
+    {
+      "columns": [
+        "player",
+        "player_clean_key",
+        "position",
+        "role",
+        "team"
+      ],
+      "durable_file": "week7_trace__outputs__roles_ourlads.csv",
+      "rows": 458,
+      "source_in_artifact": "outputs/roles_ourlads.csv"
+    }
+  ],
+  "extraction_diagnostics": {
+    "required_columns_missing_from_artifact": [
+      "analytic_expected_carries",
+      "bayes_target_share",
+      "depth_chart_position",
+      "evidence_state",
+      "expected_targets",
+      "fallback_reason",
+      "final_rush_probability",
+      "final_target_entitlement",
+      "pos",
+      "provenance",
+      "recent_team",
+      "room_normalization_factor",
+      "rush_room_scale",
+      "rush_top5_admitted",
+      "sim_selected_rush_share",
+      "target_entitlement",
+      "top_n_admitted"
+    ],
+    "required_columns_seen": {
+      "bayes_applied": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "outputs/props_priced_clean.csv"
+      ],
+      "bayes_evidence_state": [
+        "data/football_simulation_universe.csv",
+        "data/model_bayesian_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "outputs/props_priced_clean.csv"
+      ],
+      "bayes_position_group": [
+        "data/football_simulation_universe.csv",
+        "data/model_bayesian_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "bayes_rush_share": [
+        "data/football_simulation_universe.csv",
+        "data/model_bayesian_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "bayes_tgt_share": [
+        "data/football_simulation_universe.csv",
+        "data/model_bayesian_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "current_games": [
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_bayesian_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv"
+      ],
+      "opponent": [
+        "data/backtests/full_stack_vegas_benchmark_v1/non_qb_detail.csv",
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv",
+        "data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv",
+        "data/cb_coverage_player.csv",
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_context_bridge.csv",
+        "data/model_rule_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/opponent_map_from_props.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv",
+        "data/player_game_logs.csv",
+        "data/player_identity_slate.csv",
+        "data/props_raw.csv",
+        "data/qb_c2_production_integration_audit.csv",
+        "data/qb_distribution_state_context.csv",
+        "data/qb_distribution_state_context_audit.csv",
+        "data/team_week_map.csv",
+        "data/wr_cb_exposure.csv",
+        "outputs/props_priced_clean.csv"
+      ],
+      "player": [
+        "data/backtests/historical_market_vegas_benchmark_v1/historical_market_vegas_benchmark_detail.csv",
+        "data/cb_coverage_player.csv",
+        "data/current_player_availability.csv",
+        "data/football_simulation_universe.csv",
+        "data/injuries.csv",
+        "data/injuries_identity_audit.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_bayesian_diagnostics.csv",
+        "data/model_context_bridge.csv",
+        "data/model_ml_diagnostics.csv",
+        "data/model_rule_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/model_state_diagnostics.csv",
+        "data/opponent_map_from_props.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv",
+        "data/player_game_logs.csv",
+        "data/player_identity_registry.csv",
+        "data/player_identity_roster_history.csv",
+        "data/player_identity_semantic_audit.csv",
+        "data/player_identity_slate.csv",
+        "data/player_season_totals.csv",
+        "data/props_raw.csv",
+        "data/qb_c2_production_integration_audit.csv",
+        "data/rb_rush_rec_conservation_v2_integration_audit.csv",
+        "data/roles_current_production_eligible_v1.csv",
+        "data/roles_ourlads.csv",
+        "data/roles_ourlads_active_v1.csv",
+        "data/roles_ourlads_status_v1.csv",
+        "data/target_entitlement_v1_trace.csv",
+        "data/te_r5p_full_slate_entitlement_trace.csv",
+        "data/wr_cb_exposure.csv",
+        "data/wr_r15_full_slate_entitlement_trace.csv",
+        "outputs/current_player_availability.csv",
+        "outputs/props_priced_clean.csv",
+        "outputs/roles_current_production_eligible_v1.csv",
+        "outputs/roles_ourlads.csv"
+      ],
+      "player_clean_key": [
+        "data/backtests/full_stack_vegas_benchmark_v1/non_qb_detail.csv",
+        "data/backtests/historical_market_vegas_benchmark_v1/historical_market_vegas_benchmark_detail.csv",
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv",
+        "data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv",
+        "data/current_player_availability.csv",
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_bayesian_diagnostics.csv",
+        "data/model_ml_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/model_state_diagnostics.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv",
+        "data/player_game_logs.csv",
+        "data/player_identity_roster_history.csv",
+        "data/player_identity_slate.csv",
+        "data/player_season_totals.csv",
+        "data/props_raw.csv",
+        "data/qb_c2_production_integration_audit.csv",
+        "data/rb_rush_rec_conservation_v2_integration_audit.csv",
+        "data/roles_current_production_eligible_v1.csv",
+        "data/roles_ourlads.csv",
+        "data/roles_ourlads_active_v1.csv",
+        "data/roles_ourlads_status_v1.csv",
+        "data/target_entitlement_v1_trace.csv",
+        "data/te_r5p_full_slate_entitlement_trace.csv",
+        "data/wr_r15_full_slate_entitlement_trace.csv",
+        "outputs/current_player_availability.csv",
+        "outputs/props_priced_clean.csv",
+        "outputs/roles_current_production_eligible_v1.csv",
+        "outputs/roles_ourlads.csv"
+      ],
+      "player_display_name": [
+        "data/player_game_logs.csv"
+      ],
+      "position": [
+        "data/current_player_availability.csv",
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_bayesian_diagnostics.csv",
+        "data/model_context_bridge.csv",
+        "data/model_ml_diagnostics.csv",
+        "data/model_rule_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/model_state_diagnostics.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv",
+        "data/player_game_logs.csv",
+        "data/player_identity_registry.csv",
+        "data/player_identity_roster_history.csv",
+        "data/player_identity_semantic_audit.csv",
+        "data/roles_current_production_eligible_v1.csv",
+        "data/roles_ourlads.csv",
+        "data/roles_ourlads_active_v1.csv",
+        "data/roles_ourlads_status_v1.csv",
+        "data/target_entitlement_v1_trace.csv",
+        "outputs/current_player_availability.csv",
+        "outputs/roles_current_production_eligible_v1.csv",
+        "outputs/roles_ourlads.csv"
+      ],
+      "prior_games": [
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_bayesian_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv"
+      ],
+      "role": [
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_context_bridge.csv",
+        "data/model_rule_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv",
+        "data/roles_current_production_eligible_v1.csv",
+        "data/roles_ourlads.csv",
+        "data/roles_ourlads_active_v1.csv",
+        "data/roles_ourlads_status_v1.csv",
+        "outputs/roles_current_production_eligible_v1.csv",
+        "outputs/roles_ourlads.csv"
+      ],
+      "rules_applied": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "outputs/props_priced_clean.csv"
+      ],
+      "rules_role": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "outputs/props_priced_clean.csv"
+      ],
+      "rules_rush_share": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "rules_tgt_share": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/target_entitlement_v1_trace.csv"
+      ],
+      "rush_share": [
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_context_bridge.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv",
+        "data/player_season_totals.csv"
+      ],
+      "rush_share_current": [
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv"
+      ],
+      "rush_share_prior": [
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv"
+      ],
+      "season": [
+        "data/backtests/full_stack_vegas_benchmark_v1/non_qb_detail.csv",
+        "data/backtests/historical_market_vegas_benchmark_v1/historical_market_vegas_benchmark_detail.csv",
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv",
+        "data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv",
+        "data/backtests/qb_m78_official_inactives_corrected/m78_corrected_candidate_teamweek.csv",
+        "data/cb_coverage_player.csv",
+        "data/cb_coverage_team.csv",
+        "data/football_simulation_universe.csv",
+        "data/injuries.csv",
+        "data/injury_team_scope.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_bayesian_diagnostics.csv",
+        "data/model_context_bridge.csv",
+        "data/model_ml_diagnostics.csv",
+        "data/model_rule_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/model_state_diagnostics.csv",
+        "data/opponent_map_from_props.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv",
+        "data/player_game_logs.csv",
+        "data/player_identity_roster_history.csv",
+        "data/player_season_totals.csv",
+        "data/qb_c2_production_integration_audit.csv",
+        "data/qb_c2_production_starter_audit.csv",
+        "data/qb_distribution_state_context.csv",
+        "data/qb_distribution_state_context_audit.csv",
+        "data/qb_promoted_team_context.csv",
+        "data/te_r5p_full_slate_entitlement_trace.csv",
+        "data/team_context_v3.csv",
+        "data/team_week_map.csv",
+        "data/wr_cb_exposure.csv",
+        "data/wr_r15_full_slate_entitlement_trace.csv",
+        "outputs/props_priced_clean.csv"
+      ],
+      "source": [
+        "data/current_player_availability.csv",
+        "data/injuries.csv",
+        "data/injuries_identity_audit.csv",
+        "data/injury_team_scope.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/roles_ourlads_status_v1.csv",
+        "outputs/current_player_availability.csv"
+      ],
+      "sportsbook_inputs_used": [
+        "data/qb_c2_production_starter_audit.csv",
+        "data/qb_distribution_state_context.csv",
+        "data/qb_distribution_state_context_audit.csv",
+        "data/rb_rush_rec_conservation_v2_integration_audit.csv"
+      ],
+      "target_share": [
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv",
+        "data/player_game_logs.csv"
+      ],
+      "team": [
+        "data/backtests/full_stack_vegas_benchmark_v1/non_qb_detail.csv",
+        "data/backtests/historical_market_vegas_benchmark_v1/historical_market_vegas_benchmark_detail.csv",
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv",
+        "data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv",
+        "data/backtests/qb_m78_official_inactives_corrected/m78_corrected_candidate_teamweek.csv",
+        "data/cb_coverage_player.csv",
+        "data/cb_coverage_team.csv",
+        "data/current_player_availability.csv",
+        "data/football_simulation_universe.csv",
+        "data/injuries.csv",
+        "data/injuries_identity_audit.csv",
+        "data/injury_team_scope.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_bayesian_diagnostics.csv",
+        "data/model_context_bridge.csv",
+        "data/model_ml_diagnostics.csv",
+        "data/model_rule_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/model_state_diagnostics.csv",
+        "data/opponent_map_from_props.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv",
+        "data/player_game_logs.csv",
+        "data/player_identity_registry.csv",
+        "data/player_identity_roster_history.csv",
+        "data/player_identity_semantic_audit.csv",
+        "data/player_identity_slate.csv",
+        "data/props_raw.csv",
+        "data/qb_c2_production_integration_audit.csv",
+        "data/qb_c2_production_starter_audit.csv",
+        "data/qb_distribution_state_context.csv",
+        "data/qb_distribution_state_context_audit.csv",
+        "data/qb_promoted_team_context.csv",
+        "data/rb_rush_rec_conservation_v2_integration_audit.csv",
+        "data/roles_current_production_eligible_v1.csv",
+        "data/roles_ourlads.csv",
+        "data/roles_ourlads_active_v1.csv",
+        "data/roles_ourlads_status_v1.csv",
+        "data/target_entitlement_v1_trace.csv",
+        "data/te_r5p_full_slate_entitlement_trace.csv",
+        "data/team_context_v3.csv",
+        "data/team_week_map.csv",
+        "data/wr_cb_exposure.csv",
+        "data/wr_r15_full_slate_entitlement_trace.csv",
+        "outputs/current_player_availability.csv",
+        "outputs/props_priced_clean.csv",
+        "outputs/roles_current_production_eligible_v1.csv",
+        "outputs/roles_ourlads.csv"
+      ],
+      "tgt_share": [
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_context_bridge.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv",
+        "data/player_season_totals.csv"
+      ],
+      "tgt_share_current": [
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv"
+      ],
+      "tgt_share_prior": [
+        "data/football_simulation_universe.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv"
+      ],
+      "week": [
+        "data/backtests/full_stack_vegas_benchmark_v1/non_qb_detail.csv",
+        "data/backtests/historical_market_vegas_benchmark_v1/historical_market_vegas_benchmark_detail.csv",
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv",
+        "data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv",
+        "data/backtests/qb_m78_official_inactives_corrected/m78_corrected_candidate_teamweek.csv",
+        "data/cb_coverage_player.csv",
+        "data/cb_coverage_team.csv",
+        "data/football_simulation_universe.csv",
+        "data/injuries.csv",
+        "data/injury_team_scope.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_context_bridge.csv",
+        "data/model_ml_diagnostics.csv",
+        "data/model_rule_diagnostics.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/model_state_diagnostics.csv",
+        "data/opponent_map_from_props.csv",
+        "data/player_form.csv",
+        "data/player_form_consensus.csv",
+        "data/player_game_logs.csv",
+        "data/player_identity_roster_history.csv",
+        "data/qb_c2_production_integration_audit.csv",
+        "data/qb_c2_production_starter_audit.csv",
+        "data/qb_distribution_state_context.csv",
+        "data/qb_distribution_state_context_audit.csv",
+        "data/qb_promoted_team_context.csv",
+        "data/rb_rush_rec_conservation_v2_integration_audit.csv",
+        "data/te_r5p_full_slate_entitlement_trace.csv",
+        "data/team_context_v3.csv",
+        "data/team_week_map.csv",
+        "data/wr_cb_exposure.csv",
+        "data/wr_r15_full_slate_entitlement_trace.csv",
+        "outputs/props_priced_clean.csv"
+      ]
+    },
+    "scanned": [
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/_debug/team_form_prior_bridge.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/anytime_td_model_status_v1.csv"
+      },
+      {
+        "columns": 32,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "opponent",
+          "player_clean_key",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/backtests/full_stack_vegas_benchmark_v1/non_qb_detail.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/backtests/full_stack_vegas_benchmark_v1/non_qb_summary.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/backtests/full_stack_vegas_benchmark_v1/qb_base_summary.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/backtests/full_stack_vegas_benchmark_v1/qb_market_assisted_summary.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "season"
+        ],
+        "path": "data/backtests/full_stack_vegas_benchmark_v1/qb_synthesis_scoreboard_reconstruction_v1.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/backtests/full_stack_vegas_benchmark_v1/qb_synthesis_summary.csv"
+      },
+      {
+        "columns": 23,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/backtests/historical_market_vegas_benchmark_v1/historical_market_vegas_benchmark_detail.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/backtests/historical_market_vegas_benchmark_v1/historical_market_vegas_benchmark_summary.csv"
+      },
+      {
+        "columns": 13,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "season"
+        ],
+        "path": "data/backtests/historical_market_vegas_benchmark_v1/market_archive_source_audit.csv"
+      },
+      {
+        "columns": 127,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "opponent",
+          "player_clean_key",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      },
+      {
+        "columns": 14,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "opponent",
+          "player_clean_key",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv"
+      },
+      {
+        "columns": 5,
+        "explanatory_columns_matched": 3,
+        "matched": [
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/backtests/qb_m78_official_inactives_corrected/m78_corrected_candidate_teamweek.csv"
+      },
+      {
+        "columns": 18,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "opponent",
+          "player",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/cb_coverage_player.csv"
+      },
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 3,
+        "matched": [
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/cb_coverage_team.csv"
+      },
+      {
+        "columns": 6,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "team",
+          "week"
+        ],
+        "path": "data/coverage_penalties.csv"
+      },
+      {
+        "columns": 30,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "position",
+          "source",
+          "team"
+        ],
+        "path": "data/current_player_availability.csv"
+      },
+      {
+        "columns": 15,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "season",
+          "week"
+        ],
+        "path": "data/current_player_availability_game_certification.csv"
+      },
+      {
+        "columns": 108,
+        "explanatory_columns_matched": 26,
+        "matched": [
+          "bayes_applied",
+          "bayes_evidence_state",
+          "bayes_position_group",
+          "bayes_rush_share",
+          "bayes_tgt_share",
+          "current_games",
+          "opponent",
+          "player",
+          "player_clean_key",
+          "position",
+          "prior_games",
+          "role",
+          "rules_applied",
+          "rules_role",
+          "rules_rush_share",
+          "rules_tgt_share",
+          "rush_share",
+          "rush_share_current",
+          "rush_share_prior",
+          "season",
+          "target_share",
+          "team",
+          "tgt_share",
+          "tgt_share_current",
+          "tgt_share_prior",
+          "week"
+        ],
+        "path": "data/football_simulation_universe.csv"
+      },
+      {
+        "columns": 5,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "team"
+        ],
+        "path": "data/football_simulation_universe_audit.csv"
+      },
+      {
+        "columns": 4,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/full_slate_data_quality_audit.csv"
+      },
+      {
+        "columns": 10,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "season",
+          "week"
+        ],
+        "path": "data/game_lines.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "season",
+          "source",
+          "team",
+          "week"
+        ],
+        "path": "data/injuries.csv"
+      },
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 3,
+        "matched": [
+          "player",
+          "source",
+          "team"
+        ],
+        "path": "data/injuries_identity_audit.csv"
+      },
+      {
+        "columns": 9,
+        "explanatory_columns_matched": 4,
+        "matched": [
+          "season",
+          "source",
+          "team",
+          "week"
+        ],
+        "path": "data/injury_team_scope.csv"
+      },
+      {
+        "columns": 15,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "source"
+        ],
+        "path": "data/live_odds_placeholder_rows.csv"
+      },
+      {
+        "columns": 6,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "data/live_prop_identity_audit.csv"
+      },
+      {
+        "columns": 343,
+        "explanatory_columns_matched": 18,
+        "matched": [
+          "current_games",
+          "opponent",
+          "player",
+          "player_clean_key",
+          "position",
+          "prior_games",
+          "role",
+          "rush_share",
+          "rush_share_current",
+          "rush_share_prior",
+          "season",
+          "source",
+          "target_share",
+          "team",
+          "tgt_share",
+          "tgt_share_current",
+          "tgt_share_prior",
+          "week"
+        ],
+        "path": "data/make_metrics_output.csv"
+      },
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 4,
+        "matched": [
+          "player",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/manual_final_board_quarantine.csv"
+      },
+      {
+        "columns": 5,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/manual_name_overrides.csv"
+      },
+      {
+        "columns": 5,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "team"
+        ],
+        "path": "data/manual_prop_quarantine.csv"
+      },
+      {
+        "columns": 5,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "team"
+        ],
+        "path": "data/manual_roster_overrides.csv"
+      },
+      {
+        "columns": 9,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/market_model_lineage_current.csv"
+      },
+      {
+        "columns": 80,
+        "explanatory_columns_matched": 10,
+        "matched": [
+          "bayes_applied",
+          "bayes_evidence_state",
+          "opponent",
+          "player",
+          "player_clean_key",
+          "rules_applied",
+          "rules_role",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/market_track_record/boards/2026_wk01.csv"
+      },
+      {
+        "columns": 69,
+        "explanatory_columns_matched": 10,
+        "matched": [
+          "bayes_applied",
+          "bayes_evidence_state",
+          "opponent",
+          "player",
+          "player_clean_key",
+          "rules_applied",
+          "rules_role",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/market_track_record/boards/2026_wk02.csv"
+      },
+      {
+        "columns": 79,
+        "explanatory_columns_matched": 10,
+        "matched": [
+          "bayes_applied",
+          "bayes_evidence_state",
+          "opponent",
+          "player",
+          "player_clean_key",
+          "rules_applied",
+          "rules_role",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/market_track_record/boards/2026_wk06.csv"
+      },
+      {
+        "columns": 10,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/market_track_record/game_odds/2026_wk06.csv"
+      },
+      {
+        "columns": 100,
+        "explanatory_columns_matched": 11,
+        "matched": [
+          "bayes_applied",
+          "bayes_evidence_state",
+          "opponent",
+          "player",
+          "player_clean_key",
+          "position",
+          "rules_applied",
+          "rules_role",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/market_track_record/graded/2026_wk01_wk02_graded.csv"
+      },
+      {
+        "columns": 20,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "source"
+        ],
+        "path": "data/market_track_record/raw_props/2026_wk06.csv"
+      },
+      {
+        "columns": 343,
+        "explanatory_columns_matched": 18,
+        "matched": [
+          "current_games",
+          "opponent",
+          "player",
+          "player_clean_key",
+          "position",
+          "prior_games",
+          "role",
+          "rush_share",
+          "rush_share_current",
+          "rush_share_prior",
+          "season",
+          "source",
+          "target_share",
+          "team",
+          "tgt_share",
+          "tgt_share_current",
+          "tgt_share_prior",
+          "week"
+        ],
+        "path": "data/metrics_ready.csv"
+      },
+      {
+        "columns": 36,
+        "explanatory_columns_matched": 11,
+        "matched": [
+          "bayes_evidence_state",
+          "bayes_position_group",
+          "bayes_rush_share",
+          "bayes_tgt_share",
+          "current_games",
+          "player",
+          "player_clean_key",
+          "position",
+          "prior_games",
+          "season",
+          "team"
+        ],
+        "path": "data/model_bayesian_diagnostics.csv"
+      },
+      {
+        "columns": 29,
+        "explanatory_columns_matched": 9,
+        "matched": [
+          "opponent",
+          "player",
+          "position",
+          "role",
+          "rush_share",
+          "season",
+          "team",
+          "tgt_share",
+          "week"
+        ],
+        "path": "data/model_context_bridge.csv"
+      },
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/model_ensemble_diagnostics.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/model_ensemble_weights.csv"
+      },
+      {
+        "columns": 18,
+        "explanatory_columns_matched": 6,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "position",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/model_ml_diagnostics.csv"
+      },
+      {
+        "columns": 22,
+        "explanatory_columns_matched": 8,
+        "matched": [
+          "opponent",
+          "player",
+          "position",
+          "role",
+          "rules_role",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/model_rule_diagnostics.csv"
+      },
+      {
+        "columns": 409,
+        "explanatory_columns_matched": 27,
+        "matched": [
+          "bayes_applied",
+          "bayes_evidence_state",
+          "bayes_position_group",
+          "bayes_rush_share",
+          "bayes_tgt_share",
+          "current_games",
+          "opponent",
+          "player",
+          "player_clean_key",
+          "position",
+          "prior_games",
+          "role",
+          "rules_applied",
+          "rules_role",
+          "rules_rush_share",
+          "rules_tgt_share",
+          "rush_share",
+          "rush_share_current",
+          "rush_share_prior",
+          "season",
+          "source",
+          "target_share",
+          "team",
+          "tgt_share",
+          "tgt_share_current",
+          "tgt_share_prior",
+          "week"
+        ],
+        "path": "data/model_rule_simulation_inputs.csv"
+      },
+      {
+        "columns": 41,
+        "explanatory_columns_matched": 6,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "position",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/model_state_diagnostics.csv"
+      },
+      {
+        "columns": 16,
+        "explanatory_columns_matched": 3,
+        "matched": [
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/models/rb_r26_production_v1/rb_r26_week1_room_state_v1.csv"
+      },
+      {
+        "columns": 10,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/odds_game.csv"
+      },
+      {
+        "columns": 9,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "team"
+        ],
+        "path": "data/official_inactives_v1.csv"
+      },
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "opponent",
+          "player",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/opponent_map_from_props.csv"
+      },
+      {
+        "columns": 6,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "team",
+          "week"
+        ],
+        "path": "data/play_volume_splits.csv"
+      },
+      {
+        "columns": 61,
+        "explanatory_columns_matched": 17,
+        "matched": [
+          "current_games",
+          "opponent",
+          "player",
+          "player_clean_key",
+          "position",
+          "prior_games",
+          "role",
+          "rush_share",
+          "rush_share_current",
+          "rush_share_prior",
+          "season",
+          "target_share",
+          "team",
+          "tgt_share",
+          "tgt_share_current",
+          "tgt_share_prior",
+          "week"
+        ],
+        "path": "data/player_form.csv"
+      },
+      {
+        "columns": 61,
+        "explanatory_columns_matched": 17,
+        "matched": [
+          "current_games",
+          "opponent",
+          "player",
+          "player_clean_key",
+          "position",
+          "prior_games",
+          "role",
+          "rush_share",
+          "rush_share_current",
+          "rush_share_prior",
+          "season",
+          "target_share",
+          "team",
+          "tgt_share",
+          "tgt_share_current",
+          "tgt_share_prior",
+          "week"
+        ],
+        "path": "data/player_form_consensus.csv"
+      },
+      {
+        "columns": 176,
+        "explanatory_columns_matched": 9,
+        "matched": [
+          "opponent",
+          "player",
+          "player_clean_key",
+          "player_display_name",
+          "position",
+          "season",
+          "target_share",
+          "team",
+          "week"
+        ],
+        "path": "data/player_game_logs.csv"
+      },
+      {
+        "columns": 8,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "position"
+        ],
+        "path": "data/player_identity_aliases.csv"
+      },
+      {
+        "columns": 9,
+        "explanatory_columns_matched": 3,
+        "matched": [
+          "player",
+          "position",
+          "team"
+        ],
+        "path": "data/player_identity_registry.csv"
+      },
+      {
+        "columns": 10,
+        "explanatory_columns_matched": 6,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "position",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/player_identity_roster_history.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 3,
+        "matched": [
+          "player",
+          "position",
+          "team"
+        ],
+        "path": "data/player_identity_semantic_audit.csv"
+      },
+      {
+        "columns": 9,
+        "explanatory_columns_matched": 4,
+        "matched": [
+          "opponent",
+          "player",
+          "player_clean_key",
+          "team"
+        ],
+        "path": "data/player_identity_slate.csv"
+      },
+      {
+        "columns": 2,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/player_identity_validation.csv"
+      },
+      {
+        "columns": 6,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "source"
+        ],
+        "path": "data/player_name_map_from_props.csv"
+      },
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "source"
+        ],
+        "path": "data/player_scoring_td_position_priors.csv"
+      },
+      {
+        "columns": 30,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "rush_share",
+          "season",
+          "tgt_share"
+        ],
+        "path": "data/player_season_totals.csv"
+      },
+      {
+        "columns": 9,
+        "explanatory_columns_matched": 4,
+        "matched": [
+          "season",
+          "source",
+          "team",
+          "week"
+        ],
+        "path": "data/preserved_replay/WEEK2_INJURY_SCOPE_2026_WK02.csv"
+      },
+      {
+        "columns": 21,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "data/props_enriched.csv"
+      },
+      {
+        "columns": 30,
+        "explanatory_columns_matched": 4,
+        "matched": [
+          "opponent",
+          "player",
+          "player_clean_key",
+          "team"
+        ],
+        "path": "data/props_raw.csv"
+      },
+      {
+        "columns": 4,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "data/provider_readiness_v3.csv"
+      },
+      {
+        "columns": 24,
+        "explanatory_columns_matched": 6,
+        "matched": [
+          "opponent",
+          "player",
+          "player_clean_key",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/qb_c2_production_integration_audit.csv"
+      },
+      {
+        "columns": 15,
+        "explanatory_columns_matched": 4,
+        "matched": [
+          "season",
+          "sportsbook_inputs_used",
+          "team",
+          "week"
+        ],
+        "path": "data/qb_c2_production_starter_audit.csv"
+      },
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player_clean_key"
+        ],
+        "path": "data/qb_c2_state_capture_parity.csv"
+      },
+      {
+        "columns": 5,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "week"
+        ],
+        "path": "data/qb_designed_runs.csv"
+      },
+      {
+        "columns": 48,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "opponent",
+          "season",
+          "sportsbook_inputs_used",
+          "team",
+          "week"
+        ],
+        "path": "data/qb_distribution_state_context.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "opponent",
+          "season",
+          "sportsbook_inputs_used",
+          "team",
+          "week"
+        ],
+        "path": "data/qb_distribution_state_context_audit.csv"
+      },
+      {
+        "columns": 18,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "season"
+        ],
+        "path": "data/qb_promoted_context_audit.csv"
+      },
+      {
+        "columns": 27,
+        "explanatory_columns_matched": 3,
+        "matched": [
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/qb_promoted_team_context.csv"
+      },
+      {
+        "columns": 8,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "week"
+        ],
+        "path": "data/qb_run_metrics.csv"
+      },
+      {
+        "columns": 5,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "week"
+        ],
+        "path": "data/qb_scramble_rates.csv"
+      },
+      {
+        "columns": 4,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "team"
+        ],
+        "path": "data/rb_rush_rec_conservation_final_audit.csv"
+      },
+      {
+        "columns": 2,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "team"
+        ],
+        "path": "data/rb_rush_rec_conservation_input_audit.csv"
+      },
+      {
+        "columns": 13,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "sportsbook_inputs_used",
+          "team",
+          "week"
+        ],
+        "path": "data/rb_rush_rec_conservation_v2_integration_audit.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 6,
+        "matched": [
+          "opponent",
+          "player",
+          "season",
+          "sportsbook_inputs_used",
+          "team",
+          "week"
+        ],
+        "path": "data/rb_rush_synthesis_context.csv"
+      },
+      {
+        "columns": 13,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "position",
+          "role",
+          "team"
+        ],
+        "path": "data/roles_current_production_eligible_v1.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "position",
+          "role",
+          "team"
+        ],
+        "path": "data/roles_ourlads.csv"
+      },
+      {
+        "columns": 13,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "position",
+          "role",
+          "team"
+        ],
+        "path": "data/roles_ourlads_active_v1.csv"
+      },
+      {
+        "columns": 15,
+        "explanatory_columns_matched": 6,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "position",
+          "role",
+          "source",
+          "team"
+        ],
+        "path": "data/roles_ourlads_status_v1.csv"
+      },
+      {
+        "columns": 8,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "team",
+          "week"
+        ],
+        "path": "data/run_pass_funnel.csv"
+      },
+      {
+        "columns": 6,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "season",
+          "week"
+        ],
+        "path": "data/schedules/schedule_2026.csv"
+      },
+      {
+        "columns": 6,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "team",
+          "week"
+        ],
+        "path": "data/script_escalators.csv"
+      },
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "team"
+        ],
+        "path": "data/sharp_coverage_pos_2026.csv"
+      },
+      {
+        "columns": 6,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "team"
+        ],
+        "path": "data/sharp_coverage_scheme_2026.csv"
+      },
+      {
+        "columns": 6,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "team"
+        ],
+        "path": "data/sharp_def_tend_2026.csv"
+      },
+      {
+        "columns": 6,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "team"
+        ],
+        "path": "data/sharp_dl_2026.csv"
+      },
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "team"
+        ],
+        "path": "data/sharp_off_tend_2026.csv"
+      },
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "team"
+        ],
+        "path": "data/sharp_ol_2026.csv"
+      },
+      {
+        "columns": 12,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "team"
+        ],
+        "path": "data/sharp_pace_2026.csv"
+      },
+      {
+        "columns": 47,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "team"
+        ],
+        "path": "data/sharp_team_form.csv"
+      },
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "team"
+        ],
+        "path": "data/stadiums.csv"
+      },
+      {
+        "columns": 7,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player_clean_key"
+        ],
+        "path": "data/target_entitlement_v1_projection_invariance.csv"
+      },
+      {
+        "columns": 21,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "position",
+          "rules_tgt_share",
+          "team"
+        ],
+        "path": "data/target_entitlement_v1_trace.csv"
+      },
+      {
+        "columns": 22,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/te_r5p_full_slate_entitlement_trace.csv"
+      },
+      {
+        "columns": 9,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player_clean_key",
+          "position"
+        ],
+        "path": "data/te_r5p_full_slate_simulation_delta.csv"
+      },
+      {
+        "columns": 45,
+        "explanatory_columns_matched": 3,
+        "matched": [
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/team_context_v3.csv"
+      },
+      {
+        "columns": 10,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "source",
+          "team"
+        ],
+        "path": "data/team_context_v3_provenance.csv"
+      },
+      {
+        "columns": 110,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "season",
+          "team"
+        ],
+        "path": "data/team_form.csv"
+      },
+      {
+        "columns": 20,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "team"
+        ],
+        "path": "data/team_target_pool_audit.csv"
+      },
+      {
+        "columns": 10,
+        "explanatory_columns_matched": 4,
+        "matched": [
+          "opponent",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/team_week_map.csv"
+      },
+      {
+        "columns": 5,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "team",
+          "week"
+        ],
+        "path": "data/volatility_widening.csv"
+      },
+      {
+        "columns": 30,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "season",
+          "week"
+        ],
+        "path": "data/weather_week.csv"
+      },
+      {
+        "columns": 22,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "opponent",
+          "player",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/wr_cb_exposure.csv"
+      },
+      {
+        "columns": 25,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "data/wr_r15_full_slate_entitlement_trace.csv"
+      },
+      {
+        "columns": 9,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player_clean_key",
+          "position"
+        ],
+        "path": "data/wr_r15_full_slate_simulation_delta.csv"
+      },
+      {
+        "columns": 30,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "position",
+          "source",
+          "team"
+        ],
+        "path": "outputs/current_player_availability.csv"
+      },
+      {
+        "columns": 15,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "season",
+          "week"
+        ],
+        "path": "outputs/current_player_availability_game_certification.csv"
+      },
+      {
+        "columns": 10,
+        "explanatory_columns_matched": 0,
+        "matched": [],
+        "path": "outputs/odds_game.csv"
+      },
+      {
+        "columns": 6,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "source"
+        ],
+        "path": "outputs/player_name_map_from_props.csv"
+      },
+      {
+        "columns": 26,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "player_clean_key"
+        ],
+        "path": "outputs/props_enriched.csv"
+      },
+      {
+        "columns": 15,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_player_anytime_td.csv"
+      },
+      {
+        "columns": 15,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_player_pass_tds.csv"
+      },
+      {
+        "columns": 15,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_player_pass_yds.csv"
+      },
+      {
+        "columns": 15,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_player_reception_yds.csv"
+      },
+      {
+        "columns": 15,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_player_receptions.csv"
+      },
+      {
+        "columns": 15,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_player_rush_reception_yds.csv"
+      },
+      {
+        "columns": 15,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_player_rush_yds.csv"
+      },
+      {
+        "columns": 76,
+        "explanatory_columns_matched": 10,
+        "matched": [
+          "bayes_applied",
+          "bayes_evidence_state",
+          "opponent",
+          "player",
+          "player_clean_key",
+          "rules_applied",
+          "rules_role",
+          "season",
+          "team",
+          "week"
+        ],
+        "path": "outputs/props_priced_clean.csv"
+      },
+      {
+        "columns": 20,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "source"
+        ],
+        "path": "outputs/props_pricing_offers.csv"
+      },
+      {
+        "columns": 13,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_raw/player_anytime_td.csv"
+      },
+      {
+        "columns": 13,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_raw/player_pass_tds.csv"
+      },
+      {
+        "columns": 13,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_raw/player_pass_yds.csv"
+      },
+      {
+        "columns": 13,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_raw/player_reception_yds.csv"
+      },
+      {
+        "columns": 13,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_raw/player_receptions.csv"
+      },
+      {
+        "columns": 13,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_raw/player_rush_reception_yds.csv"
+      },
+      {
+        "columns": 8,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_raw/player_rush_tds.csv"
+      },
+      {
+        "columns": 13,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_raw/player_rush_yds.csv"
+      },
+      {
+        "columns": 20,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "source"
+        ],
+        "path": "outputs/props_raw.csv"
+      },
+      {
+        "columns": 14,
+        "explanatory_columns_matched": 2,
+        "matched": [
+          "player",
+          "source"
+        ],
+        "path": "outputs/props_raw_compact.csv"
+      },
+      {
+        "columns": 9,
+        "explanatory_columns_matched": 1,
+        "matched": [
+          "player"
+        ],
+        "path": "outputs/props_raw_wide.csv"
+      },
+      {
+        "columns": 13,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "position",
+          "role",
+          "team"
+        ],
+        "path": "outputs/roles_current_production_eligible_v1.csv"
+      },
+      {
+        "columns": 11,
+        "explanatory_columns_matched": 5,
+        "matched": [
+          "player",
+          "player_clean_key",
+          "position",
+          "role",
+          "team"
+        ],
+        "path": "outputs/roles_ourlads.csv"
+      }
+    ]
+  },
+  "outcomes_inspected": false,
+  "purpose": "preserve the pre-sportsbook explanatory state needed to audit production's position-prior fallback route before artifact 12456298985 expires 2027-01-20",
+  "scientific_boundary": "PRE_SPORTSBOOK_EXPLANATORY_STATE_ONLY",
+  "source_artifact_id": "12456298985",
+  "source_head": "4dc178b59da8708dbea978b8e54e753b1e2f75c5",
+  "source_run_id": "39849371821",
+  "sportsbook_columns_excluded": true,
+  "version": "WEEK7_PRODUCTION_OPPORTUNITY_TRACE_V1",
+  "week": 7
+}
