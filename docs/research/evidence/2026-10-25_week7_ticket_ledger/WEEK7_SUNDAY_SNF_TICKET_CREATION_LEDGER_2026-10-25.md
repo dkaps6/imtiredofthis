@@ -12,7 +12,7 @@ This file preserves the ticket constructions created in the GPT/user conversatio
 - `FINAL` means the last card version presented in chat for that portfolio; it does **not** imply the user necessarily placed every card.
 - ATD cards are preserved as an explicitly **uncertified / fun-money** lane and must not be used as validation of PRISM yardage science.
 - The SNF ATD card labelled `SEA_SCRIPT_LABEL_AS_CREATED` is preserved exactly as created even though Kenneth Walker III was a KC player in the 2026 slate. Do not silently repair historical ticket evidence.
-- User-supplied FanDuel screenshots are preserved separately under `pricing_screenshots/`; their SHA-256 hashes and player/market mappings are in `pricing_screenshot_manifest.csv`.
+- User-supplied FanDuel screenshot **content is preserved in this evidence package as an exact pricing transcription plus per-image SHA-256 manifest**. The current GitHub connector cannot accept raw JPEG bytes from ChatGPT conversation attachments, so the 21 JPEG binaries are not falsely claimed as committed. Two lossless ZIP archives of the originals were created in the chat workspace and are identified in `SCREENSHOT_BINARY_ARCHIVE_NOTE.md` for external handoff.
 - `pricing_transcription.csv` contains only prices that were clearly readable/transcribed in the conversation. Cropped/uncertain prices are intentionally omitted rather than guessed.
 - The canonical paid Week-7 market boundary remains `data/market_track_record/`; these screenshots are downstream human ticket-construction evidence, not model inputs.
 
@@ -320,7 +320,8 @@ This file preserves the ticket constructions created in the GPT/user conversatio
 - `ticket_legs.csv` — one row per ticket leg for grading/exposure analysis.
 - `pricing_transcription.csv` — exact visible FanDuel alt prices transcribed from user screenshots.
 - `pricing_screenshot_manifest.csv` — screenshot mapping + SHA-256.
-- `pricing_screenshots/` — original user-supplied JPEG evidence.
+- `SCREENSHOT_BINARY_ARCHIVE_NOTE.md` — exact archive counts, sizes, SHA-256s, and the binary-transfer limitation.
+- Raw JPEG binaries: **not committed by this connector**; use the archive hashes to verify any later binary import.
 
 ## Postmortem use
 
