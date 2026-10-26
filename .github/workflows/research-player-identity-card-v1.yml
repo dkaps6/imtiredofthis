@@ -160,9 +160,19 @@ jobs:
           # (B) active zero-opportunity weeks are represented, not dropped
           az = pd.to_numeric(cards["active_zero_opportunity_weeks"],
                              errors="coerce")
-          if not (az.fillna(-1) >= 0).all():
-              fail.append("active_zero_opportunity_weeks missing/negative")
-          if az.sum() <= 0:
+          # NaN is legitimate exactly where the denominator is not trusted:
+          # an understated n_part understates the zero count too. Everywhere
+          # else it must be a real, non-negative integer.
+          state = cards["participation_source_state"]
+          trusted_rows = state.eq("available")
+          if not (az[trusted_rows] >= 0).all():
+              fail.append("active_zero_opportunity_weeks missing/negative on "
+                          "cards whose denominator IS trusted")
+          stray = az[~trusted_rows].notna()
+          if stray.any():
+              fail.append(f"{int(stray.sum())} untrusted cards still report an "
+                          "active-zero week count")
+          if az[trusted_rows].sum() <= 0:
               fail.append("no active zero-opportunity weeks found at all, "
                           "which means they are still being dropped")
 
