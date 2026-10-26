@@ -1,7 +1,10 @@
 {
+  "anomaly_gate_version": "PLAYER_STATE_ANOMALY_GATE_V1_PARTICIPATION_ONLY",
   "audit_corrections_applied": "6420504608_A_through_E",
   "cards": 35196,
   "denominator_contradicted_cards": 24,
+  "gate_cards_with_withheld_weeks": 1428,
+  "gate_weeks_withheld_total": 2010,
   "history_state_counts": {
     "current_only": 558,
     "no_history": 27928,
@@ -39,6 +42,11 @@
     "unbridged_only_players": 381
   },
   "opportunity_eligible_cards": 10960,
+  "player_week_state_counts": {
+    "HEALTHY_FULL": 6401,
+    "NO_BASELINE": 1430,
+    "UNRESOLVED_CONTEXT": 1743
+  },
   "players": 3053,
   "prior_seasons": [
     2025
