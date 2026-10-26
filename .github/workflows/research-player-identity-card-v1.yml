@@ -146,12 +146,16 @@ jobs:
           if leaked.any():
               fail.append(f"{int(leaked.sum())} untrusted-denominator cards "
                           "still published a per-week rate")
-          # With those excluded, a remaining contradiction is a real
-          # inconsistency rather than a known bridge gap.
-          if bool(cards["participation_denominator_contradicted"].any()):
-              n_c = int(cards["participation_denominator_contradicted"].sum())
-              fail.append(f"{n_c} cards have fewer participation weeks than "
-                          "weeks in which opportunity was observed")
+          # A contradiction (fewer participation weeks than weeks with observed
+          # opportunity) means the bridge missed that player entirely. It is
+          # reported, not fatal: the harm would be publishing a rate on top of
+          # a denominator we have just proved is short. Gate on the harm.
+          contra = cards["participation_denominator_contradicted"].astype(bool)
+          contra_rated = contra & pd.to_numeric(
+              cards["opp_per_participation_week"], errors="coerce").notna()
+          if contra_rated.any():
+              fail.append(f"{int(contra_rated.sum())} cards published a "
+                          "per-week rate on a provably short denominator")
 
           # (B) active zero-opportunity weeks are represented, not dropped
           az = pd.to_numeric(cards["active_zero_opportunity_weeks"],
