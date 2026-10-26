@@ -17,26 +17,26 @@
     "prior_only": 2593
   },
   "identity_bridge": {
-    "bridge_match_rate": 0.8117859784663434,
-    "bridge_matched": 29631,
+    "bridge_ambiguous_pfr_ids": 0,
+    "bridge_match_rate": 0.8135119585764774,
+    "bridge_matched": 29694,
+    "bridge_players_mapped": 2520,
     "bridge_state": "ok",
-    "bridge_unmatched": 6870,
+    "bridge_unmatched": 6807,
     "offensive_player_weeks_total": 14474,
-    "offensive_player_weeks_unmatched": 4906,
-    "partial_bridge_gsis_ids": [
-      "00-0039518"
-    ],
-    "partial_bridge_player_weeks": 3,
-    "partial_bridge_players": 1,
-    "participation_player_weeks": 9568,
+    "offensive_player_weeks_unmatched": 4900,
+    "partial_bridge_gsis_ids": [],
+    "partial_bridge_player_weeks": 0,
+    "partial_bridge_players": 0,
+    "participation_player_weeks": 9574,
     "roster_rows": 64455,
     "roster_rows_bridgeable": 48111,
     "roster_rows_with_gsis": 64429,
     "roster_rows_with_pfr": 48111,
     "snap_rows": 36501,
     "unbridged_absent_from_roster": 381,
-    "unbridged_on_roster_without_gsis": 3,
-    "unbridged_only_players": 384
+    "unbridged_on_roster_without_gsis": 0,
+    "unbridged_only_players": 381
   },
   "opportunity_eligible_cards": 10960,
   "players": 3053,
@@ -57,6 +57,6 @@
     7
   ],
   "teams": 32,
-  "untrusted_denominator_cards": 14,
+  "untrusted_denominator_cards": 0,
   "version": "PLAYER_IDENTITY_CARD_V1"
 }
