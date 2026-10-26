@@ -3,8 +3,8 @@
   "audit_corrections_applied": "6420504608_A_through_E",
   "cards": 35196,
   "denominator_contradicted_cards": 24,
-  "gate_cards_with_withheld_weeks": 1428,
-  "gate_weeks_withheld_total": 2010,
+  "gate_cards_with_withheld_weeks": 1398,
+  "gate_weeks_withheld_total": 1976,
   "history_state_counts": {
     "current_only": 558,
     "no_history": 27928,
@@ -26,6 +26,7 @@
     "bridge_players_mapped": 2520,
     "bridge_state": "ok",
     "bridge_unmatched": 6807,
+    "bye_detection": "available",
     "offensive_player_weeks_total": 14474,
     "offensive_player_weeks_unmatched": 4900,
     "partial_bridge_gsis_ids": [],
@@ -43,9 +44,9 @@
   },
   "opportunity_eligible_cards": 10960,
   "player_week_state_counts": {
-    "HEALTHY_FULL": 6401,
+    "HEALTHY_FULL": 6786,
     "NO_BASELINE": 1430,
-    "UNRESOLVED_CONTEXT": 1743
+    "UNRESOLVED_CONTEXT": 1358
   },
   "players": 3053,
   "prior_seasons": [
