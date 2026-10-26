@@ -1,0 +1,6 @@
+partial_participation_ratio,is_current_default,participation_weeks,weeks_usable,weeks_withheld,state_HEALTHY_FULL,state_NO_BASELINE,state_UNRESOLVED_CONTEXT,state_RETURN_FROM_INJURY,state_INJURY_LIMITED,cards,cards_opportunity_eligible,cards_with_usable_evidence,eligible_cards_with_usable_evidence,gate_weeks_withheld_total
+0.3,False,9574,8667,907,7237,1430,654,213,40,35196,10960,2655,2651,1100
+0.4,False,9574,8475,1099,7045,1430,833,213,53,35196,10960,2577,2573,1508
+0.5,True,9574,8216,1358,6786,1430,1078,213,67,35196,10960,2521,2517,1976
+0.6,False,9574,7931,1643,6501,1430,1347,213,83,35196,10960,2421,2417,2536
+0.7,False,9574,7544,2030,6114,1430,1711,213,106,35196,10960,2293,2289,3228
