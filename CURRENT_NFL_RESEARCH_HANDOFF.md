@@ -1,6 +1,6 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-26 — V2 — PLAYER IDENTITY CARD V1 BUILT, GATED, COMMITTED / ANOMALY GATE ENFORCED / TRANSMISSION STILL OPEN
+## TOP CHECKPOINT — 2026-10-26 — V3 — IDENTITY CARD SUBSTRATE ACCEPTED / AUDIT PRIORITIES 1-4 DONE / RE-AUDIT PENDING / NO PREDICTIVE CLEARANCE
 
 **Model:** PRISM — Player Role & Individual Situation Model
 
@@ -8,13 +8,9 @@
 
 `docs/handoffs/NFL_HANDOFF_2026-10-26_WEEK7_POSTMORTEM_PLAYER_FIRST_ENVIRONMENT_CONTINUITY.md`
 
-Restart prompt:
-
-`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-26_WEEK7_POSTMORTEM_PLAYER_FIRST_ENVIRONMENT_CONTINUITY.md`
-
-The checkpoint this one supersedes is archived verbatim at:
-
-`docs/handoffs/NFL_HANDOFF_2026-10-26_V2_ARCHIVED_TOP_WEEK7_FORENSIC_PLAYER_FIRST_TRANSMISSION.md`
+Displaced checkpoints, archived verbatim, **not** for resuming:
+- `docs/handoffs/NFL_HANDOFF_2026-10-26_V3_ARCHIVED_TOP_IDENTITY_CARD_ACCEPTED_SUBSTRATE.md`
+- `docs/handoffs/NFL_HANDOFF_2026-10-26_V2_ARCHIVED_TOP_WEEK7_FORENSIC_PLAYER_FIRST_TRANSMISSION.md`
 
 Do not recursively read older dated handoffs.
 
@@ -26,7 +22,7 @@ PRISM is an **INDIVIDUAL-PLAYER PROJECTION MODEL**.
 
 > **ANOMALIES ARE QUESTIONS, NOT TRENDS.**
 
-Position MAE/RMSE is downstream QA only. Do not scrap/rebuild PRISM; identity/state/opponent work is additive.
+Position MAE/RMSE is downstream QA only. Identity/state/opponent work is additive; do not scrap/rebuild PRISM.
 
 Always distinguish: `SOURCE READY` / `SOURCE BLOCKED` / `PREDICTIVE CLOSED` / `QUALIFIED`.
 
@@ -36,168 +32,154 @@ Always distinguish: `SOURCE READY` / `SOURCE BLOCKED` / `PREDICTIVE CLOSED` / `Q
 - GPT-5.6 = independent auditor / project control
 - shared lane = Issue #535
 
-Before substantive work:
-1. read `AGENTS.md`;
-2. read only this TOP checkpoint;
-3. read the deep handoff;
-4. fetch newest #535;
-5. reconcile live `main` / PRs / Actions.
+Before substantive work: read `AGENTS.md`; read only this TOP checkpoint; read the deep handoff; fetch newest #535; reconcile live `main` / PRs / Actions.
 
 ### LIVE STATE
 
-`main` at checkpoint: `c4de3d4044e828e39d80aa7db19af0de2caf652a` (plus this handoff commit).
+`main` at checkpoint: `b734247ce8d8e8ed8dc50cd3021af5e54e9f1e18` (plus this handoff commit).
 
-Active research branch, **authorized by the user and a genuine descendant of main** (merge base = main's head):
+Active research branch (user-authorized, genuine descendant of main):
 
-`research-prism-player-first-identity-environment-2026-10-26` @ `d93e4cca`
+`research-prism-player-first-identity-environment-2026-10-26` @ **`aa70663c`**
 
-Newest #535 comment at checkpoint: **6423234263**
+Green runs: card `40391557775`, sweep `40391557902`. 68 tests under pandas 1.5.3 / numpy 1.26.4 (the versions CI installs).
 
-This chat's #535 record, in order:
-- `6422827149` — Identity Card V1 corrected build, source audit, two findings
-- `6422904132` — correction: the card did not satisfy the anomaly gate
-- `6422987723` — correction: my player-level-bridge prediction was wrong
-- `6423234263` — anomaly gate enforced, incl. a 22% false positive in my own gate
+Newest #535 comment at checkpoint: **6426050333**
 
-**No additional paid OddsAPI call is authorized.** Betting remains CLOSED.
+This chat's #535 record:
+- `6422827149` corrected card build + source audit
+- `6422904132` correction: card did not satisfy the anomaly gate
+- `6422987723` correction: my player-level-bridge prediction was wrong
+- `6423234263` anomaly gate enforced, incl. a 22% false positive in my own gate
+- `6425032876` ledger superseded on main
+- **`6425282770` GPT AUDIT — substrate ACCEPTED, predictive BLOCKED, 5-item priority order**
+- `6426050333` priorities 1-4 complete, revised fixed target presented for re-audit
 
-Canonical paid Week-7 board remains run `39849371821`, artifact `12456298985`, digest `sha256:d1a1fb48e5bb920c5291f35b7457b5870801b689751deb2d742f98c555603a85`, durable under `data/market_track_record/`.
+**No paid OddsAPI call is authorized. Betting remains CLOSED.**
 
 Carried-forward repo debt:
-- Repo CI on main still fails one known stale no-credit exact-string `FETCH_LIVE_ODDS` assertion. **Do not weaken the live-odds authorization guard to make it pass.**
-- `claude/nice-cori-4qkwqs` is an **orphan branch sharing no merge base with main**. Tooling stranded there (Week-6 graders, `scripts/operations/salvage_production_decision_gates_v1.py`, Week-6 result docs) must be ported file-by-file; no merge is possible.
+- Repo CI on main still fails one known stale no-credit exact-string `FETCH_LIVE_ODDS` assertion. **Do not weaken the live-odds guard to make it pass.**
+- `claude/nice-cori-4qkwqs` is an **orphan branch with no merge base**; its tooling (Week-6 graders, gate-salvage script, Week-6 result docs) must be ported file-by-file.
 - `requirements.txt` leaves `pyarrow` unbounded; workflows pin `pyarrow==17.0.0` individually.
 
-### PLAYER IDENTITY CARD V1 — BUILT, GATED, COMMITTED
+### GPT AUDIT 6425282770 — THE GOVERNING DISPOSITION
 
-`scripts/research/build_player_identity_card_v1.py`
-`.github/workflows/research-player-identity-card-v1.yml`
-`tests/test_build_player_identity_card_v1.py` — 40 tests
+`PLAYER_IDENTITY_CARD_V1_DESCRIPTIVE_SUBSTRATE_ACCEPTED__NO_PREDICTIVE_CLEARANCE`
 
-Committed artifact (git, not merely an artifact — AGENTS.md §5a):
-`data/research/player_identity/player_identity_card_v1_2026.csv` + `_status.json`
+All five A–E blockers from `6420504608` materially closed for the descriptive substrate. The audit also ruled:
 
-Green run **`40371208533`**. 35,196 cards, 52 columns, 3,053 players, 32 teams, seasons 2025+2026, target weeks 1–7.
+1. **Position universe** — keep the complete roster universe in the durable card; **all** opportunity/entitlement/player-projection research must use an explicit `can_receive_opportunity == True` subset; downstream tables must state which universe they use; a non-eligible row may not silently receive carry/target entitlement.
+2. **Anomaly gate** accepted as a fail-closed screening layer, *not* a complete state model.
+3. **Team-share fields are BLOCKED from predictive role authority** until week-matched. Explicitly: do not gate the numerator while leaving the denominator on all weeks — that mechanically depresses the share.
+4. **Threshold sweep authorized** as descriptive only: no outcome inspection, no winner, no tuning.
 
-Boundary: `DESCRIPTIVE_STATE_ONLY_NO_FIT_NO_PROMOTION`. Nothing fit, scored or promoted. `sportsbook_inputs_used = 0` on every row, asserted in CI. Predictive use remains gated by `6420198257`.
+### AUDIT PRIORITIES 1-4 — COMPLETE, AWAITING RE-AUDIT
 
-Sources: `load_rosters_weekly` (64,455 rows — target-week team, player universe, position, and the gsis↔pfr bridge), `load_snap_counts` (36,501 — participation denominator), `load_pbp` (67,332 — opportunity rows + situational columns). `load_weekly_rosters` does not exist in this nflreadpy.
+**1. Source-qualified player-state resolver.** `load_injuries` available 2026 wk1-7, keyed on `gsis_id` (no bridge). A week-*w* report precedes week *w*, so no look-ahead; a test blocks a later designation explaining an earlier gap.
 
-All five audit defects from `6420504608` are closed. Concrete evidence rather than assertion:
-- **(C)** 180 skill-position players carry a 2026 target-week team appearing nowhere in their history (e.g. Kenneth Walker III, week 1: `team_target_week=KC`, `teams_in_history=SEA`). `mode(posteam)` would have mislabelled every one.
-- **(B)** 7,666 active zero-opportunity player-weeks preserved as real zeros that the first version silently dropped.
-- **(D)** universe is every rostered player; `participation_only_zero_opportunity` (1,587) is labelled distinctly from `no_history`.
+`UNRESOLVED_CONTEXT` 1,358 → **1,078**; `RETURN_FROM_INJURY` **213**; `INJURY_LIMITED` **67**. 280 of 1,358 (20.6%) now carry a cause.
 
-**Composition matters when reading the counts.** 69% of cards are DB/OL/LB/DL/K/P/LS and 86% of the headline `no_history: 27,928` is those positions — a punter having no rushing history is not a finding. `can_receive_opportunity` flags QB/RB/FB/HB/WR/TE: **10,960 opportunity-eligible cards**, whose split is `no_history` 3,903, `prior_only` 2,593, `prior+current` 2,407, `participation_only_zero_opportunity` 1,519, `current_only` 538.
+**The withheld set is unchanged** — verified on real data and by test. An injury-explained week is explained, not representative. Withholding is keyed on a two-valued `gate_disposition`, never on the single label; keying off the label would silently promote explained weeks into usable evidence. CI fails if withheld week-slots drop below explained weeks.
 
-### PLAYER-STATE ANOMALY GATE — ENFORCED, WITH NAMED LIMITS
+`PARTIAL_GAME` is **SOURCE BLOCKED** for 2026: `load_participation` raises `Season must be between 2016 and 2025` (verified). PBP is no substitute — it names only ball-touchers. CI fails if the label is ever emitted.
 
-`anomaly_gate_version = PLAYER_STATE_ANOMALY_GATE_V1_PARTICIPATION_ONLY`. The suffix is deliberate: the gate currently reasons from participation alone.
+Gate version: `PLAYER_STATE_ANOMALY_GATE_V2_INJURY_RESOLVED`, degrading (with CI failure) if the source is unavailable.
 
-Each week is judged **only against the player's own earlier weeks**, so a label does not shift with the target week and one bad week cannot excuse itself by dragging down its own baseline.
+**2. Week-matched team-share denominators.** Numerator and denominator now come from the identical accepted player-week set. Arithmetic pinned by test: ungated 0.400, naive-wrong 0.375, week-matched **0.500** — and the test asserts the value is *not* 0.375 so a regression fails loudly. Reconstructible via `player_opp_in_gate_weeks_current` / `team_opp_in_gate_weeks` and rz/i5 equivalents; ungated retained under `*_all_weeks`. **Still descriptive/provisional, still not predictive role authority.**
 
-States supported today: `DNP_INACTIVE` (excluded by construction), `HEALTHY_FULL`, `UNRESOLVED_CONTEXT`, `NO_BASELINE`.
-`INJURY_LIMITED` / `PARTIAL_GAME` / `RETURN_FROM_INJURY` need an injury / participation-detail source **not yet loaded**; those cases land in `UNRESOLVED_CONTEXT`, which is the prescribed fail-closed, not a silent `HEALTHY_FULL`.
+**3. Descriptive threshold sweep** (`scripts/research/sweep_player_state_threshold_v1.py`):
 
-Current distribution over 9,574 participation weeks: `HEALTHY_FULL` 6,786, `UNRESOLVED_CONTEXT` 1,358 (14.2%), `NO_BASELINE` 1,430. 1,976 week-slots withheld across 1,398 cards.
+| ratio | withheld weeks | `UNRESOLVED` | eligible cards w/ usable evidence |
+|---|---|---|---|
+| 0.30 | 907 | 654 | 2,651 |
+| 0.40 | 1,099 | 833 | 2,573 |
+| **0.50** (current) | 1,358 | 1,078 | 2,517 |
+| 0.60 | 1,643 | 1,347 | 2,417 |
+| 0.70 | 2,030 | 1,711 | 2,289 |
 
-**Only `UNRESOLVED_CONTEXT` is withheld.** Withholding merely-zero-opportunity weeks would re-introduce the exact upward bias fix (B) removed; a test exists solely to stop a future change collapsing those two ideas back together.
+Churn between adjacent ratios 192 / 259 / 285 / 387. Spread **362 cards = 13.66%** → `MODERATELY_THRESHOLD_SENSITIVE`.
 
-Gate applies to trajectory, stability **and** efficiency. Canonical fields are the gated ones; ungated figures remain under `_all_weeks` suffixes so using contaminated evidence requires naming it. `gate_weeks_used` / `gate_weeks_withheld` / `gate_state_counts` / `efficiency_opp_used` / `efficiency_opp_withheld` make it auditable per card.
+**This is unresolved by design and must be carried forward as uncertainty, not settled by picking a threshold.** `RETURN_FROM_INJURY` is flat at 213 across the range (absence-driven, not snap-ratio-driven). Named top movers: Tim Patrick (3 weeks), Nick Chubb, DJ Moore, Adam Thielen, Tyler Higbee, Jonnu Smith — ordinary skill players, so the sensitivity is not confined to fringe cases.
 
-**A 22% false positive was found and fixed in the gate itself.** `returned_from_absence` fired on any participation gap — and a team bye is a gap for every player on that roster, so the week after a bye flagged whole teams. 385 player-weeks (1,743 → 1,358). A gap now counts as an absence only if the player's team actually played during it, derived from the snap-counts team column (no new source). `absence_bye_explained` records excused gaps. Without a team column the stricter reading is kept and CI fails the run.
+Script-level guarantees: `threshold_recommended` hardcoded `None`, `no_winner_selected` `True`, no code path ranks or selects a ratio; CI fails on a recommendation, outcome inspection, a changed swept set, broken monotonicity, or a flat sweep.
 
-Thresholds are **screening heuristics, not fitted parameters**: `PARTIAL_PARTICIPATION_RATIO = 0.5`, `MIN_BASELINE_WEEKS = 2`. They were deliberately not tuned, because tuning them would make them fitted quantities on data not authorized for fitting.
+**4. Evidence authority + model-facing universe.**
 
-CI fails the run if the gate is unstamped, never fired, withheld nothing, changed no published number, lost bye discrimination, or published a rate not reconstructible from `opp_in_gate_weeks / gate_weeks_used`. A decorative gate fails.
+| `evidence_authority` | all cards | opportunity-eligible |
+|---|---|---|
+| `position_prior_only` | 29,515 | **5,422** |
+| `prior_only` | 2,714 | 2,593 |
+| `prior+current` | 2,409 | 2,407 |
+| `current_only` | 558 | 538 |
+
+**49.5% of opportunity-eligible card-weeks (5,422 / 10,960) have no player-specific opportunity evidence**, so production hands them a position prior and lets them compete in the finite room. That is the materiality of the zero-history audit, and the card previously reported it only as absence (`no_history`). `opportunity_from_population_fallback` answers it directly. `participation_evidence` preserves the observed-zero distinction production's three-value vocabulary cannot express.
+
+Durable card stamped `COMPLETE_ROSTER_UNIVERSE` (35,196 rows); model-facing universe is a named function **and** its own committed artifact stamped `MODEL_FACING_OPPORTUNITY_UNIVERSE` (10,960 rows), not a filter people must remember.
+
+### COMMITTED ARTIFACTS (git, not expiring artifacts — §5a)
+
+```
+data/research/player_identity/player_identity_card_v1_2026.csv
+data/research/player_identity/player_identity_card_v1_2026_model_facing.csv
+data/research/player_identity/player_identity_card_v1_2026_status.json
+data/research/player_identity/player_state_threshold_sweep_v1.csv
+data/research/player_identity/player_state_threshold_sweep_v1_churn.csv
+data/research/player_identity/player_state_threshold_sweep_v1_examples.csv
+data/research/player_identity/player_state_threshold_sweep_v1_status.json
+```
 
 ### IDENTITY BRIDGE — SOURCE-CAPPED, QUANTIFIED
 
-`pfr_id` ↔ `gsis_id` is built at **player level** (it is a player invariant, not a weekly fact). Ambiguity fails closed; currently 0 ambiguous ids, 2,520 players mapped.
+Built at **player level** (`pfr_id` is a player invariant, not weekly). Ambiguity fails closed; 0 ambiguous, 2,520 players mapped. Partial-bridge coverage is **structurally impossible** (0 players, `untrusted_denominator_cards` 0).
 
-The binding constraint is nflverse roster completeness, not the join: 48,111 of 64,455 roster rows (74.6%) carry a `pfr_id` while 64,429 carry a `gsis_id`. 381 of 384 never-bridged players are absent from the roster `pfr_id` index entirely, so **no player-level map can reach them** — the per-week→player-level change recovered only 6 player-weeks, not the "most" I predicted in `6422987723`.
+Binding constraint is nflverse roster completeness: 48,111 / 64,455 rows (74.6%) carry `pfr_id`; 381 of 384 never-bridged players lack it in **every** row, so the per-week→player-level change recovered only 6 player-weeks — my prediction of "most" was wrong (`6422987723`).
 
-Partial-bridge coverage is now **structurally impossible** (1 → 0 players; `untrusted_denominator_cards` 0), so the understated-denominator bias is eliminated by construction rather than mitigated.
-
-**The statistic that matters:** coverage on opportunity-eligible cards with current-season opportunity is **2,939 / 2,945 = 99.80%**. `bridge_match_rate` and `offensive_player_weeks_unmatched` are the wrong statistics — the 4,900 unmatched weeks are overwhelmingly offensive linemen, who take snaps and never a carry or target.
-
-Named exceptions: **Cody White** (WR, LV — 17 targets by wk 7, no bridged participation week, rates correctly NaN) and **Treyton Welch** (TE, NO — the sole former partial-bridge case). 24 `participation_denominator_contradicted` cards are Cody White plus linemen/punters with freak opportunity rows; all already NaN.
-
-### WEEK-7 TICKET FORENSIC — RULING UNCHANGED
-
-Construction failure, not model failure. `6419138959`, accepted by GPT in `6420198257`: "safe" tickets were ~41–47% naive hit probability; 25/57 unique yardage legs were bought-down OVERs against a canonical UNDER edge direction; SD / exact clearance probability not respected; portfolio concentrated in repeated players; ATD consumed share while uncertified.
-
-**Construction failure does NOT close opponent/environment transmission.** Do not collapse these.
-
-### OPPONENT / ENVIRONMENT TRANSMISSION FACTS — STILL OPEN
-
-- `def_rush_epa` present but not consumed by generic RB matchup rules;
-- explosive-play suppression available but not consumed generically;
-- WR/TE/RB YPT and outside/slot YPT dropped before generic player projection;
-- YBC/stuff fields dropped;
-- generic game script hardcodes `pass_share = 0.57` (`scripts/modeling/rules_v2.py:98`, inside `project_game_script`);
-- lead/trail does not alter generic pass/rush split;
-- qualified Stage-2 conditional allocation does not reach production.
-
-QB M89/M90 is richer; do not conflate it with generic RB/WR/TE.
-
-**Kenneth Walker III remains the preferred first generic-skill transmission decomposition case.** GPT has a version at commit `cca416bd` / `docs/research/PRISM_WEEK7_WALKER_ENVIRONMENT_TRANSMISSION_DECOMPOSITION_V1.md`.
-
-Environment is **not** game total / spread / implied points. That is one input. The environment is the football situation: opportunity topology, game script, teammate competition, defensive scheme and personnel.
-
-### BETTING-LAYER CORRECTIONS — STILL IN FORCE
-
-Until an evidence-backed construction V2 is frozen:
-- alt direction conflicting with canonical main-line model direction ⇒ default **PASS**;
-- raw yard cushion ≠ safety;
-- use model mean + distribution/SD + exact threshold + `P(clear)` + exact price;
-- do not label ~41% full-ticket probability "Safe";
-- surface repeated-player and same-game concentration;
-- no universal anchor across every tier;
-- ATD remains uncertified/fun and separate.
-
-Do not invent numeric exposure caps or threshold rules from Week 7.
-
-### EXISTING SCIENCE BOUNDARIES — PRESERVE
-
-Preserve all qualified/closed/source-blocked dispositions from the 2026-10-22 V2 handoff. Especially:
-- QB M89/M90 + C2 active
-- WR-R15 active
-- TE-R5P active
-- RB P3/R22 Week-1-only, **not** active Week 7
-- Stage-2 conditional allocation qualified in research, not production-wired (`PRISM_FUTURE_STAGE2_TRANSLATION_NOT_READY__FAIL_CLOSED`)
-- direct WR/CB unavailable/gated off
-- dedicated ATD model not certified
-- RB rushing Stage-1 source reset remains `SOURCE BLOCKED`
-- RB/TE team-context reset candidates remain `PREDICTIVE CLOSED`
-
-### OPEN DECISIONS AWAITING THE AUDITOR
-
-Claude has deliberately **not** decided these:
-
-1. **Position universe** — restrict cards to opportunity-eligible positions, or keep the complete universe with `can_receive_opportunity` as the filter? GPT wrote fix (D), so the reach of (D) is GPT's call. Either way is a one-line filter.
-2. **Threshold sensitivity** — a 0.3–0.7 sweep on `PARTIAL_PARTICIPATION_RATIO` is available as a descriptive diagnostic on request. Not run unasked, to avoid making a screening threshold look fitted.
+**The statistic that matters: 2,939 / 2,945 = 99.80% coverage on opportunity-eligible cards with current-season opportunity.** `bridge_match_rate` and `offensive_player_weeks_unmatched` are the wrong statistics; the 4,900 unmatched weeks are overwhelmingly offensive linemen. Named exceptions: **Cody White** (WR, LV) and **Treyton Welch** (TE, NO).
 
 ### KNOWN GAPS — STATED, NOT HIDDEN
 
-- **Injury source not loaded.** 14.2% of participation weeks are `UNRESOLVED_CONTEXT`, so trajectory evidence is genuinely thinner than the raw card suggests. This is the honest state.
-- **Team shares are not yet gated.** `team_share_current`, `team_red_zone_share_current`, `team_inside_5_share_current` are role claims and therefore in the gate's scope, but gating a share correctly requires a **week-matched team denominator** — excluding the player's contaminated weeks while leaving the team total whole would deflate every share by construction.
-- Raw counts, team totals and the opportunity-quality topology are intentionally ungated: per-play facts, outside the gate.
-- Role elasticity and the full teammate-competition map remain deferred to V2.
+- **1,078 player-weeks remain unexplained.** No injury report explains a benching, blowout rest, healthy inactive or committee rotation.
+- **`PARTIAL_GAME` source-blocked for 2026**; nothing available closes it.
+- **Team shares week-matched but provisional**, per audit ruling.
+- **13.66% threshold sensitivity unresolved by design.**
+- Screening thresholds `PARTIAL_PARTICIPATION_RATIO = 0.5`, `MIN_BASELINE_WEEKS = 2` are deliberately **unfitted**.
+- Role elasticity and the full teammate-competition map deferred to V2.
+
+### WEEK-7 FORENSIC / TRANSMISSION — UNCHANGED AND STILL OPEN
+
+Week-7 ticket failure was **construction**, not model (`6419138959`, accepted in `6420198257`): ~41–47% naive hit probability on "safe" tickets, 25/57 yardage legs bought-down OVERs against a canonical UNDER direction, SD/clearance ignored, repeated-player concentration, uncertified ATD consuming share.
+
+**Construction failure does NOT close opponent/environment transmission.** The accepted Identity Card does not resolve the Walker / JSN / Kupp / Barner transmission findings by itself.
+
+Transmission facts still open: `def_rush_epa` unconsumed by generic RB rules; explosive-play suppression unconsumed; WR/TE/RB YPT and outside/slot YPT dropped; YBC/stuff dropped; generic game script hardcodes `pass_share = 0.57` (`scripts/modeling/rules_v2.py:98`); lead/trail does not alter the generic split; qualified Stage-2 conditional allocation unwired.
+
+**Environment is not game total / spread / implied points.** That is one input. It is the football situation: opportunity topology, game script, teammate competition, defensive scheme and personnel.
+
+**Kenneth Walker III remains the preferred first generic-skill transmission decomposition case** (GPT version at `cca416bd`, `docs/research/PRISM_WEEK7_WALKER_ENVIRONMENT_TRANSMISSION_DECOMPOSITION_V1.md`).
+
+### STAGE-2 — FAIL CLOSED BY CHRONOLOGY
+
+`PRISM_FUTURE_STAGE2_TRANSLATION_NOT_READY__FAIL_CLOSED` (`6421086265`). Blocker: `target/future stat rows already present; refuse audit: weeks=[7]`. Do not weaken or filter around the guard, do not call Week 7 prospectively ready, **do not reconstruct a Week-7 Stage-2 shadow postgame**, do not reuse Week 7 as a retrospective substitute. The next Stage-2 target must be a genuinely future window frozen before its stats can exist.
+
+### BETTING-LAYER CORRECTIONS — STILL IN FORCE
+
+Until an evidence-backed construction V2 is frozen: alt direction conflicting with canonical main-line direction ⇒ **PASS**; raw yard cushion ≠ safety; use mean + SD + exact threshold + `P(clear)` + exact price; never label ~41% probability "Safe"; surface repeated-player and same-game concentration; no universal anchor across tiers; ATD uncertified and separate. Do not invent exposure caps or threshold rules from Week 7.
+
+### EXISTING SCIENCE BOUNDARIES — PRESERVE
+
+QB M89/M90 + C2 active; WR-R15 active; TE-R5P active; RB P3/R22 Week-1-only and **not** active Week 7; Stage-2 qualified in research but not production-wired; direct WR/CB unavailable/gated; ATD model uncertified; RB rushing Stage-1 source reset `SOURCE BLOCKED`; RB/TE team-context reset candidates `PREDICTIVE CLOSED`.
 
 ### EXACT CURRENT NEXT ACTIONS
 
-1. audit newest Claude work first; re-fetch #535 (newest `6423234263`) and live Actions;
-2. resolve the two open decisions above;
-3. load the injury / participation-detail source to convert `UNRESOLVED_CONTEXT` into `INJURY_LIMITED` / `PARTIAL_GAME` / `RETURN_FROM_INJURY` — highest leverage, shrinks every other gap;
-4. week-matched team shares, per the known gap above;
-5. Walker-first read-only opponent/environment transmission decomposition;
-6. extend to representative WR/TE identities;
-7. freeze any new predictive mechanism **before** scoring;
-8. separately develop evidence-backed alt-threshold / portfolio construction V2;
-9. port the stranded `claude/nice-cori-4qkwqs` tooling file-by-file;
-10. grade Week 7 once the graders are ported to main.
+1. re-fetch #535 (newest `6426050333`) and await / read the re-audit of the revised fixed target `aa70663c`;
+2. **no predictive or scoring use of the card until that re-audit clears it**;
+3. act on whatever the re-audit rules; if it clears, the first predictive step must be frozen before scoring;
+4. Walker-first read-only opponent/environment transmission decomposition;
+5. extend to representative WR/TE identities;
+6. betting-layer construction V2 spec (direction conflict → PASS, clearance probability, price/EV, exposure caps, probability-aware tier labels);
+7. port the stranded `claude/nice-cori-4qkwqs` tooling file-by-file;
+8. grade Week 7 once the graders are ported to main.
 
-No paid OddsAPI. No sportsbook upstream. No aggregate-MAE optimization. No post-hoc subgroup rescue. No reopening closed science without new causal evidence.
+No paid OddsAPI. No sportsbook upstream. No aggregate-MAE optimization. No post-hoc subgroup rescue. No Week-7 fitting. No reopening closed science without new causal evidence.
 
 The next chat MUST re-fetch #535 and live GitHub before asserting that this remains current.
