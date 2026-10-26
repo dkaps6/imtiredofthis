@@ -1,34 +1,30 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-22 — FINAL V2 PRISM WEEK-7 LIVE BOARD / CLAUDE EXECUTOR + GPT AUDITOR / PLAYER-FIRST CONTINUITY
+## TOP CHECKPOINT — 2026-10-26 — WEEK-7 SUNDAY/SNF FORENSIC / CONSTRUCTION FAILURE ACCEPTED / PLAYER-FIRST ENVIRONMENT TRANSMISSION OPEN
 
 **Model:** PRISM — Player Role & Individual Situation Model
 
 ### READ THIS DEEP HANDOFF NEXT
 
-`docs/handoffs/NFL_HANDOFF_2026-10-22_V2_PRISM_WEEK7_LIVE_BOARD_CONTROL_ROOM_PLAYER_FIRST.md`
+`docs/handoffs/NFL_HANDOFF_2026-10-26_WEEK7_POSTMORTEM_PLAYER_FIRST_ENVIRONMENT_CONTINUITY.md`
 
 Reusable restart prompt:
 
-`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-22_V2_PRISM_WEEK7_LIVE_BOARD_CONTROL_ROOM.md`
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-26_WEEK7_POSTMORTEM_PLAYER_FIRST_ENVIRONMENT_CONTINUITY.md`
 
-Historical stacked checkpoints were preserved verbatim at:
-
-`docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_CHECKPOINTS_THROUGH_2026-10-22_PRE_WEEK7.md`
+Historical continuity remains in prior dated deep handoffs. Do not recursively read them.
 
 ### ABSOLUTE ASSIGNMENT
 
 PRISM is an **INDIVIDUAL-PLAYER PROJECTION MODEL**.
 
-The unit of truth is the named player in his actual current football state for the exact market.
-
 > **THE PLAYER SHOULD HAVE THE RULES. THE POSITION SHOULD NOT HAVE THE PLAYER.**
 
 > **ANOMALIES ARE QUESTIONS, NOT TRENDS.**
 
-Position MAE/RMSE is downstream QA only. Never turn it into the optimization objective.
+Position MAE/RMSE is downstream QA only.
 
-Do **not** scrap/rebuild PRISM. Current role-state, team-context and environment work is an **additive high-resolution arbitration layer** over substantial qualified player-specific science.
+Do not scrap/rebuild PRISM. New identity/state/opponent work is additive.
 
 Always distinguish:
 - `SOURCE READY`
@@ -36,158 +32,144 @@ Always distinguish:
 - `PREDICTIVE CLOSED`
 - `QUALIFIED`
 
-A source block is not a predictive failure. A failed new candidate does not erase old qualified science.
+### CONTROL ROOM
 
-### CONTROL-ROOM ROLES
+- Claude = executor / research lead
+- GPT-5.6 = independent auditor / project control
+- shared lane = Issue #535
 
-Per user direction:
-- **Claude = active executor / research lead**
-- **GPT-5.6 = independent auditor / project-control**
-- shared lane = GitHub Issue #535
-- GPT prefixes: `[GPT AUDIT]`, `[GPT OBJECTION]`
-- Claude prefixes: `[CLAUDE STATUS]`, `[CLAUDE QUESTION FOR GPT]`
-
-Before substantive status/audit decisions:
+Before substantive work:
 1. read `AGENTS.md`;
 2. read only this TOP checkpoint;
-3. read the deep handoff above;
-4. fetch newest Issue #535 comments;
-5. reconcile live `main`, open PRs, exact-head Actions/artifacts.
+3. read the deep handoff;
+4. fetch newest #535;
+5. reconcile live main / PRs / Actions.
 
-### LIVE PRODUCTION STATE — WEEK 7 BOARD EXISTS AND IS DURABLE
+### LIVE PRE-HANDOFF STATE
 
-Current `main` at the final pre-handoff refresh:
-`32b5cbf41f551b452a89c457c1b32e497bd934da`
+Pre-handoff `main`:
+`97ecae88f391a692cf694971c2bf2f34c04cf593`
 
-PR #693 is merged:
-- merge commit `4dc178b59da8708dbea978b8e54e753b1e2f75c5`
-- fixes the real nflverse participation schema blocker (`possession_team` / `defenders_in_box`);
-- strict box gating remained intact;
-- the false intermediate-source provenance sidecar was removed before merge.
+PR #695 is merged and preserves the full Week-7 Sunday/SNF ticket evidence under:
 
-Canonical Week-7 live Full Slate:
-- run `39849371821` — **SUCCESS**
-- job `120071136220`
-- head `4dc178b59da8708dbea978b8e54e753b1e2f75c5`
+`docs/research/evidence/2026-10-25_week7_ticket_ledger/`
+
+Canonical paid Week-7 board remains:
+- run `39849371821` SUCCESS
 - artifact `12456298985`
 - digest `sha256:d1a1fb48e5bb920c5291f35b7457b5870801b689751deb2d742f98c555603a85`
-- snapshot mode: `LIVE_SPORTSBOOK_SNAPSHOT`
-- workbook pricing status: `CURRENT`
-- sportsbook remains downstream-only.
+- durable under `data/market_track_record/`
 
-Pregame football availability:
-- 14 games / 28 teams;
-- 14 eligible, 0 withheld;
-- state `NOT_YET_REQUIRED: 14`;
-- sportsbook inputs used for availability = 0.
+**No additional paid OddsAPI call is authorized.**
 
-Week-7 live pricing:
-- 396 football players;
-- 328 priced players;
-- 732 compact player-market rows;
-- 1,447 exact bookmaker offer rows;
-- 2,894 priced side rows;
-- core prop identity unresolved rows = 0;
-- final manual quarantine removed 0 rows;
-- data quality: `FULL_SLATE_DATA_QUALITY_PASS_WITH_DECLARED_LIMITATIONS`.
+After PR #695:
+- archive workflow `40341879091` SUCCESS
+- Repo CI `40341289972` failed only on the known stale no-credit exact-string assertion:
+  - 660 passed
+  - 1 skipped
+  - 1 failed
+- do not weaken the live-odds authorization guard to make that stale test pass
 
-Durable Week-7 paid boundary on `main` from archive commit `c8f6f057...`:
-- `data/market_track_record/boards/2026_wk07.csv` — 2,894 data rows;
-- `data/market_track_record/game_odds/2026_wk07.csv` — 252 data rows;
-- `data/market_track_record/raw_props/2026_wk07.csv` — 1,447 data rows;
-- all carry `source_run_id=39849371821` / source head `4dc178b59...`.
+### WEEK-7 TICKET FORENSIC — CURRENT RULING
 
-**Do not spend another OddsAPI credit unless the user explicitly authorizes it.** Reuse the durable Week-7 boundary whenever possible.
+User reported only one Sunday ticket hit and no SNF regular tickets hit.
 
-### CURRENT SCIENCE BOUNDARIES TO PRESERVE
+Claude #535 comment `6419138959` found a major **downstream construction failure**:
+- “Safe” tickets were only ~41–47% naive hit probability;
+- 25/57 unique yardage legs were bought-down OVERs while the canonical main-line edge direction was UNDER;
+- model SD / exact clearance probability was not properly respected;
+- portfolio was heavily concentrated in repeated players;
+- ATD consumed meaningful portfolio share despite being uncertified.
 
-- `PRISM_RETURN_STATE_NEXT_ROLE_PERSISTENCE_V1_QUALIFIED_STATE_ONLY` remains QUALIFIED.
-- `PRISM_PLAYER_TEAM_CONTEXT_TRANSITION_V1_SOURCE_READY` remains SOURCE READY.
-- RB carry-count identity bridge: SOURCE BLOCKED, not predictive failure.
-- RB receiving team-context reset: SOURCE READY -> PREDICTIVE CLOSED.
-- TE receiving team-context reset: SOURCE READY -> PREDICTIVE CLOSED.
-- RB rushing Stage-1 participation-authority reset: SOURCE BLOCKED; no predictive outcomes opened.
-- Qualified RB Stage-2 conditional allocation exists in research; do not falsely say PRISM cannot represent conditional allocation.
-- Direct high-value-share V1 closure is narrow; do not generalize to “scoring-area usage is useless.”
-- QB generic pass-yard narrowing remains retracted/closed; do not reopen on Week-6/7 noise.
-- Dedicated anytime-TD science is **not certified**. ATD is not a process-backed projection market yet.
+GPT accepted that diagnosis in `6420198257`.
 
-Week-7 production itself declares:
-- M89/M90 QB mean authority active;
-- QB C2 distribution consumed;
-- WR-R15 active;
-- TE-R5P active;
-- RB P3 rushing authority = Week-1 only, so not active in Week 7;
-- RB R22 receiving tail = Week-1 only, so not active in Week 7;
-- direct WR/CB matchup rows unavailable and gated off, team-scheme coverage still available.
+**BUT: construction failure does NOT close opponent/environment transmission.**
 
-### CLAUDE ROADMAP / RESEARCH FRONTIER
+Correct disposition:
 
-User-approved order from #535:
-- **B:** Stage-2 -> production wiring audit, read-only.
-- **C:** team scoring-territory drive creation.
-- **D:** applicability as a strictly-prior player property.
-- **E:** opponent/environment transmission.
+- Week-7 parlay failure = primarily construction / threshold / exposure problem.
+- Opponent/environment transmission = independently **OPEN** architecture/research problem.
 
-Do not subgroup-shop improved players. Freeze applicability criteria before outcomes.
+Do not collapse these into one conclusion.
 
-At last control-room evidence, no committed final result proved lane B complete. Re-check #535 before asserting otherwise.
+### OPPONENT / ENVIRONMENT TRANSMISSION FACTS
 
-### OPERATIONS / AUDIT STATE
+Prior audits established:
+- `def_rush_epa` present but not consumed by generic RB matchup rules;
+- explosive-play suppression available but not consumed generically;
+- WR/TE/RB YPT and outside/slot YPT dropped before generic player projection;
+- YBC/stuff fields dropped;
+- generic game script hardcodes pass_share=0.57;
+- lead/trail does not alter generic pass/rush split;
+- qualified Stage-2 conditional allocation research does not currently reach production.
 
-Accepted:
-- Week-5 `PRESERVED_PRE_T75_REPLAY` is a valid replay-authority state when it restores acquisition-time **game eligibility only** while current player unavailability remains authoritative.
-- Weeks 3/4/6 gate salvage is accepted as **team-layer evidence only**; player-market gate layer remains unknown.
-- Week 6 is measured + team-layer clean, but full-gate incomplete and non-poolable with fully gated Weeks 1-2.
-- PR #692 artifact-durability work is merged.
-- PR #693 production blocker fix is merged.
+QB M89/M90 is richer; do not conflate it with generic RB/WR/TE.
 
-Outstanding:
-- stale workflow-contract CI assertion should be fixed without weakening the live-odds guard;
-- `requirements.txt` PyArrow hardening remains separate work;
-- truthful final-source TeamForm box provenance remains follow-up;
-- PlayerForm semantic migration remains: explicit `alignment_slot`, `usage_rank`, `starter_authority`, migrate consumers one by one;
-- #691 is stale/blocked and is superseded by this new canonical continuity checkpoint; do not blindly merge it;
-- #690 is audit-cleared but still open against the research branch;
-- PR #672 remains large open/draft research lineage; do not merge wholesale.
+**Kenneth Walker III is the preferred first generic-skill transmission decomposition case.**
 
-### BET-SLIP CONSTRUCTION CONTINUITY
+### PLAYER IDENTITY — NOT BLOCKED
 
-Canonical rule:
-`docs/research/MODEL_BACKED_ALT_LINE_PARLAY_CONSTRUCTION_V1.md`
+Claude corrected an overstatement in `6420003475`.
 
-User wants slips built as:
-1. PRISM football projection first;
-2. compare against actual sportsbook line;
-3. validate the named player's exact role/current state/team/opponent/game environment;
-4. buy down to an alt threshold with real cushion;
-5. construct coherent game-script tickets;
-6. use **Safe / Moderate / High / Lottery** tiers;
-7. for a “home-run” ticket, increase payout through multiple individually defensible legs, not random TD scorers or nonsense thresholds.
+Strictly-prior player identity can be reconstructed leakage-safe from published football history (PBP, player stats, snap counts, schedules, etc.).
 
-Week-6 SF-WAS manual construction used this method and the user later reported **every placed bet/leg hit**. Treat that as a successful prospective anecdote/process example, **not scientific validation**. The user also corrected that the actual FanDuel payout odds were lower than our mental estimate; next time use the exact displayed FD prices/screenshots rather than estimating SGP payout.
+Current gate-design direction:
+- preregister football-semantic partitions before scoring;
+- require independent replication;
+- pooled population must not materially harm;
+- declared partition must improve consistently;
+- minimum support;
+- no subgroup shopping / top-N rescue / post-hoc named-player carveout;
+- report per-player heterogeneity.
 
-### QUEUE GOVERNANCE
+### BETTING-LAYER CORRECTIONS
 
-- Betting defaults LOCKED unless the user explicitly shifts into slip construction.
-- No paid OddsAPI without explicit authorization.
-- Sportsbook downstream only.
-- Do not reopen closed science merely to get numbers.
-- No names/fuzzy/manual identity bridges where stable provider ID is required.
-- No production mutation from source/research work alone.
-- Keep old QUALIFIED/CLOSED/SOURCE_BLOCKED results intact.
-- On “keep going,” continue the exact active canonical lane after live reconciliation.
+Until an evidence-backed construction V2 is frozen:
 
+- alt direction conflicting with canonical main-line model direction => default PASS;
+- raw yard cushion != safety;
+- use model mean + distribution/SD + exact threshold + P(clear) + exact price;
+- do not label ~41% full-ticket probability “Safe”;
+- surface repeated-player and same-game concentration;
+- no universal anchor across every tier;
+- ATD remains uncertified/fun and separate.
 
-### FINAL V2 END-OF-CHAT REFRESH
+Do not invent numeric exposure caps or threshold rules from Week 7.
 
-At the final refresh for this chat:
-- no Claude Issue #535 comment newer than GPT continuity comments `6353044832` / `6353046193` was visible;
-- PR #672 remained OPEN/DRAFT and stale/huge;
-- PR #690 remained OPEN and audit-cleared, with SOURCE_BLOCKED science unchanged;
-- PR #691 remained OPEN but stale/superseded; do not merge;
-- PR #693 remained MERGED;
-- Week-7 live board run `39849371821` and durable paid boundary remained canonical;
-- no additional OddsAPI acquisition was authorized.
+### EXISTING SCIENCE BOUNDARIES
 
-The next chat MUST re-fetch #535/live GitHub before asserting that this remains current.
+Preserve all qualified/closed/source-blocked dispositions from the 2026-10-22 V2 handoff.
+
+Especially:
+- QB M89/M90 + C2 active
+- WR-R15 active
+- TE-R5P active
+- RB P3/R22 Week-1-only, not active Week 7
+- Stage-2 conditional allocation qualified in research but not production-wired
+- direct WR/CB unavailable/gated off
+- dedicated ATD model not certified
+- RB rushing Stage-1 source reset remains SOURCE BLOCKED
+- RB/TE team-context reset candidates remain PREDICTIVE CLOSED
+
+### EXACT CURRENT NEXT ACTIONS
+
+After live reconciliation:
+
+1. audit newest Claude work first;
+2. continue descriptive Player Identity Card construction if not already advanced;
+3. run/verify fresh Stage-2 source-readiness re-probe under the frozen contract if not already completed;
+4. run Walker-first read-only opponent/environment projection decomposition;
+5. extend to representative WR/TE player identities;
+6. freeze any new predictive mechanism before scoring;
+7. separately develop evidence-backed alt-threshold / portfolio construction V2;
+8. preserve richer football-state/explanation evidence going forward.
+
+No paid OddsAPI.
+No sportsbook upstream.
+No aggregate-MAE optimization.
+No post-hoc subgroup rescue.
+
+Newest visible #535 comment at final pre-handoff reconciliation:
+**6420198257**
+
+The next chat MUST re-fetch #535 and live GitHub before asserting that this remains current.
