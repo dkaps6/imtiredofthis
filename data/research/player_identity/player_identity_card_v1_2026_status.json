@@ -29,7 +29,13 @@
     "partial_bridge_player_weeks": 3,
     "partial_bridge_players": 1,
     "participation_player_weeks": 9568,
+    "roster_rows": 64455,
+    "roster_rows_bridgeable": 48111,
+    "roster_rows_with_gsis": 64429,
+    "roster_rows_with_pfr": 48111,
     "snap_rows": 36501,
+    "unbridged_absent_from_roster": 381,
+    "unbridged_on_roster_without_gsis": 3,
     "unbridged_only_players": 384
   },
   "opportunity_eligible_cards": 10960,
