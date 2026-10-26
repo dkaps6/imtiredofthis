@@ -22,6 +22,7 @@ import pandas as pd
 import pytest
 
 from scripts.research.build_player_identity_card_v1 import (
+    PARTIAL_PARTICIPATION_RATIO,
     build_cards,
     build_participation,
     player_opportunity_rows,
@@ -760,3 +761,70 @@ def test_share_is_nan_not_zero_when_no_week_is_accepted():
               & (cards.opportunity_kind == "carry")].iloc[0]
     assert np.isnan(a["team_share_current"])
     assert a["team_opp_in_gate_weeks"] == 0
+
+
+# -------------------------------------------- threshold sensitivity sweep
+
+from scripts.research.sweep_player_state_threshold_v1 import (  # noqa: E402
+    SWEEP, _assert_no_outcome_columns, _market_shaped_columns,
+)
+
+
+def test_sweep_covers_exactly_the_authorized_ratios():
+    """GPT audit 6425282770 named these five. Not a tunable list."""
+    assert SWEEP == (0.30, 0.40, 0.50, 0.60, 0.70)
+
+
+def test_sweep_refuses_market_columns():
+    """The sweep is descriptive. If it is ever pointed at priced data it must
+    fail closed rather than quietly produce a fitted result."""
+    for col in ("model_proj", "qb_synthesis_proj", "closing_line", "line",
+                "over_odds", "implied_prob", "edge", "clv", "bookmaker"):
+        with pytest.raises(RuntimeError, match="descriptive"):
+            _assert_no_outcome_columns(
+                pd.DataFrame({"season": [2026], col: [1]}), "probe")
+
+
+def test_guard_does_not_false_positive_on_real_football_columns():
+    """A substring test flags yardline_100 for "line" and qb_hit for "hit".
+    A guard that fires on real data gets loosened until it is useless, so
+    matching is token-wise."""
+    legit = pd.DataFrame(columns=[
+        "yardline_100", "qb_hit", "air_yards", "goal_to_go", "pass_attempt",
+        "half_seconds_remaining", "offense_snaps", "pfr_player_id",
+        "report_status", "practice_status", "defenders_in_box",
+    ])
+    assert _market_shaped_columns(legit) == []
+    _assert_no_outcome_columns(legit, "legit")
+
+
+def test_sweep_accepts_the_frames_it_actually_reads():
+    _assert_no_outcome_columns(rosters(), "rosters")
+    _assert_no_outcome_columns(snaps({(1, PFR_A): 30}), "snaps")
+
+
+def test_looser_threshold_never_flags_fewer_weeks():
+    """Monotonicity is the sweep's own correctness check: raising the ratio
+    must flag at least as many weeks abnormal, never fewer."""
+    part = _snaps_pw({**TEAMMATE,
+                      **{(1, GSIS_A): 60, (2, GSIS_A): 60, (3, GSIS_A): 60,
+                         (4, GSIS_A): 36, (5, GSIS_A): 18}})
+    withheld = []
+    for r in SWEEP:
+        out = label_player_week_states(part, partial_ratio=r)
+        withheld.append(int((out["gate_disposition"] != DISPOSITION_USABLE).sum()))
+    assert withheld == sorted(withheld), withheld
+    # ...and the fixture actually exercises the range rather than being flat.
+    assert withheld[-1] > withheld[0]
+
+
+def test_threshold_is_recorded_on_the_labelled_frame():
+    out = label_player_week_states(_snaps_pw(STEADY), partial_ratio=0.3)
+    assert (out["partial_participation_ratio"] == 0.3).all()
+
+
+def test_default_threshold_is_unchanged_by_parameterisation():
+    a = label_player_week_states(_snaps_pw(STEADY))
+    b = label_player_week_states(_snaps_pw(STEADY),
+                                 partial_ratio=PARTIAL_PARTICIPATION_RATIO)
+    assert a["player_state"].tolist() == b["player_state"].tolist()

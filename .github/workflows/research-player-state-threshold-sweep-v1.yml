@@ -1,0 +1,151 @@
+name: Research Player-State Threshold Sweep V1
+
+# Descriptive sensitivity sweep for PARTIAL_PARTICIPATION_RATIO, authorized by
+# GPT audit 6425282770 section 5.
+#
+# This is NOT parameter fitting. It inspects no outcome, reads no sportsbook
+# data, makes no OddsAPI call, fits nothing, and selects no winning threshold.
+# Its product is a measurement of how much the Identity Card moves across the
+# swept range -- i.e. the uncertainty to carry forward, not a tuned value.
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Target season"
+        required: false
+        default: "2026"
+      weeks:
+        description: "Target weeks, e.g. 1-7"
+        required: false
+        default: "1-7"
+      prior_seasons:
+        description: "Comma list of whole prior seasons used as history"
+        required: false
+        default: "2025"
+  push:
+    branches:
+      - research-prism-player-first-identity-environment-2026-10-26
+    paths:
+      - '.github/workflows/research-player-state-threshold-sweep-v1.yml'
+      - 'scripts/research/sweep_player_state_threshold_v1.py'
+
+permissions:
+  contents: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SEASON: ${{ github.event.inputs.season || '2026' }}
+      WEEKS: ${{ github.event.inputs.weeks || '1-7' }}
+      PRIOR_SEASONS: ${{ github.event.inputs.prior_seasons || '2025' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest
+          pip install 'pyarrow==17.0.0'
+
+      - name: Unit tests
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          pytest -q tests/test_build_player_identity_card_v1.py
+
+      - name: Run the descriptive sweep
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/sweep_player_state_threshold_v1.py \
+            --season "${SEASON}" \
+            --weeks "${WEEKS}" \
+            --prior-seasons "${PRIOR_SEASONS}" \
+            --out-dir data/research/player_identity
+
+      - name: Assert the sweep stayed descriptive
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          import json
+          import pandas as pd
+          base = "data/research/player_identity/player_state_threshold_sweep_v1"
+          t = pd.read_csv(f"{base}.csv")
+          st = json.load(open(f"{base}_status.json"))
+          fail = []
+
+          if st.get("threshold_recommended") is not None:
+              fail.append("a threshold was recommended; the sweep must not "
+                          "choose a winner")
+          if not st.get("no_winner_selected"):
+              fail.append("no_winner_selected is not set")
+          if st.get("outcomes_inspected"):
+              fail.append("outcomes were inspected")
+          if st.get("scientific_boundary") != \
+             "DESCRIPTIVE_SENSITIVITY_ONLY_NO_FITTING":
+              fail.append("boundary not stamped")
+          if int(st.get("sportsbook_inputs_used", 1)) != 0:
+              fail.append("sportsbook inputs reported")
+          if sorted(st.get("swept_ratios", [])) != [0.3, 0.4, 0.5, 0.6, 0.7]:
+              fail.append(f"swept ratios are not the authorized five: "
+                          f"{st.get('swept_ratios')}")
+
+          # Monotonicity: a looser threshold cannot flag fewer weeks.
+          wh = t.sort_values("partial_participation_ratio")["weeks_withheld"].tolist()
+          if any(b < a for a, b in zip(wh, wh[1:])):
+              fail.append(f"withheld weeks not monotonic: {wh}")
+          # The sweep must actually span something, or it measures nothing.
+          if wh[-1] <= wh[0]:
+              fail.append(f"sweep is flat across the range: {wh}")
+          if not t["is_current_default"].any():
+              fail.append("the current default ratio is not in the sweep")
+
+          print(t.to_string(index=False))
+          print("\nstability:", st["qualitative_stability"],
+                "spread_cards:", st["eligible_evidence_spread_cards"],
+                f"({st['eligible_evidence_spread_fraction']:.2%})")
+          print("churn:", json.dumps(
+              st["label_churn_between_adjacent_ratios"]))
+          if fail:
+              print("\nFAILED ASSERTIONS:")
+              for f in fail:
+                  print("  -", f)
+              raise SystemExit(1)
+          print("\nsweep is descriptive and internally consistent; "
+                "no threshold recommended")
+          EOF
+
+      - name: Commit the sweep evidence
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/research/player_identity/player_state_threshold_sweep_v1*
+          if git diff --cached --quiet; then
+            echo "sweep output unchanged"
+            exit 0
+          fi
+          git commit -m "Player-state threshold sensitivity sweep V1: season ${SEASON} weeks ${WEEKS}
+
+          Produced by run ${GITHUB_RUN_ID}. Descriptive sensitivity only: no
+          fitting, no outcome inspection, no recommended threshold."
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player_state_threshold_sweep_v1_${{ github.run_id }}
+          path: data/research/player_identity/player_state_threshold_sweep_v1*
+          if-no-files-found: warn
+          retention-days: 90

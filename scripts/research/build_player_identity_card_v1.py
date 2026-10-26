@@ -413,7 +413,8 @@ def _injury_flags(injuries: pd.DataFrame) -> tuple[dict, dict]:
 
 
 def label_player_week_states(participation: pd.DataFrame,
-                             injuries: pd.DataFrame | None = None
+                             injuries: pd.DataFrame | None = None,
+                             partial_ratio: float | None = None,
                              ) -> pd.DataFrame:
     """State-label every participation week before it can become a trend.
 
@@ -489,7 +490,9 @@ def label_player_week_states(participation: pd.DataFrame,
         pw["absence_bye_explained"] = False
 
     enough = pw["baseline_weeks"].fillna(0) >= MIN_BASELINE_WEEKS
-    abnormal = enough & pw["snap_ratio"].le(PARTIAL_PARTICIPATION_RATIO)
+    ratio = (PARTIAL_PARTICIPATION_RATIO if partial_ratio is None
+             else float(partial_ratio))
+    abnormal = enough & pw["snap_ratio"].le(ratio)
 
     pw["player_state"] = np.where(
         ~enough, STATE_NO_BASELINE,
@@ -503,6 +506,7 @@ def label_player_week_states(participation: pd.DataFrame,
                                  else "unavailable")
     pw["injury_designation"] = ""
     pw["partial_game_source_state"] = PARTIAL_GAME_SOURCE_STATE
+    pw["partial_participation_ratio"] = ratio
 
     if limiting or absent_cause:
         prev_w = pw.groupby("gsis_id", sort=False, group_keys=False)["week"] \
