@@ -136,6 +136,30 @@ STATE_DNP = "DNP_INACTIVE"
 STATE_HEALTHY = "HEALTHY_FULL"
 STATE_UNRESOLVED = "UNRESOLVED_CONTEXT"
 STATE_NO_BASELINE = "NO_BASELINE"
+STATE_INJURY_LIMITED = "INJURY_LIMITED"
+STATE_RETURN_FROM_INJURY = "RETURN_FROM_INJURY"
+
+# PARTIAL_GAME is deliberately absent. Establishing that a player left a game
+# early needs per-play participation, and nflverse load_participation covers
+# 2016-2025 only -- it raises "Season must be between 2016 and 2025" for 2026.
+# Play-by-play is not a substitute: it names only players who touched the ball,
+# so a sparse-usage player's last appearance says nothing about when he left.
+# For 2026 this state is SOURCE BLOCKED; such weeks resolve to INJURY_LIMITED
+# when a designation explains them and stay UNRESOLVED_CONTEXT otherwise.
+PARTIAL_GAME_SOURCE_STATE = "SOURCE_BLOCKED_NO_2026_PARTICIPATION_DATA"
+
+# An injury designation explains an abnormal week. It does not make that week
+# representative evidence of the player's healthy role, so an explained week is
+# still withheld from trajectory/efficiency -- withheld WITH a reason rather
+# than as an unknown. Only these two dispositions exist.
+DISPOSITION_USABLE = "USABLE"
+DISPOSITION_WITHHELD = "WITHHELD"
+
+# report_status / practice_status values that explain a limited or missed week.
+_INJURY_REPORT_LIMITING = frozenset({"out", "doubtful", "questionable"})
+_INJURY_PRACTICE_LIMITING = frozenset({
+    "did not participate in practice", "limited participation in practice"})
+_INJURY_ABSENT_CAUSE = frozenset({"out", "doubtful"})
 
 RED_ZONE = 20
 INSIDE_10 = 10
@@ -208,6 +232,23 @@ def load_snaps(seasons: list[int]) -> pd.DataFrame:
         return df
     except Exception as exc:
         print(f"[identity] WARNING snap counts unavailable: "
+              f"{type(exc).__name__}: {exc}")
+        return pd.DataFrame()
+
+
+def load_injuries(seasons: list[int]) -> pd.DataFrame:
+    """Weekly injury report. Optional enrichment: fails soft but visibly.
+
+    Keyed on gsis_id directly, so no identity bridge is involved. A week-w
+    report is published before week w is played, so using it to explain week w
+    introduces no look-ahead, and cards only ever consume weeks < target.
+    """
+    try:
+        df = _lower(_to_pandas(_nflv().load_injuries(seasons=seasons)))
+        print(f"[identity] injury report rows={len(df)}")
+        return df
+    except Exception as exc:
+        print(f"[identity] WARNING injuries unavailable: "
               f"{type(exc).__name__}: {exc}")
         return pd.DataFrame()
 
@@ -341,7 +382,39 @@ def build_participation(
     return part, diag
 
 
-def label_player_week_states(participation: pd.DataFrame) -> pd.DataFrame:
+def _injury_flags(injuries: pd.DataFrame) -> tuple[dict, dict]:
+    """(season, week, gsis_id) -> limiting designation, and -> absence cause."""
+    if injuries.empty:
+        return {}, {}
+    need = {"season", "week", "gsis_id"}
+    if not need <= set(injuries.columns):
+        return {}, {}
+    inj = injuries.copy()
+    inj["season"] = pd.to_numeric(inj["season"], errors="coerce")
+    inj["week"] = pd.to_numeric(inj["week"], errors="coerce")
+    rep = (inj["report_status"].astype(str).str.strip().str.lower()
+           if "report_status" in inj.columns else pd.Series("", index=inj.index))
+    prac = (inj["practice_status"].astype(str).str.strip().str.lower()
+            if "practice_status" in inj.columns
+            else pd.Series("", index=inj.index))
+
+    limiting, absent = {}, {}
+    keys = list(zip(inj["season"], inj["week"], inj["gsis_id"]))
+    for k, r, pr in zip(keys, rep, prac):
+        if any(pd.isna(x) for x in k[:2]) or k[2] is None:
+            continue
+        kk = (int(k[0]), int(k[1]), k[2])
+        if r in _INJURY_REPORT_LIMITING or pr in _INJURY_PRACTICE_LIMITING:
+            # Keep the strongest designation seen for the week.
+            limiting[kk] = r if r in _INJURY_REPORT_LIMITING else pr
+        if r in _INJURY_ABSENT_CAUSE or pr == "did not participate in practice":
+            absent[kk] = r if r in _INJURY_ABSENT_CAUSE else pr
+    return limiting, absent
+
+
+def label_player_week_states(participation: pd.DataFrame,
+                             injuries: pd.DataFrame | None = None
+                             ) -> pd.DataFrame:
     """State-label every participation week before it can become a trend.
 
     Required by the PLAYER-STATE ANOMALY INVESTIGATION GATE. Each week is
@@ -357,7 +430,11 @@ def label_player_week_states(participation: pd.DataFrame) -> pd.DataFrame:
             snap_ratio=pd.Series(dtype=float),
             returned_from_absence=pd.Series(dtype=bool),
             absence_bye_explained=pd.Series(dtype=bool),
-            player_state=pd.Series(dtype=object))
+            player_state=pd.Series(dtype=object),
+            injury_source_state=pd.Series(dtype=object),
+            injury_designation=pd.Series(dtype=object),
+            partial_game_source_state=pd.Series(dtype=object),
+            gate_disposition=pd.Series(dtype=object))
 
     pw = participation.sort_values(["gsis_id", "season", "week"]).copy()
     pw["offense_snaps"] = pd.to_numeric(pw["offense_snaps"], errors="coerce")
@@ -418,6 +495,58 @@ def label_player_week_states(participation: pd.DataFrame) -> pd.DataFrame:
         ~enough, STATE_NO_BASELINE,
         np.where(abnormal | pw["returned_from_absence"],
                  STATE_UNRESOLVED, STATE_HEALTHY))
+
+    # ---- source-qualified resolution of the unexplained weeks -------------
+    inj = pd.DataFrame() if injuries is None else injuries
+    limiting, absent_cause = _injury_flags(inj)
+    pw["injury_source_state"] = ("available" if limiting or absent_cause
+                                 else "unavailable")
+    pw["injury_designation"] = ""
+    pw["partial_game_source_state"] = PARTIAL_GAME_SOURCE_STATE
+
+    if limiting or absent_cause:
+        prev_w = pw.groupby("gsis_id", sort=False, group_keys=False)["week"] \
+            .shift(1)
+        states, desig = [], []
+        for i, (sea, wk, pid, st, ret) in enumerate(zip(
+                pw["season"], pw["week"], pw["gsis_id"], pw["player_state"],
+                pw["returned_from_absence"])):
+            if st != STATE_UNRESOLVED:
+                states.append(st)
+                desig.append("")
+                continue
+            key = (int(sea), int(wk), pid)
+            if bool(ret):
+                # Was the gap itself injury-explained? Look only at the weeks
+                # between his last appearance and this one -- all earlier than
+                # this week, so no look-ahead.
+                pv = prev_w.iloc[i]
+                cause = ""
+                if pd.notna(pv):
+                    for w in range(int(pv) + 1, int(wk)):
+                        c = absent_cause.get((int(sea), w, pid))
+                        if c:
+                            cause = c
+                            break
+                if cause:
+                    states.append(STATE_RETURN_FROM_INJURY)
+                    desig.append(cause)
+                    continue
+            d = limiting.get(key)
+            if d:
+                states.append(STATE_INJURY_LIMITED)
+                desig.append(d)
+            else:
+                states.append(STATE_UNRESOLVED)
+                desig.append("")
+        pw["player_state"] = states
+        pw["injury_designation"] = desig
+
+    # An explained week is still not representative of the healthy player, so
+    # explanation changes the REASON a week is withheld, never the fact.
+    pw["gate_disposition"] = np.where(
+        pw["player_state"].isin([STATE_HEALTHY, STATE_NO_BASELINE]),
+        DISPOSITION_USABLE, DISPOSITION_WITHHELD)
     return pw.drop(columns=["baseline_weeks"])
 
 
@@ -558,12 +687,15 @@ def build_cards(
     # Apply the anomaly gate HERE rather than trusting a caller to have done
     # it: a forgotten call would silently publish ungated trajectory fields,
     # which is the failure mode the gate exists to prevent.
-    if have_part and "player_state" not in participation.columns:
+    if have_part and "gate_disposition" not in participation.columns:
         participation = label_player_week_states(participation)
     # Players whose participation weeks are only partially bridged. Their
     # denominator is short, so any rate built on it is inflated; fail those
     # rates closed per player rather than publish a confident overstatement.
     untrusted = set(untrusted_denominator_ids or ())
+    inj_state = (participation["injury_source_state"].iloc[0]
+                 if have_part and "injury_source_state" in participation.columns
+                 and len(participation) else "unavailable")
     kinds = ("carry", "target")
     rows = []
 
@@ -592,7 +724,11 @@ def build_cards(
             # very upward bias (B) removed.
             weeks_all = pw.groupby("gsis_id")["week"].apply(
                 lambda x: sorted(set(x.astype(int)))).to_dict()
-            clean = pw.loc[pw["player_state"].ne(STATE_UNRESOLVED)]
+            # Withhold by DISPOSITION, not by the single unresolved label: an
+            # injury-explained week is explained, not representative, so it
+            # stays withheld. Keying off the label alone would have silently
+            # promoted every week the resolver explained into usable evidence.
+            clean = pw.loc[pw["gate_disposition"].eq(DISPOSITION_USABLE)]
             weeks_clean = clean.groupby("gsis_id")["week"].apply(
                 lambda x: sorted(set(x.astype(int)))).to_dict()
             state_counts = (pw.groupby(["gsis_id", "player_state"]).size()
@@ -603,14 +739,21 @@ def build_cards(
             # weeks are withheld from the efficiency aggregates. Prior seasons
             # are labelled too, so this is not current-season-only.
             unres = participation.loc[
-                participation["player_state"].eq(STATE_UNRESOLVED),
+                participation["gate_disposition"].eq(DISPOSITION_WITHHELD),
                 ["gsis_id", "season", "week"]]
             withheld_pw = set(map(tuple, unres.to_numpy().tolist()))
+            w = pw.loc[pw["gate_disposition"].eq(DISPOSITION_WITHHELD)]
+            wh_expl = (w.loc[w["player_state"].isin(
+                [STATE_INJURY_LIMITED, STATE_RETURN_FROM_INJURY])]
+                .groupby("gsis_id").size().to_dict())
+            wh_unexpl = (w.loc[w["player_state"].eq(STATE_UNRESOLVED)]
+                         .groupby("gsis_id").size().to_dict())
         else:
             part_weeks = pd.Series(dtype=int)
             weeks_all, weeks_clean = {}, {}
             state_counts = pd.DataFrame()
             withheld_pw = set()
+            wh_expl, wh_unexpl = {}, {}
 
         team_tot = cur.groupby(["posteam", "opportunity_kind"]).size()
         team_rz = cur.loc[cur["is_red_zone"]].groupby(
@@ -726,6 +869,12 @@ def build_cards(
                     "gate_weeks_used": gated["weeks"],
                     "gate_weeks_withheld": max(
                         0, ungated["weeks"] - gated["weeks"]),
+                    "gate_withheld_explained": int(
+                        wh_expl.get(pid, 0)) if have_part else 0,
+                    "gate_withheld_unexplained": int(
+                        wh_unexpl.get(pid, 0)) if have_part else 0,
+                    "injury_source_state": inj_state,
+                    "partial_game_source_state": PARTIAL_GAME_SOURCE_STATE,
                     "gate_state_counts": ";".join(
                         f"{k}={int(v)}" for k, v in sorted(
                             state_counts.loc[pid].items()) if v
@@ -819,7 +968,21 @@ def build_cards(
             k: int(v) for k, v in
             (participation["player_state"].value_counts().items()
              if have_part and "player_state" in participation.columns else [])},
-        "anomaly_gate_version": "PLAYER_STATE_ANOMALY_GATE_V1_PARTICIPATION_ONLY",
+        "anomaly_gate_version": (
+            "PLAYER_STATE_ANOMALY_GATE_V2_INJURY_RESOLVED"
+            if inj_state == "available"
+            else "PLAYER_STATE_ANOMALY_GATE_V1_PARTICIPATION_ONLY"),
+        "injury_source_state": inj_state,
+        "partial_game_source_state": PARTIAL_GAME_SOURCE_STATE,
+        # How much of the withholding is now EXPLAINED rather than mysterious.
+        # The withheld set itself is unchanged by resolution: an explained week
+        # is not a representative one.
+        "withheld_explained_cards": int(
+            (pd.to_numeric(out["gate_withheld_explained"], errors="coerce")
+             .fillna(0) > 0).sum()),
+        "withheld_unexplained_cards": int(
+            (pd.to_numeric(out["gate_withheld_unexplained"], errors="coerce")
+             .fillna(0) > 0).sum()),
     }
     out = out.sort_values(
         ["season", "target_week", "team_target_week", "opportunity_kind",
@@ -859,6 +1022,19 @@ def main() -> int:
             "participation bridge unavailable and --require-participation set; "
             f"refusing to emit a card whose denominators cannot be trusted: {bridge}"
         )
+
+    # Source-qualified player-state resolution, per GPT audit 6425282770
+    # priority 1. Optional enrichment: if it fails the gate simply stays
+    # fail-closed with every abnormal week UNRESOLVED_CONTEXT.
+    injuries = load_injuries(seasons)
+    participation = label_player_week_states(participation, injuries)
+    if not participation.empty:
+        print("[identity] player-week states: "
+              + json.dumps(participation["player_state"]
+                           .value_counts().to_dict(), sort_keys=True))
+        print("[identity] injury source: "
+              f"{participation['injury_source_state'].iloc[0]}; "
+              f"PARTIAL_GAME: {PARTIAL_GAME_SOURCE_STATE}")
 
     pbp = load_pbp(seasons)
     print(f"[identity] pbp rows={len(pbp)}")

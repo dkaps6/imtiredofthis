@@ -186,16 +186,38 @@ jobs:
               fail.append("no no_history cards: universe is still "
                           "opportunity-observed only")
 
+          sc = status.get("player_week_state_counts") or {}
+
           # PLAYER-STATE ANOMALY INVESTIGATION GATE (AGENTS.md, non-negotiable)
+          # Priority 1 of GPT audit 6425282770: the source-qualified resolver.
           if status.get("anomaly_gate_version") != \
-             "PLAYER_STATE_ANOMALY_GATE_V1_PARTICIPATION_ONLY":
-              fail.append("anomaly gate not stamped")
+             "PLAYER_STATE_ANOMALY_GATE_V2_INJURY_RESOLVED":
+              fail.append("anomaly gate not stamped as injury-resolved: "
+                          f"{status.get('anomaly_gate_version')}")
+          if status.get("injury_source_state") != "available":
+              fail.append("injury source unavailable: the gate is back to "
+                          "participation-only and cannot name a cause")
+          if "SOURCE_BLOCKED" not in str(status.get("partial_game_source_state")):
+              fail.append("PARTIAL_GAME source state not declared")
+          resolved = {k: sc.get(k, 0) for k in
+                      ("INJURY_LIMITED", "RETURN_FROM_INJURY")}
+          if sum(resolved.values()) <= 0:
+              fail.append("resolver explained nothing: every abnormal week is "
+                          f"still UNRESOLVED_CONTEXT ({resolved})")
+          # Explanation must not promote a contaminated week. A week labelled
+          # INJURY_LIMITED or RETURN_FROM_INJURY is explained, not
+          # representative, so it must still be withheld.
+          if int(status.get("gate_weeks_withheld_total", 0)) < sum(resolved.values()):
+              fail.append("fewer withheld week-slots than explained weeks: "
+                          "resolution has promoted contaminated weeks")
+          if "PARTIAL_GAME" in sc:
+              fail.append("PARTIAL_GAME label emitted although its source is "
+                          "blocked for 2026")
           # A bye is a gap for every player on an idle team; without the
           # schedule-aware correction the gate flags whole rosters.
           if status["identity_bridge"].get("bye_detection") != "available":
               fail.append("bye detection unavailable: a team bye would be "
                           "read as an absence for its entire roster")
-          sc = status.get("player_week_state_counts") or {}
           if "UNRESOLVED_CONTEXT" not in sc:
               fail.append("gate never fired on real data: no UNRESOLVED_CONTEXT "
                           "player-weeks, which means anomalies are still being "
@@ -254,6 +276,12 @@ jobs:
                 status["history_state_counts_opportunity_eligible"])
           print("active zero-opportunity player-weeks:", int(az[trusted_rows].sum()))
           print("player-week states:", json.dumps(sc, sort_keys=True))
+          print("injury source: %s | PARTIAL_GAME: %s" % (
+              status.get("injury_source_state"),
+              status.get("partial_game_source_state")))
+          print("withholding: explained_cards=%s unexplained_cards=%s" % (
+              status.get("withheld_explained_cards"),
+              status.get("withheld_unexplained_cards")))
           print("gate: cards_with_withheld_weeks=%s weeks_withheld_total=%s" % (
               status.get("gate_cards_with_withheld_weeks"),
               status.get("gate_weeks_withheld_total")))

@@ -575,3 +575,119 @@ def test_efficiency_gate_is_a_no_op_when_no_week_is_withheld():
               & (cards.opportunity_kind == "carry")].iloc[0]
     assert r["efficiency_opp_withheld"] == 0
     assert r["yards_per_opp"] == pytest.approx(r["yards_per_opp_all_weeks"])
+
+
+# ------------------------------- source-qualified player-state resolution
+
+from scripts.research.build_player_identity_card_v1 import (  # noqa: E402
+    DISPOSITION_USABLE, DISPOSITION_WITHHELD, PARTIAL_GAME_SOURCE_STATE,
+    STATE_INJURY_LIMITED, STATE_RETURN_FROM_INJURY,
+)
+
+
+def _inj(rows):
+    """rows: list of (week, gsis_id, report_status, practice_status)"""
+    return pd.DataFrame([
+        {"season": 2026, "week": w, "gsis_id": g, "team": "PHI",
+         "report_status": r, "practice_status": p}
+        for w, g, r, p in rows])
+
+
+def _snaps_pw(spec, team="PHI"):
+    return pd.DataFrame([
+        {"season": 2026, "week": w, "gsis_id": g, "offense_snaps": n,
+         "team": team}
+        for (w, g), n in spec.items()])
+
+
+# A teammate who plays every week. Without one, a single player's absence
+# makes his whole team look idle and the bye correction correctly excuses the
+# gap -- real teams field ~25 offensive players, so the fixture needs company.
+TEAMMATE = {(w, GSIS_B): 55 for w in range(1, 8)}
+STEADY = {**TEAMMATE, **{(w, GSIS_A): 60 for w in (1, 2, 3)}}
+
+
+def test_abnormal_week_with_a_designation_resolves_to_injury_limited():
+    part = _snaps_pw({**STEADY, (4, GSIS_A): 8, (5, GSIS_A): 60})
+    out = label_player_week_states(part, _inj([(4, GSIS_A, "Questionable", None)]))
+    out = out[out.gsis_id == GSIS_A].set_index("week")
+    assert out.loc[4, "player_state"] == STATE_INJURY_LIMITED
+    assert out.loc[4, "injury_designation"] == "questionable"
+    # Explained is not representative: still withheld.
+    assert out.loc[4, "gate_disposition"] == DISPOSITION_WITHHELD
+
+
+def test_abnormal_week_without_a_designation_stays_unresolved():
+    part = _snaps_pw({**STEADY, (4, GSIS_A): 8})
+    out = label_player_week_states(
+        part, _inj([(4, GSIS_ROOKIE, "Out", None)]))
+    out = out[out.gsis_id == GSIS_A].set_index("week")
+    assert out.loc[4, "player_state"] == STATE_UNRESOLVED
+    assert out.loc[4, "gate_disposition"] == DISPOSITION_WITHHELD
+
+
+def test_return_after_an_out_designated_gap_resolves_to_return_from_injury():
+    part = _snaps_pw({**STEADY, (5, GSIS_A): 60})   # week 4 missing
+    out = label_player_week_states(part, _inj([(4, GSIS_A, "Out", None)]))
+    out = out[out.gsis_id == GSIS_A].set_index("week")
+    assert out.loc[5, "player_state"] == STATE_RETURN_FROM_INJURY
+    assert out.loc[5, "injury_designation"] == "out"
+
+
+def test_return_after_an_unexplained_gap_stays_unresolved():
+    part = _snaps_pw({**STEADY, (5, GSIS_A): 60})
+    out = label_player_week_states(
+        part, _inj([(2, GSIS_A, None, "Full Participation in Practice")]))
+    out = out[out.gsis_id == GSIS_A].set_index("week")
+    assert out.loc[5, "player_state"] == STATE_UNRESOLVED
+
+
+def test_a_later_designation_may_not_explain_an_earlier_gap():
+    """Chronology: only weeks inside the gap can explain the gap."""
+    part = _snaps_pw({**STEADY, (5, GSIS_A): 60})   # gap is week 4 only
+    out = label_player_week_states(part, _inj([(6, GSIS_A, "Out", None)]))
+    out = out[out.gsis_id == GSIS_A].set_index("week")
+    assert out.loc[5, "player_state"] == STATE_UNRESOLVED
+
+
+def test_resolution_never_changes_which_weeks_are_withheld():
+    """The whole point: explanation changes the reason, not the fact. If this
+    ever fails, the resolver has started promoting contaminated weeks."""
+    part = _snaps_pw({**STEADY, (4, GSIS_A): 8, (6, GSIS_A): 60})
+    inj = _inj([(4, GSIS_A, "Questionable", None), (5, GSIS_A, "Out", None)])
+    bare = label_player_week_states(part)
+    res = label_player_week_states(part, inj)
+    key = ["season", "week", "gsis_id"]
+    assert (set(map(tuple, bare.loc[bare.gate_disposition.eq(
+                DISPOSITION_WITHHELD), key].to_numpy().tolist()))
+            == set(map(tuple, res.loc[res.gate_disposition.eq(
+                DISPOSITION_WITHHELD), key].to_numpy().tolist())))
+    # ...and it did actually resolve something, or the test proves nothing.
+    assert set(res["player_state"]) & {STATE_INJURY_LIMITED,
+                                       STATE_RETURN_FROM_INJURY}
+
+
+def test_without_injuries_the_gate_stays_fail_closed():
+    part = _snaps_pw({**STEADY, (4, GSIS_A): 8})
+    out = label_player_week_states(part)
+    out = out[out.gsis_id == GSIS_A].set_index("week")
+    assert out.loc[4, "player_state"] == STATE_UNRESOLVED
+    assert out.loc[4, "injury_source_state"] == "unavailable"
+
+
+def test_partial_game_is_declared_source_blocked_not_invented():
+    """load_participation covers 2016-2025, so 2026 partial games cannot be
+    established. Say so rather than guess from a snap count."""
+    out = label_player_week_states(_snaps_pw(STEADY))
+    assert (out["partial_game_source_state"] == PARTIAL_GAME_SOURCE_STATE).all()
+    assert "SOURCE_BLOCKED" in PARTIAL_GAME_SOURCE_STATE
+    assert "PARTIAL_GAME" not in set(out["player_state"])
+
+
+def test_healthy_weeks_are_usable_and_unaffected_by_the_resolver():
+    part = _snaps_pw(STEADY)
+    out = label_player_week_states(part, _inj([(3, GSIS_A, "Questionable", None)]))
+    out = out[out.gsis_id == GSIS_A].set_index("week")
+    # Listed questionable but played a normal snap count: not an anomaly.
+    assert out.loc[3, "player_state"] == STATE_HEALTHY
+    assert out.loc[3, "gate_disposition"] == DISPOSITION_USABLE
