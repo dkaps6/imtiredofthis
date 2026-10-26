@@ -3,6 +3,18 @@
   "audit_corrections_applied": "6420504608_A_through_E",
   "cards": 35196,
   "denominator_contradicted_cards": 24,
+  "evidence_authority_counts": {
+    "current_only": 558,
+    "position_prior_only": 29515,
+    "prior+current": 2409,
+    "prior_only": 2714
+  },
+  "evidence_authority_counts_opportunity_eligible": {
+    "current_only": 538,
+    "position_prior_only": 5422,
+    "prior+current": 2407,
+    "prior_only": 2593
+  },
   "gate_cards_with_withheld_weeks": 1398,
   "gate_weeks_withheld_total": 1976,
   "history_state_counts": {
@@ -43,6 +55,7 @@
     "unbridged_only_players": 381
   },
   "injury_source_state": "available",
+  "model_facing_rows": 10960,
   "opportunity_eligible_cards": 10960,
   "partial_game_source_state": "SOURCE_BLOCKED_NO_2026_PARTICIPATION_DATA",
   "player_week_state_counts": {
@@ -53,6 +66,8 @@
     "UNRESOLVED_CONTEXT": 1078
   },
   "players": 3053,
+  "population_fallback_cards": 29515,
+  "population_fallback_cards_opportunity_eligible": 5422,
   "prior_seasons": [
     2025
   ],
@@ -70,6 +85,8 @@
     7
   ],
   "teams": 32,
+  "universe_durable": "COMPLETE_ROSTER_UNIVERSE",
+  "universe_model_facing": "MODEL_FACING_OPPORTUNITY_UNIVERSE",
   "untrusted_denominator_cards": 0,
   "version": "PLAYER_IDENTITY_CARD_V1",
   "withheld_explained_cards": 200,
