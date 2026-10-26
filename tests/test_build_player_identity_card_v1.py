@@ -379,3 +379,116 @@ def test_roster_coverage_breakdown_distinguishes_the_two_failure_modes():
     assert diag["unbridged_only_players"] == 2          # B and ZZZ999
     assert diag["unbridged_on_roster_without_gsis"] == 1  # B
     assert diag["unbridged_absent_from_roster"] == 1      # ZZZ999
+
+
+# ----------------------------------- PLAYER-STATE ANOMALY INVESTIGATION GATE
+
+from scripts.research.build_player_identity_card_v1 import (  # noqa: E402
+    STATE_HEALTHY, STATE_NO_BASELINE, STATE_UNRESOLVED,
+    label_player_week_states,
+)
+
+WK = (1, 2, 3, 4, 5, 6)
+
+
+def test_snap_collapse_is_unresolved_not_a_clean_week():
+    part = pd.DataFrame([
+        {"season": 2026, "week": w, "gsis_id": GSIS_A, "offense_snaps": n}
+        for w, n in [(1, 60), (2, 60), (3, 60), (4, 8), (5, 60)]])
+    st = label_player_week_states(part).set_index("week")["player_state"]
+    assert st[1] == STATE_NO_BASELINE      # nothing earlier to judge against
+    assert st[2] == STATE_NO_BASELINE
+    assert st[3] == STATE_HEALTHY
+    assert st[4] == STATE_UNRESOLVED       # 8 snaps against a 60 baseline
+    assert st[5] == STATE_HEALTHY
+
+
+def test_return_from_absence_is_unresolved():
+    part = pd.DataFrame([
+        {"season": 2026, "week": w, "gsis_id": GSIS_A, "offense_snaps": 40}
+        for w in (1, 2, 3, 5)])          # week 4 missing entirely
+    out = label_player_week_states(part).set_index("week")
+    assert bool(out.loc[5, "returned_from_absence"])
+    assert out.loc[5, "player_state"] == STATE_UNRESOLVED
+    assert out.loc[3, "player_state"] == STATE_HEALTHY
+
+
+def test_a_week_is_never_judged_against_itself():
+    """Baseline uses strictly earlier weeks, so one bad week cannot excuse
+    itself by dragging its own baseline down."""
+    part = pd.DataFrame([
+        {"season": 2026, "week": w, "gsis_id": GSIS_A, "offense_snaps": n}
+        for w, n in [(1, 60), (2, 60), (3, 5)]])
+    out = label_player_week_states(part).set_index("week")
+    assert out.loc[3, "baseline_snaps"] == 60
+    assert out.loc[3, "player_state"] == STATE_UNRESOLVED
+
+
+def _gated_cards(snap_spec, pbp_spec, week=6):
+    ros = rosters(weeks=WK)
+    part, diag = build_participation(ros, snaps(snap_spec))
+    assert diag["bridge_state"] == "ok"
+    cards, cdiag = build_cards(pbp(pbp_spec), ros, part, 2026, [week], [])
+    return cards, cdiag
+
+
+def test_gate_withholds_the_anomalous_week_from_trajectory():
+    snap = {(w, PFR_A): n for w, n in
+            [(1, 60), (2, 60), (3, 60), (4, 8), (5, 60)]}
+    ev = ([(w, GSIS_A, 50, 4) for w in (1, 1, 1, 2, 2, 2, 3, 3, 3, 5, 5, 5)])
+    cards, _ = _gated_cards(snap, ev)
+    r = cards[(cards.gsis_id == GSIS_A)
+              & (cards.opportunity_kind == "carry")].iloc[0]
+    # 12 carries. Over the 4 explained weeks that is 3.0/wk; over all 5
+    # participation weeks (including the 8-snap week) it is 2.4/wk.
+    assert r["opp_per_participation_week"] == pytest.approx(3.0)
+    assert r["opp_per_participation_week_all_weeks"] == pytest.approx(2.4)
+    assert r["gate_weeks_used"] == 4
+    assert r["gate_weeks_withheld"] == 1
+    assert r["opp_week_to_week_sd"] == pytest.approx(0.0)
+    assert r["opp_week_to_week_sd_all_weeks"] > 0
+    # Raw counts are per-play facts and the gate must not touch them.
+    assert r["opp_total_current_season"] == 12
+    assert f"{STATE_UNRESOLVED}=1" in r["gate_state_counts"]
+
+
+def test_gate_does_not_withhold_a_healthy_zero_opportunity_week():
+    """The gate must not undo fix (B): a healthy active week with no touches
+    is a real zero and stays in the denominator."""
+    snap = {(w, PFR_A): 60 for w in (1, 2, 3, 4, 5)}
+    ev = [(w, GSIS_A, 50, 4) for w in (1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4)]
+    cards, _ = _gated_cards(snap, ev)   # week 5: played 60 snaps, 0 carries
+    r = cards[(cards.gsis_id == GSIS_A)
+              & (cards.opportunity_kind == "carry")].iloc[0]
+    assert r["gate_weeks_withheld"] == 0
+    assert r["gate_weeks_used"] == 5
+    # 12 carries over 5 weeks, NOT over the 4 weeks he happened to carry.
+    assert r["opp_per_participation_week"] == pytest.approx(2.4)
+    assert r["active_zero_opportunity_weeks"] == 1
+
+
+def test_gate_applies_even_if_participation_arrives_unlabelled():
+    """A forgotten labeller call must not silently publish ungated fields."""
+    ros = rosters(weeks=WK)
+    part, _ = build_participation(ros, snaps(
+        {(w, PFR_A): n for w, n in [(1, 60), (2, 60), (3, 60), (4, 8), (5, 60)]}))
+    assert "player_state" not in part.columns
+    cards, diag = build_cards(
+        pbp([(w, GSIS_A, 50, 4) for w in (1, 2, 3, 5)]),
+        ros, part, 2026, [6], [])
+    r = cards[(cards.gsis_id == GSIS_A)
+              & (cards.opportunity_kind == "carry")].iloc[0]
+    assert r["gate_weeks_withheld"] == 1
+    assert diag["gate_weeks_withheld_total"] >= 1
+    assert STATE_UNRESOLVED in diag["player_week_state_counts"]
+
+
+def test_rate_is_reconstructible_from_its_own_published_inputs():
+    snap = {(w, PFR_A): n for w, n in
+            [(1, 60), (2, 60), (3, 60), (4, 8), (5, 60)]}
+    ev = [(w, GSIS_A, 50, 4) for w in (1, 1, 2, 2, 3, 5)]
+    cards, _ = _gated_cards(snap, ev)
+    r = cards[(cards.gsis_id == GSIS_A)
+              & (cards.opportunity_kind == "carry")].iloc[0]
+    assert (r["opp_in_gate_weeks"] / r["gate_weeks_used"]
+            == pytest.approx(r["opp_per_participation_week"]))

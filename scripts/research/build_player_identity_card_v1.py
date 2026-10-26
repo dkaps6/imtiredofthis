@@ -103,6 +103,40 @@ _QUALITY_COLS = ("yardline_100", "down", "goal_to_go", "half_seconds_remaining")
 # without this flag it is 69% of the rows.
 _OPPORTUNITY_POSITIONS = frozenset({"QB", "RB", "FB", "HB", "WR", "TE"})
 
+# PLAYER-STATE ANOMALY INVESTIGATION GATE (AGENTS.md).
+#
+# A week's observation may not enter trajectory or stability logic until it has
+# been state-labelled, and an unresolved cause must fail closed rather than
+# become affirmative evidence. Fix (B) was right that an active zero-touch week
+# is a real zero and must not be dropped -- but an active zero is not ONE
+# thing. A healthy back schemed out is signal; a back who took eight snaps and
+# left with a hamstring is contamination. Both were being written into the same
+# trajectory and stability fields.
+#
+# What the loaded sources can support today:
+#   DNP_INACTIVE       - no offensive participation that week
+#   HEALTHY_FULL       - snaps consistent with the player's own prior baseline
+#   UNRESOLVED_CONTEXT - materially abnormal snaps, or a return from absence,
+#                        with no loaded source that explains the cause
+#   NO_BASELINE        - too little prior participation to judge abnormality
+#
+# INJURY_LIMITED, PARTIAL_GAME and RETURN_FROM_INJURY require an injury /
+# participation-detail source that this builder does not yet load. Until it
+# does, those cases land in UNRESOLVED_CONTEXT, which is precisely the
+# fail-closed behaviour the gate prescribes -- not a silent HEALTHY_FULL.
+#
+# A SCREENING threshold, not a fitted parameter: a week at or below this
+# fraction of the player's own prior median offensive snaps is treated as
+# materially abnormal and sent for explanation.
+PARTIAL_PARTICIPATION_RATIO = 0.5
+# Minimum prior participation weeks before abnormality can be judged at all.
+MIN_BASELINE_WEEKS = 2
+
+STATE_DNP = "DNP_INACTIVE"
+STATE_HEALTHY = "HEALTHY_FULL"
+STATE_UNRESOLVED = "UNRESOLVED_CONTEXT"
+STATE_NO_BASELINE = "NO_BASELINE"
+
 RED_ZONE = 20
 INSIDE_10 = 10
 INSIDE_5 = 5
@@ -297,6 +331,56 @@ def build_participation(
     return part, diag
 
 
+def label_player_week_states(participation: pd.DataFrame) -> pd.DataFrame:
+    """State-label every participation week before it can become a trend.
+
+    Required by the PLAYER-STATE ANOMALY INVESTIGATION GATE. Each week is
+    judged only against the player's own EARLIER weeks, so a given week's
+    label is stable no matter which target week's card is being built.
+
+    Returns the participation frame plus: baseline_snaps, snap_ratio,
+    returned_from_absence, player_state.
+    """
+    if participation.empty:
+        return participation.assign(
+            baseline_snaps=pd.Series(dtype=float),
+            snap_ratio=pd.Series(dtype=float),
+            returned_from_absence=pd.Series(dtype=bool),
+            player_state=pd.Series(dtype=object))
+
+    pw = participation.sort_values(["gsis_id", "season", "week"]).copy()
+    pw["offense_snaps"] = pd.to_numeric(pw["offense_snaps"], errors="coerce")
+
+    # group_keys=False keeps apply from prepending the group key to the index,
+    # which is pandas 1.5 default behaviour but a FutureWarning: being explicit
+    # makes this survive the 2.x change rather than silently misalign.
+    g = pw.groupby("gsis_id", sort=False, group_keys=False)["offense_snaps"]
+    # Expanding median of EARLIER weeks only: shift(1) keeps the week being
+    # judged out of its own baseline.
+    pw["baseline_snaps"] = g.apply(lambda x: x.shift(1).expanding().median())
+    pw["baseline_weeks"] = g.apply(lambda x: x.shift(1).expanding().count())
+    pw["snap_ratio"] = np.where(
+        pw["baseline_snaps"] > 0,
+        pw["offense_snaps"] / pw["baseline_snaps"], np.nan)
+
+    # A gap in a player's own participation sequence: he played, then did not,
+    # then played again. The gate treats the return as needing explanation.
+    prev_week = pw.groupby("gsis_id", sort=False)["week"].shift(1)
+    same_season = pw.groupby("gsis_id", sort=False)["season"].shift(1).eq(
+        pw["season"])
+    pw["returned_from_absence"] = (
+        same_season & prev_week.notna() & (pw["week"] - prev_week > 1))
+
+    enough = pw["baseline_weeks"].fillna(0) >= MIN_BASELINE_WEEKS
+    abnormal = enough & pw["snap_ratio"].le(PARTIAL_PARTICIPATION_RATIO)
+
+    pw["player_state"] = np.where(
+        ~enough, STATE_NO_BASELINE,
+        np.where(abnormal | pw["returned_from_absence"],
+                 STATE_UNRESOLVED, STATE_HEALTHY))
+    return pw.drop(columns=["baseline_weeks"])
+
+
 def player_opportunity_rows(pbp: pd.DataFrame) -> pd.DataFrame:
     """One row per (player, opportunity) with its situational flags.
 
@@ -368,6 +452,40 @@ def player_opportunity_rows(pbp: pd.DataFrame) -> pd.DataFrame:
     return ev
 
 
+def _week_stats(wk_counts: pd.Series, part_weeks: list) -> dict:
+    """Level, stability and trajectory over an explicit set of weeks.
+
+    Numerator and denominator are drawn from the SAME week set, which the
+    previous inline version did not do: it summed every current-season
+    opportunity over a participation-week count, so a player with opportunity
+    in a week his participation record omitted produced a rate that could not
+    be reconstructed from its own inputs.
+
+    A week in `part_weeks` with no opportunity contributes a genuine zero --
+    that is fix (B). A week not in `part_weeks` contributes nothing at all.
+    """
+    weeks = sorted({int(w) for w in part_weeks})
+    n = len(weeks)
+    if n == 0:
+        return {"per_week": np.nan, "sd": np.nan, "recent": np.nan,
+                "earlier": np.nan, "weeks": 0, "opp": 0.0}
+    counts = (wk_counts.reindex(weeks).fillna(0).astype(float)
+              if len(wk_counts) else pd.Series(0.0, index=weeks))
+    total = float(counts.sum())
+    recent_weeks = weeks[-2:]
+    n_recent = float(counts.reindex(recent_weeks).fillna(0).sum())
+    den_earlier = n - len(recent_weeks)
+    return {
+        "per_week": total / n,
+        "sd": float(counts.std()) if n > 1 else np.nan,
+        "recent": n_recent / len(recent_weeks),
+        "earlier": ((total - n_recent) / den_earlier
+                    if den_earlier > 0 else np.nan),
+        "weeks": n,
+        "opp": total,
+    }
+
+
 def _rate(num, den):
     den = float(den)
     return float(num) / den if den > 0 else np.nan
@@ -397,6 +515,11 @@ def build_cards(
     ros["week"] = pd.to_numeric(ros["week"], errors="coerce")
 
     have_part = not participation.empty
+    # Apply the anomaly gate HERE rather than trusting a caller to have done
+    # it: a forgotten call would silently publish ungated trajectory fields,
+    # which is the failure mode the gate exists to prevent.
+    if have_part and "player_state" not in participation.columns:
+        participation = label_player_week_states(participation)
     # Players whose participation weeks are only partially bridged. Their
     # denominator is short, so any rate built on it is inflated; fail those
     # rates closed per player rather than publish a confident overstatement.
@@ -422,8 +545,22 @@ def build_cards(
             pw = participation.loc[participation["season"].eq(season)
                                    & participation["week"].lt(wk)]
             part_weeks = pw.groupby("gsis_id")["week"].nunique()
+            # PLAYER-STATE ANOMALY GATE: weeks whose cause is unexplained may
+            # not become trajectory/stability evidence. Only UNRESOLVED_CONTEXT
+            # is withheld -- a healthy active week with zero touches stays in,
+            # which is fix (B), and withholding it here would re-introduce the
+            # very upward bias (B) removed.
+            weeks_all = pw.groupby("gsis_id")["week"].apply(
+                lambda x: sorted(set(x.astype(int)))).to_dict()
+            clean = pw.loc[pw["player_state"].ne(STATE_UNRESOLVED)]
+            weeks_clean = clean.groupby("gsis_id")["week"].apply(
+                lambda x: sorted(set(x.astype(int)))).to_dict()
+            state_counts = (pw.groupby(["gsis_id", "player_state"]).size()
+                            .unstack(fill_value=0))
         else:
             part_weeks = pd.Series(dtype=int)
+            weeks_all, weeks_clean = {}, {}
+            state_counts = pd.DataFrame()
 
         team_tot = cur.groupby(["posteam", "opportunity_kind"]).size()
         team_rz = cur.loc[cur["is_red_zone"]].groupby(
@@ -462,30 +599,20 @@ def build_cards(
                 # with zero touches counts as a real zero. Without a
                 # participation source these fail closed to NaN rather than
                 # silently reverting to opportunity-observed weeks.
+                wk_counts = (gc.groupby("week").size()
+                             if n_cur else pd.Series(dtype=float))
+                obs = sorted(wk_counts.index.astype(int).tolist()) if n_cur else []
                 if trusted and n_part > 0:
-                    per_week = _rate(n_cur, n_part)
-                    wk_counts = (gc.groupby("week").size()
-                                 if n_cur else pd.Series(dtype=int))
-                    zeros = max(0, n_part - int(wk_counts.shape[0]))
-                    series = pd.concat(
-                        [wk_counts, pd.Series([0] * zeros, dtype=int)]
-                    ) if zeros else wk_counts
-                    sd = float(series.std()) if len(series) > 1 else np.nan
-                    obs = sorted(wk_counts.index.tolist()) if n_cur else []
-                    recent_weeks = sorted(
-                        pw.loc[pw["gsis_id"].eq(pid), "week"].unique()
-                    )[-2:] if n_part else []
-                    n_recent = int(wk_counts.reindex(recent_weeks).fillna(0).sum()) \
-                        if n_cur and recent_weeks else 0
-                    per_week_recent = _rate(n_recent, len(recent_weeks)) \
-                        if recent_weeks else np.nan
-                    n_earlier = n_cur - n_recent
-                    den_earlier = n_part - len(recent_weeks)
-                    per_week_earlier = _rate(n_earlier, den_earlier) \
-                        if den_earlier > 0 else np.nan
+                    # Canonical fields are the GATE-COMPLIANT ones, computed on
+                    # weeks whose state is explained. The all-weeks figures stay
+                    # visible as diagnostics but have to be named to be used.
+                    gated = _week_stats(wk_counts, weeks_clean.get(pid, []))
+                    ungated = _week_stats(wk_counts, weeks_all.get(pid, []))
                 else:
-                    per_week = sd = per_week_recent = per_week_earlier = np.nan
-                    obs = sorted(gc["week"].unique().tolist()) if n_cur else []
+                    gated = ungated = _week_stats(pd.Series(dtype=float), [])
+                per_week, sd = gated["per_week"], gated["sd"]
+                per_week_recent, per_week_earlier = (gated["recent"],
+                                                    gated["earlier"])
 
                 tn = team_tot.get((team_now, kind), 0)
                 trz = team_rz.get((team_now, kind), 0)
@@ -531,6 +658,26 @@ def build_cards(
                     "opp_per_week_recent2": per_week_recent,
                     "opp_per_week_earlier": per_week_earlier,
                     "opp_week_to_week_sd": sd,
+                    # --- PLAYER-STATE ANOMALY GATE -------------------------
+                    # The canonical trajectory/stability fields above are
+                    # computed on explained weeks only. These make the gate's
+                    # effect auditable: what it withheld, and what the figures
+                    # would have been without it.
+                    "gate_weeks_used": gated["weeks"],
+                    "gate_weeks_withheld": max(
+                        0, ungated["weeks"] - gated["weeks"]),
+                    "gate_state_counts": ";".join(
+                        f"{k}={int(v)}" for k, v in sorted(
+                            state_counts.loc[pid].items()) if v
+                    ) if (not state_counts.empty
+                          and pid in state_counts.index) else "",
+                    "opp_per_participation_week_all_weeks": ungated["per_week"],
+                    "opp_week_to_week_sd_all_weeks": ungated["sd"],
+                    "opp_per_week_recent2_all_weeks": ungated["recent"],
+                    "opp_per_week_earlier_all_weeks": ungated["earlier"],
+                    # Numerator actually used, so the rate is reconstructible
+                    # from its own published inputs.
+                    "opp_in_gate_weeks": gated["opp"],
                     # --- opportunity QUALITY / topology -------------------
                     "red_zone_opp": int(g["is_red_zone"].sum()) if n else 0,
                     "inside_10_opp": int(g["is_inside_10"].sum()) if n else 0,
@@ -587,6 +734,18 @@ def build_cards(
              == "available_untrusted_partial_bridge").sum()),
         "denominator_contradicted_cards": int(
             out["participation_denominator_contradicted"].sum()),
+        # PLAYER-STATE ANOMALY GATE effect, so it is never invisible.
+        "gate_cards_with_withheld_weeks": int(
+            (pd.to_numeric(out["gate_weeks_withheld"], errors="coerce")
+             .fillna(0) > 0).sum()),
+        "gate_weeks_withheld_total": int(
+            pd.to_numeric(out["gate_weeks_withheld"], errors="coerce")
+            .fillna(0).sum()),
+        "player_week_state_counts": {
+            k: int(v) for k, v in
+            (participation["player_state"].value_counts().items()
+             if have_part and "player_state" in participation.columns else [])},
+        "anomaly_gate_version": "PLAYER_STATE_ANOMALY_GATE_V1_PARTICIPATION_ONLY",
     }
     out = out.sort_values(
         ["season", "target_week", "team_target_week", "opportunity_kind",

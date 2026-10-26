@@ -115,6 +115,7 @@ jobs:
           export PYTHONPATH="${PWD}"
           python - <<'EOF'
           import json, os, sys
+          import numpy as np
           import pandas as pd
           season = os.environ["SEASON"]
           base = f"data/research/player_identity/player_identity_card_v1_{season}"
@@ -185,6 +186,39 @@ jobs:
               fail.append("no no_history cards: universe is still "
                           "opportunity-observed only")
 
+          # PLAYER-STATE ANOMALY INVESTIGATION GATE (AGENTS.md, non-negotiable)
+          if status.get("anomaly_gate_version") != \
+             "PLAYER_STATE_ANOMALY_GATE_V1_PARTICIPATION_ONLY":
+              fail.append("anomaly gate not stamped")
+          sc = status.get("player_week_state_counts") or {}
+          if "UNRESOLVED_CONTEXT" not in sc:
+              fail.append("gate never fired on real data: no UNRESOLVED_CONTEXT "
+                          "player-weeks, which means anomalies are still being "
+                          "read as clean weeks")
+          wh = pd.to_numeric(cards["gate_weeks_withheld"], errors="coerce")
+          if not (wh.fillna(0) >= 0).all():
+              fail.append("negative gate_weeks_withheld")
+          if int(status.get("gate_weeks_withheld_total", 0)) <= 0:
+              fail.append("gate withheld nothing anywhere")
+          # The gate must actually change a published number somewhere, or it
+          # is decorative.
+          gated = pd.to_numeric(cards["opp_per_participation_week"],
+                                errors="coerce")
+          ung = pd.to_numeric(cards["opp_per_participation_week_all_weeks"],
+                              errors="coerce")
+          both = gated.notna() & ung.notna()
+          if not (gated[both] != ung[both]).any():
+              fail.append("gated and all-weeks rates are identical on every "
+                          "card: the gate has no effect")
+          # A withheld week must never leave the rate unreconstructible.
+          used = pd.to_numeric(cards["gate_weeks_used"], errors="coerce")
+          opp = pd.to_numeric(cards["opp_in_gate_weeks"], errors="coerce")
+          rec = (opp / used.replace(0, np.nan))
+          bad = both & (rec - gated).abs().gt(1e-9)
+          if bad.any():
+              fail.append(f"{int(bad.sum())} cards publish a rate that does "
+                          "not equal opp_in_gate_weeks / gate_weeks_used")
+
           # boundary
           if not (pd.to_numeric(cards["sportsbook_inputs_used"]) == 0).all():
               fail.append("sportsbook inputs present")
@@ -199,7 +233,11 @@ jobs:
                 status["opportunity_eligible_cards"])
           print("history_state (opportunity-eligible):",
                 status["history_state_counts_opportunity_eligible"])
-          print("active zero-opportunity player-weeks:", int(az.sum()))
+          print("active zero-opportunity player-weeks:", int(az[trusted_rows].sum()))
+          print("player-week states:", json.dumps(sc, sort_keys=True))
+          print("gate: cards_with_withheld_weeks=%s weeks_withheld_total=%s" % (
+              status.get("gate_cards_with_withheld_weeks"),
+              status.get("gate_weeks_withheld_total")))
           print("untrusted-denominator cards:",
                 status["untrusted_denominator_cards"])
           print("denominator contradictions:",
