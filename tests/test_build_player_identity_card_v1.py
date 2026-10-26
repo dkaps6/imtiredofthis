@@ -247,6 +247,27 @@ def test_situational_flags_are_derived_from_field_position():
     assert ev["is_red_zone"].sum() == 3
 
 
+def test_missing_situational_columns_fail_closed():
+    """Absent field position, a quality flag would read as absent work."""
+    thin = pbp([(1, GSIS_A, 50, 4)]).drop(columns=["yardline_100"])
+    with pytest.raises(RuntimeError, match="situational columns"):
+        player_opportunity_rows(thin)
+
+
+def test_optional_passing_columns_do_not_crash_when_absent():
+    """complete_pass/air_yards are not guaranteed; their absence is not fatal."""
+    rows = pbp([(1, GSIS_A, 50, 4)])
+    rows.loc[:, "pass_attempt"] = 1
+    rows.loc[:, "rush_attempt"] = 0
+    rows.loc[:, "receiver_player_id"] = GSIS_A
+    assert "complete_pass" not in rows.columns
+    ev = player_opportunity_rows(rows)
+    tgt = ev[ev.opportunity_kind == "target"]
+    assert len(tgt) == 1
+    assert tgt["complete"].iloc[0] == 0
+    assert np.isnan(tgt["air_yards"].iloc[0])
+
+
 def test_cards_never_carry_sportsbook_input():
     c = _cards({(1, PFR_A): 30}, [(1, GSIS_A, 50, 4)])
     assert (c["sportsbook_inputs_used"] == 0).all()

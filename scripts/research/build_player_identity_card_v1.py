@@ -74,13 +74,29 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-try:
-    import nflreadpy as nflv
-except ImportError:  # pragma: no cover - environment guard
-    print("FATAL: nflreadpy is required", file=sys.stderr)
-    raise
+
+def _nflv():
+    """nflverse loaders, imported on first use.
+
+    Deliberately lazy: data acquisition needs nflreadpy, the state arithmetic
+    below does not. Keeping the import at the boundary lets the card logic be
+    unit-tested on fixtures without reaching for the network library.
+    """
+    try:
+        import nflreadpy
+    except ImportError:  # pragma: no cover - environment guard
+        print("FATAL: nflreadpy is required to load nflverse data",
+              file=sys.stderr)
+        raise
+    return nflreadpy
+
 
 # High-value opportunity zones, by distance to the opponent goal line.
+# Situational columns the opportunity-quality topology is derived from. Absent
+# any of these the card cannot distinguish "15 carries between the 20s" from
+# "10 carries with 3 inside the 5", which is the distinction it exists to carry.
+_QUALITY_COLS = ("yardline_100", "down", "goal_to_go", "half_seconds_remaining")
+
 RED_ZONE = 20
 INSIDE_10 = 10
 INSIDE_5 = 5
@@ -104,6 +120,18 @@ def _first_col(df: pd.DataFrame, candidates) -> str | None:
     return next((c for c in candidates if c in df.columns), None)
 
 
+def _num_series(df: pd.DataFrame, col: str, default=np.nan) -> pd.Series:
+    """Numeric column as a Series aligned to df.index, or a default-filled one.
+
+    `df.get(col, 0)` returns the bare scalar when the column is missing, which
+    then has no Series methods. Always returning an aligned Series keeps the
+    callers safe against upstream schema drift.
+    """
+    if col in df.columns:
+        return pd.to_numeric(df[col], errors="coerce")
+    return pd.Series(default, index=df.index, dtype="float64")
+
+
 def load_weekly_rosters(seasons: list[int]) -> pd.DataFrame:
     """Authority for target-week team, player universe, and the id bridge.
 
@@ -112,6 +140,7 @@ def load_weekly_rosters(seasons: list[int]) -> pd.DataFrame:
     of players who should get a card, and the bridge between play-by-play
     (gsis) and snap counts (pfr).
     """
+    nflv = _nflv()
     last = None
     for fn in ("load_rosters_weekly", "load_weekly_rosters", "load_rosters"):
         if not hasattr(nflv, fn):
@@ -134,7 +163,7 @@ def load_weekly_rosters(seasons: list[int]) -> pd.DataFrame:
 
 def load_snaps(seasons: list[int]) -> pd.DataFrame:
     try:
-        df = _lower(_to_pandas(nflv.load_snap_counts(seasons=seasons)))
+        df = _lower(_to_pandas(_nflv().load_snap_counts(seasons=seasons)))
         print(f"[identity] snap counts rows={len(df)}")
         return df
     except Exception as exc:
@@ -144,7 +173,7 @@ def load_snaps(seasons: list[int]) -> pd.DataFrame:
 
 
 def load_pbp(seasons: list[int]) -> pd.DataFrame:
-    return _lower(_to_pandas(nflv.load_pbp(seasons=seasons)))
+    return _lower(_to_pandas(_nflv().load_pbp(seasons=seasons)))
 
 
 def build_participation(
@@ -208,6 +237,16 @@ def player_opportunity_rows(pbp: pd.DataFrame) -> pd.DataFrame:
     Rushing and receiving involvement are emitted separately because a single
     play gives a carry to one player and a target to another.
     """
+    # Opportunity quality is the point of this artifact, and every quality flag
+    # is derived from field position / situation. A missing column here would
+    # read as "no red-zone work" rather than "unknown", so refuse instead.
+    missing = [c for c in _QUALITY_COLS if c not in pbp.columns]
+    if missing:
+        raise RuntimeError(
+            "play-by-play lacks the situational columns opportunity quality is "
+            f"derived from: {missing}. Without them every quality flag would "
+            "silently read as absent work rather than unknown work.")
+
     frames = []
     base = [c for c in ("season", "week", "posteam", "defteam", "yardline_100",
                         "down", "goal_to_go", "half_seconds_remaining",
@@ -218,9 +257,10 @@ def player_opportunity_rows(pbp: pd.DataFrame) -> pd.DataFrame:
         r = r[r["rusher_player_id"].notna()]
         o = r[base].copy()
         o["gsis_id"] = r["rusher_player_id"]
-        o["pbp_name"] = r.get("rusher_player_name")
+        o["pbp_name"] = (r["rusher_player_name"]
+                         if "rusher_player_name" in r.columns else None)
         o["opportunity_kind"] = "carry"
-        o["yards"] = pd.to_numeric(r["yards_gained"], errors="coerce")
+        o["yards"] = _num_series(r, "yards_gained")
         o["complete"] = np.nan
         o["air_yards"] = np.nan
         frames.append(o)
@@ -230,12 +270,12 @@ def player_opportunity_rows(pbp: pd.DataFrame) -> pd.DataFrame:
         p = p[p["receiver_player_id"].notna()]
         o = p[base].copy()
         o["gsis_id"] = p["receiver_player_id"]
-        o["pbp_name"] = p.get("receiver_player_name")
+        o["pbp_name"] = (p["receiver_player_name"]
+                         if "receiver_player_name" in p.columns else None)
         o["opportunity_kind"] = "target"
-        o["yards"] = pd.to_numeric(p["yards_gained"], errors="coerce")
-        o["complete"] = pd.to_numeric(p.get("complete_pass", 0),
-                                      errors="coerce").fillna(0)
-        o["air_yards"] = pd.to_numeric(p.get("air_yards"), errors="coerce")
+        o["yards"] = _num_series(p, "yards_gained")
+        o["complete"] = _num_series(p, "complete_pass", 0.0).fillna(0.0)
+        o["air_yards"] = _num_series(p, "air_yards")
         frames.append(o)
 
     if not frames:
@@ -244,10 +284,10 @@ def player_opportunity_rows(pbp: pd.DataFrame) -> pd.DataFrame:
     ev["season"] = pd.to_numeric(ev["season"], errors="coerce")
     ev["week"] = pd.to_numeric(ev["week"], errors="coerce")
 
-    yl = pd.to_numeric(ev.get("yardline_100"), errors="coerce")
-    down = pd.to_numeric(ev.get("down"), errors="coerce")
-    g2g = pd.to_numeric(ev.get("goal_to_go"), errors="coerce").fillna(0)
-    half = pd.to_numeric(ev.get("half_seconds_remaining"), errors="coerce")
+    yl = _num_series(ev, "yardline_100")
+    down = _num_series(ev, "down")
+    g2g = _num_series(ev, "goal_to_go", 0.0).fillna(0.0)
+    half = _num_series(ev, "half_seconds_remaining")
     ev["is_red_zone"] = yl.le(RED_ZONE)
     ev["is_inside_10"] = yl.le(INSIDE_10)
     ev["is_inside_5"] = yl.le(INSIDE_5)
