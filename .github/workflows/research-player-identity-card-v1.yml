@@ -286,6 +286,46 @@ jobs:
               fail.append("gated and all-weeks efficiency identical on every "
                           "card: the efficiency gate has no effect")
 
+          # Evidence authority + model-facing universe (audit 6425282770 #2,
+          # and the position-prior requirement from the zero-history audit).
+          mf_path = f"{base}_model_facing.csv"
+          if not os.path.exists(mf_path):
+              fail.append("model-facing opportunity universe not written")
+          else:
+              mf = pd.read_csv(mf_path, low_memory=False)
+              if not mf["can_receive_opportunity"].astype(bool).all():
+                  fail.append("model-facing universe contains ineligible rows")
+              if not (mf["universe"] == "MODEL_FACING_OPPORTUNITY_UNIVERSE").all():
+                  fail.append("model-facing universe not stamped")
+              if len(mf) >= len(cards):
+                  fail.append("model-facing universe is not a strict subset")
+              print(f"model-facing universe rows={len(mf)} "
+                    f"({len(mf)/max(1,len(cards)):.1%} of durable card)")
+          if not (cards["universe"] == "COMPLETE_ROSTER_UNIVERSE").all():
+              fail.append("durable card not stamped as the complete universe")
+          ea = set(cards["evidence_authority"].dropna().unique())
+          if "position_prior_only" not in ea:
+              fail.append("no position_prior_only cards: population fallback "
+                          "is not being named, only absence of history")
+          unknown_ea = ea - {"position_prior_only", "prior_only",
+                             "current_only", "prior+current"}
+          if unknown_ea:
+              fail.append(f"unexpected evidence_authority values: {unknown_ea}")
+          # A card naming player evidence must not also claim fallback.
+          pf = cards["opportunity_from_population_fallback"].astype(bool)
+          contradiction = pf & cards["evidence_authority"].ne("position_prior_only")
+          if contradiction.any():
+              fail.append(f"{int(contradiction.sum())} cards claim population "
+                          "fallback while naming player evidence")
+          print("evidence authority:",
+                json.dumps(status["evidence_authority_counts"], sort_keys=True))
+          print("evidence authority (opportunity-eligible):", json.dumps(
+              status["evidence_authority_counts_opportunity_eligible"],
+              sort_keys=True))
+          print("population-fallback cards: all=%s eligible=%s" % (
+              status.get("population_fallback_cards"),
+              status.get("population_fallback_cards_opportunity_eligible")))
+
           # boundary
           if not (pd.to_numeric(cards["sportsbook_inputs_used"]) == 0).all():
               fail.append("sportsbook inputs present")

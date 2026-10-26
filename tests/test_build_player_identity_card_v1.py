@@ -828,3 +828,88 @@ def test_default_threshold_is_unchanged_by_parameterisation():
     b = label_player_week_states(_snaps_pw(STEADY),
                                  partial_ratio=PARTIAL_PARTICIPATION_RATIO)
     assert a["player_state"].tolist() == b["player_state"].tolist()
+
+
+# ------------------------- evidence authority + model-facing universe
+
+from scripts.research.build_player_identity_card_v1 import (  # noqa: E402
+    EVIDENCE_POSITION_PRIOR_ONLY, UNIVERSE_COMPLETE, UNIVERSE_MODEL_FACING,
+    model_facing_universe,
+)
+
+
+def test_zero_history_player_is_position_prior_only_not_merely_no_history():
+    """Production does not leave a zero-history player blank: it hands him the
+    position prior and lets him compete in the finite room. The card must name
+    the authority, not just report absence."""
+    c = _cards({(1, PFR_A): 30}, [(1, GSIS_A, 50, 4)])
+    r = c[(c.gsis_id == GSIS_ROOKIE) & (c.opportunity_kind == "carry")].iloc[0]
+    assert r["history_state"] == "no_history"
+    assert r["evidence_authority"] == EVIDENCE_POSITION_PRIOR_ONLY
+    assert bool(r["opportunity_from_population_fallback"])
+    assert r["participation_evidence"] == "none"
+
+
+def test_observed_zero_opportunity_is_still_population_fallback_but_labelled():
+    """He played and never touched the ball. The opportunity posterior is
+    still the prior (n=0), but an observed zero is evidence and the card must
+    not conflate it with never having played."""
+    c = _cards({(1, PFR_B): 22}, [(1, GSIS_A, 50, 4)])
+    r = c[(c.gsis_id == GSIS_B) & (c.opportunity_kind == "carry")].iloc[0]
+    assert r["history_state"] == "participation_only_zero_opportunity"
+    assert r["evidence_authority"] == EVIDENCE_POSITION_PRIOR_ONLY
+    assert r["participation_evidence"] == "observed_zero_opportunity"
+
+
+def test_player_evidence_is_not_flagged_as_fallback():
+    c = _cards({(1, PFR_A): 30, (2, PFR_A): 30},
+               [(1, GSIS_A, 50, 4), (2, GSIS_A, 40, 6)])
+    r = c[(c.gsis_id == GSIS_A) & (c.opportunity_kind == "carry")].iloc[0]
+    assert r["evidence_authority"] == "current_only"
+    assert not bool(r["opportunity_from_population_fallback"])
+    assert r["participation_evidence"] == "present"
+
+
+def test_durable_card_is_the_complete_roster_universe():
+    c = _cards({(1, PFR_A): 30}, [(1, GSIS_A, 50, 4)])
+    assert (c["universe"] == UNIVERSE_COMPLETE).all()
+
+
+def test_model_facing_universe_is_eligible_only_and_restamped():
+    c = _cards({(1, PFR_A): 30}, [(1, GSIS_A, 50, 4)])
+    mf = model_facing_universe(c)
+    assert len(mf) <= len(c)
+    assert mf["can_receive_opportunity"].all()
+    assert (mf["universe"] == UNIVERSE_MODEL_FACING).all()
+    # The durable card is untouched by taking the subset.
+    assert (c["universe"] == UNIVERSE_COMPLETE).all()
+
+
+def test_model_facing_universe_excludes_non_opportunity_positions():
+    ros = rosters()
+    ros.loc[ros.gsis_id == GSIS_ROOKIE, "position"] = "OL"
+    part, _ = build_participation(ros, snaps({(1, PFR_A): 30}))
+    cards, _ = build_cards(pbp([(1, GSIS_A, 50, 4)]), ros, part, 2026, [3], [])
+    mf = model_facing_universe(cards)
+    assert GSIS_ROOKIE in set(cards["gsis_id"])      # durable card keeps him
+    assert GSIS_ROOKIE not in set(mf["gsis_id"])     # model-facing does not
+
+
+def test_model_facing_universe_refuses_to_guess():
+    with pytest.raises(RuntimeError, match="refusing to guess"):
+        model_facing_universe(pd.DataFrame({"gsis_id": [GSIS_A]}))
+
+
+def test_guard_does_not_flag_negative_attestations():
+    """A column whose job is to record that a boundary was NOT crossed must
+    contain the word it attests about. sportsbook_inputs_used = 0 is the proof
+    the boundary held; flagging it inverts its meaning."""
+    att = pd.DataFrame(columns=["sportsbook_inputs_used",
+                                "injury_source_state",
+                                "partial_game_source_state"])
+    assert _market_shaped_columns(att) == []
+
+
+def test_guard_still_catches_a_real_market_column_beside_an_attestation():
+    mixed = pd.DataFrame(columns=["sportsbook_inputs_used", "over_odds"])
+    assert _market_shaped_columns(mixed) == ["over_odds"]

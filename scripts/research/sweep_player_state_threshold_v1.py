@@ -72,10 +72,20 @@ _FORBIDDEN_EXACT = frozenset({
 })
 
 
+# Negative attestations -- columns whose job is to record that a boundary was
+# NOT crossed -- necessarily contain the words they attest about.
+# `sportsbook_inputs_used = 0` is the provenance proving no sportsbook input
+# reached the card, so flagging it inverts its meaning. Exempt the class, not
+# the one instance.
+_ATTESTATION_SUFFIXES = ("_inputs_used", "_source_state")
+
+
 def _market_shaped_columns(df: pd.DataFrame) -> list[str]:
     bad = set()
     for c in df.columns:
         n = str(c).strip().lower()
+        if n.endswith(_ATTESTATION_SUFFIXES):
+            continue
         if n in _FORBIDDEN_EXACT or n.endswith("_proj"):
             bad.add(str(c))
         elif _FORBIDDEN_TOKENS & set(n.split("_")):

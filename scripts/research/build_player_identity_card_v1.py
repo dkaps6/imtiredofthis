@@ -136,6 +136,20 @@ STATE_DNP = "DNP_INACTIVE"
 STATE_HEALTHY = "HEALTHY_FULL"
 STATE_UNRESOLVED = "UNRESOLVED_CONTEXT"
 STATE_NO_BASELINE = "NO_BASELINE"
+# Opportunity-evidence authority, in production's bayes_evidence_state terms.
+# Which authority supplies a player's opportunity statistic is a different
+# claim from whether he has history, and it is the one that matters: a
+# zero-history player is not skipped, he inherits the position prior.
+EVIDENCE_POSITION_PRIOR_ONLY = "position_prior_only"
+_EVIDENCE_AUTHORITY = {
+    "prior+current": "prior+current",
+    "prior_only": "prior_only",
+    "current_only": "current_only",
+    # No opportunity observations at all -> the posterior IS the prior.
+    "no_history": EVIDENCE_POSITION_PRIOR_ONLY,
+    "participation_only_zero_opportunity": EVIDENCE_POSITION_PRIOR_ONLY,
+}
+
 STATE_INJURY_LIMITED = "INJURY_LIMITED"
 STATE_RETURN_FROM_INJURY = "RETURN_FROM_INJURY"
 
@@ -625,6 +639,32 @@ def player_opportunity_rows(pbp: pd.DataFrame) -> pd.DataFrame:
     return ev
 
 
+UNIVERSE_COMPLETE = "COMPLETE_ROSTER_UNIVERSE"
+UNIVERSE_MODEL_FACING = "MODEL_FACING_OPPORTUNITY_UNIVERSE"
+
+
+def model_facing_universe(cards: pd.DataFrame) -> pd.DataFrame:
+    """The subset any opportunity/entitlement research must use.
+
+    GPT audit 6425282770 section 2: keep the complete roster universe in the
+    durable card, but "all opportunity/entitlement/player-projection research
+    must use an explicit model-facing subset by default", and "a non-eligible
+    row may not silently receive carry/target entitlement merely because it
+    exists in the card".
+
+    Exists as a named function rather than a filter expression people are
+    trusted to remember, and it restamps `universe` so a downstream table can
+    always say which population it is reporting.
+    """
+    if "can_receive_opportunity" not in cards.columns:
+        raise RuntimeError(
+            "cards lack can_receive_opportunity; refusing to guess the "
+            "model-facing universe")
+    out = cards.loc[cards["can_receive_opportunity"].astype(bool)].copy()
+    out["universe"] = UNIVERSE_MODEL_FACING
+    return out.reset_index(drop=True)
+
+
 def _week_stats(wk_counts: pd.Series, part_weeks: list) -> dict:
     """Level, stability and trajectory over an explicit set of weeks.
 
@@ -868,6 +908,27 @@ def build_cards(
                         sorted({str(t) for t in g["posteam"].dropna().unique()})),
                     "opportunity_kind": kind,
                     "history_state": history_state,
+                    # Production's own vocabulary (bayes_evidence_state), per
+                    # GPT audit doc PRISM_WEEK7_ZERO_HISTORY_POSITION_PRIOR_
+                    # ALLOCATION_AUDIT_V1 section 10. "no_history" describes
+                    # the ABSENCE of evidence; production does not leave such
+                    # a player blank, it hands him the POSITION PRIOR and then
+                    # lets him compete inside the finite team room. Naming the
+                    # authority is what makes population fallback visible.
+                    "evidence_authority": _EVIDENCE_AUTHORITY[history_state],
+                    "opportunity_from_population_fallback": bool(
+                        _EVIDENCE_AUTHORITY[history_state]
+                        == EVIDENCE_POSITION_PRIOR_ONLY),
+                    # Preserves the distinction production's three-value
+                    # vocabulary cannot express: a player who took snaps and
+                    # never touched the ball has an OBSERVED zero, which is
+                    # evidence, even though his opportunity posterior is still
+                    # the position prior because n=0.
+                    "participation_evidence": (
+                        "observed_zero_opportunity"
+                        if history_state == "participation_only_zero_opportunity"
+                        else "none" if history_state == "no_history"
+                        else "present"),
                     # --- participation (A)(B) -----------------------------
                     "participation_weeks_prior": n_part,
                     "participation_source_state": (
@@ -971,6 +1032,7 @@ def build_cards(
                                              if kind == "target" and n
                                              and g["complete"].notna().any() else np.nan),
                     # --- provenance ---------------------------------------
+                    "universe": UNIVERSE_COMPLETE,
                     "strict_prior": True,
                     "history_seasons": ",".join(
                         str(int(s)) for s in sorted(g["season"].dropna().unique())
@@ -990,6 +1052,18 @@ def build_cards(
         # Composition, so "27,928 no_history" is not read as a finding when
         # most of it is linemen and defensive backs with no rushing history.
         "opportunity_eligible_cards": int(out["can_receive_opportunity"].sum()),
+        "evidence_authority_counts": {
+            k: int(v) for k, v in
+            out["evidence_authority"].value_counts().items()},
+        "evidence_authority_counts_opportunity_eligible": {
+            k: int(v) for k, v in
+            out.loc[out["can_receive_opportunity"], "evidence_authority"]
+            .value_counts().items()},
+        "population_fallback_cards": int(
+            out["opportunity_from_population_fallback"].sum()),
+        "population_fallback_cards_opportunity_eligible": int(
+            (out["opportunity_from_population_fallback"]
+             & out["can_receive_opportunity"]).sum()),
         "history_state_counts_opportunity_eligible": {
             k: int(v) for k, v in
             out.loc[out["can_receive_opportunity"], "history_state"]
@@ -1087,10 +1161,23 @@ def main() -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     cards.to_csv(a.out, index=False)
 
+    # Durable card keeps the complete roster universe; the model-facing
+    # opportunity universe is written as its own stamped artifact so no
+    # downstream step has to remember a filter, and so any table can say
+    # which population it reports.
+    mf = model_facing_universe(cards)
+    mf_path = a.out.with_name(a.out.stem + "_model_facing" + a.out.suffix)
+    mf.to_csv(mf_path, index=False)
+    print(f"[identity] model-facing opportunity universe: {len(mf)} rows "
+          f"({len(mf) / max(1, len(cards)):.1%} of the durable card) -> {mf_path}")
+
     status = {
         "version": "PLAYER_IDENTITY_CARD_V1",
         "scientific_boundary": "DESCRIPTIVE_STATE_ONLY_NO_FIT_NO_PROMOTION",
         "audit_corrections_applied": "6420504608_A_through_E",
+        "universe_durable": UNIVERSE_COMPLETE,
+        "universe_model_facing": UNIVERSE_MODEL_FACING,
+        "model_facing_rows": int(len(mf)),
         "season": a.season,
         "target_weeks": weeks,
         "prior_seasons": priors,
