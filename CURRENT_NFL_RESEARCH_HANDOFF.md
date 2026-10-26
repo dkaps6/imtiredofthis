@@ -1,18 +1,20 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-26 — WEEK-7 SUNDAY/SNF FORENSIC / CONSTRUCTION FAILURE ACCEPTED / PLAYER-FIRST ENVIRONMENT TRANSMISSION OPEN
+## TOP CHECKPOINT — 2026-10-26 — V4 — IDENTITY CARD REVISED TARGET BLOCKED / TWO PLAYER-FIRST CORRECTNESS FIXES REQUIRED / NO PREDICTIVE CLEARANCE
 
 **Model:** PRISM — Player Role & Individual Situation Model
 
 ### READ THIS DEEP HANDOFF NEXT
 
-`docs/handoffs/NFL_HANDOFF_2026-10-26_WEEK7_POSTMORTEM_PLAYER_FIRST_ENVIRONMENT_CONTINUITY.md`
+`docs/handoffs/NFL_HANDOFF_2026-10-26_V4_PLAYER_FIRST_IDENTITY_REAUDIT_BLOCKERS_CONTINUITY.md`
 
-Reusable restart prompt:
+Restart prompt:
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-26_V4_PLAYER_FIRST_IDENTITY_REAUDIT_BLOCKERS_CONTINUITY.md`
 
-`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-26_WEEK7_POSTMORTEM_PLAYER_FIRST_ENVIRONMENT_CONTINUITY.md`
+Displaced active checkpoint archived at:
+`docs/handoffs/NFL_HANDOFF_2026-10-26_V4_ARCHIVED_TOP_AUDIT_PRIORITIES_DONE_REAUDIT_PENDING.md`
 
-Historical continuity remains in prior dated deep handoffs. Do not recursively read them.
+Do not recursively read older handoffs.
 
 ### ABSOLUTE ASSIGNMENT
 
@@ -22,15 +24,7 @@ PRISM is an **INDIVIDUAL-PLAYER PROJECTION MODEL**.
 
 > **ANOMALIES ARE QUESTIONS, NOT TRENDS.**
 
-Position MAE/RMSE is downstream QA only.
-
-Do not scrap/rebuild PRISM. New identity/state/opponent work is additive.
-
-Always distinguish:
-- `SOURCE READY`
-- `SOURCE BLOCKED`
-- `PREDICTIVE CLOSED`
-- `QUALIFIED`
+Position MAE/RMSE is downstream QA only. Identity/state/opponent work is additive; do not scrap/rebuild validated PRISM science.
 
 ### CONTROL ROOM
 
@@ -38,138 +32,139 @@ Always distinguish:
 - GPT-5.6 = independent auditor / project control
 - shared lane = Issue #535
 
-Before substantive work:
-1. read `AGENTS.md`;
-2. read only this TOP checkpoint;
-3. read the deep handoff;
-4. fetch newest #535;
-5. reconcile live main / PRs / Actions.
+Before substantive work: read `AGENTS.md`; read only this TOP checkpoint; read the V4 deep handoff; fetch newest #535; reconcile live `main` / PRs / Actions.
 
-### LIVE PRE-HANDOFF STATE
+### LIVE STATE AT HANDOFF
 
-Pre-handoff `main`:
-`97ecae88f391a692cf694971c2bf2f34c04cf593`
+Pre-handoff `main`: `dc6add89347cd6c177dfac655b755425e393e909`. The V4 handoff commit is a direct child; re-fetch `main` before acting.
 
-PR #695 is merged and preserves the full Week-7 Sunday/SNF ticket evidence under:
+Active research branch:
+`research-prism-player-first-identity-environment-2026-10-26 @ aa70663cae1b65b32687b2809c57326d66093949`
 
-`docs/research/evidence/2026-10-25_week7_ticket_ledger/`
+Exact-head main before handoff:
+- Full Slate `40392535113` SUCCESS
+- artifact `12685836060`
+- digest `sha256:b607ad03cec823b75f080a6fc53852b462e63c41ff3793b688f01122de359da4`
+- Repo CI `40392535296` failed only the known stale exact-string no-credit workflow assertion: 660 passed / 1 skipped / 1 failed.
+- **Do not weaken the live-odds guard.**
+- No paid OddsAPI call authorized.
+- Betting CLOSED.
 
-Canonical paid Week-7 board remains:
-- run `39849371821` SUCCESS
-- artifact `12456298985`
-- digest `sha256:d1a1fb48e5bb920c5291f35b7457b5870801b689751deb2d742f98c555603a85`
-- durable under `data/market_track_record/`
+### GOVERNING #535 STATE
 
-**No additional paid OddsAPI call is authorized.**
+Newest governing GPT audits at handoff:
+- `6426307861`
+- `6426366490`
 
-After PR #695:
-- archive workflow `40341879091` SUCCESS
-- Repo CI `40341289972` failed only on the known stale no-credit exact-string assertion:
-  - 660 passed
-  - 1 skipped
-  - 1 failed
-- do not weaken the live-odds authorization guard to make that stale test pass
+Prior important Claude response:
+- `6426050333` revised fixed target `aa70663c`.
 
-### WEEK-7 TICKET FORENSIC — CURRENT RULING
+Prior descriptive-substrate acceptance:
+- `6425282770`.
 
-User reported only one Sunday ticket hit and no SNF regular tickets hit.
+Current disposition:
 
-Claude #535 comment `6419138959` found a major **downstream construction failure**:
-- “Safe” tickets were only ~41–47% naive hit probability;
-- 25/57 unique yardage legs were bought-down OVERs while the canonical main-line edge direction was UNDER;
-- model SD / exact clearance probability was not properly respected;
-- portfolio was heavily concentrated in repeated players;
-- ATD consumed meaningful portfolio share despite being uncertified.
+`PLAYER_IDENTITY_CARD_V1_REVISED_TARGET_BLOCKED_ON_NO_BASELINE_CONTAMINATION_AND_TRADE_SHARE_SEMANTICS`
 
-GPT accepted that diagnosis in `6420198257`.
+The Identity Card descriptive substrate remains accepted. The revised target is **not** cleared for predictive/scoring use.
 
-**BUT: construction failure does NOT close opponent/environment transmission.**
+### BLOCKER A — NO_BASELINE MUST NOT OVERRIDE KNOWN CONTAMINATION
 
-Correct disposition:
+A sparse-history player can currently receive `NO_BASELINE`, bypass the injury resolver, and become USABLE even when a source-qualified limiting injury/return state exists.
 
-- Week-7 parlay failure = primarily construction / threshold / exposure problem.
-- Opponent/environment transmission = independently **OPEN** architecture/research problem.
+Required:
+- same-week limiting injury can force WITHHELD despite insufficient baseline;
+- return-from-injury can force WITHHELD despite insufficient baseline;
+- NO_BASELINE means insufficient baseline **and no independent contamination signal**;
+- add explicit sparse-player tests.
 
-Do not collapse these into one conclusion.
+### BLOCKER B — CURRENT-TEAM SHARE MUST BE TRADE-SAFE
 
-### OPPONENT / ENVIRONMENT TRANSMISSION FACTS
+Current implementation can mix old-team player opportunity in the numerator with the target/new team's denominator.
 
-Prior audits established:
-- `def_rush_epa` present but not consumed by generic RB matchup rules;
-- explosive-play suppression available but not consumed generically;
-- WR/TE/RB YPT and outside/slot YPT dropped before generic player projection;
-- YBC/stuff fields dropped;
-- generic game script hardcodes pass_share=0.57;
-- lead/trail does not alter generic pass/rush split;
-- qualified Stage-2 conditional allocation research does not currently reach production.
+Required semantic:
+**target-team-tenure share**.
 
-QB M89/M90 is richer; do not conflate it with generic RB/WR/TE.
+Only use strictly-prior player-weeks where weekly roster authority says player team == target-week team. Numerator and denominator must use those exact same accepted target-team weeks. If no prior accepted target-team week exists, return NaN / explicit no-current-team-evidence. Apply the same rule to RZ, inside-5 and all-weeks current-team comparison fields. Add a synthetic in-season trade regression test.
 
-**Kenneth Walker III is the preferred first generic-skill transmission decomposition case.**
+### REQUIRED FALLBACK MATERIALITY DECOMPOSITION
 
-### PLAYER IDENTITY — NOT BLOCKED
+The raw 5,422 / 10,960 = 49.5% `position_prior_only` opportunity-eligible card-row rate is **not yet an accepted live-production severity rate**.
 
-Claude corrected an overstatement in `6420003475`.
+Before interpreting severity, decompose outcome-blind by:
+- target_week;
+- opportunity_kind;
+- roster_position × opportunity_kind;
+- Week-7 slice;
+- no_history vs participation_only_zero_opportunity;
+- production prior value / whether fallback can move finite allocation;
+- implied fallback opportunity mass entering the finite room where possible.
 
-Strictly-prior player identity can be reconstructed leakage-safe from published football history (PBP, player stats, snap counts, schedules, etc.).
+### ACCEPTED REVISED-WORK COMPONENTS
 
-Current gate-design direction:
-- preregister football-semantic partitions before scoring;
-- require independent replication;
-- pooled population must not materially harm;
-- declared partition must improve consistently;
-- minimum support;
-- no subgroup shopping / top-N rescue / post-hoc named-player carveout;
-- report per-player heterogeneity.
+Keep:
+- source-qualified injury resolver;
+- `PARTIAL_GAME` SOURCE BLOCKED for 2026;
+- explained abnormal weeks remain WITHHELD;
+- threshold sweep accepted as descriptive uncertainty only;
+- `MODERATELY_THRESHOLD_SENSITIVE`;
+- 362 / 2,651 = 13.66% usable-evidence sensitivity over 0.30-0.70;
+- do not choose a threshold winner;
+- complete roster durable card + explicit model-facing QB/RB/FB/HB/WR/TE universe;
+- evidence_authority / population-fallback visibility;
+- player-level identity bridge;
+- 99.80% coverage on opportunity-eligible cards with current-season opportunity.
 
-### BETTING-LAYER CORRECTIONS
+### OPPONENT / ENVIRONMENT TRANSMISSION REMAINS OPEN
 
-Until an evidence-backed construction V2 is frozen:
+Identity-card work does not resolve:
+- Walker rushing opponent transmission = zero in exact W7 generic path;
+- rich rush-defense context stranded;
+- JSN/Kupp direct KC movement zero;
+- Barner coarse coverage-threshold lift;
+- finite-room cross-player compression;
+- generic `pass_share = 0.57`;
+- Stage-2 not production-wired.
 
-- alt direction conflicting with canonical main-line model direction => default PASS;
-- raw yard cushion != safety;
-- use model mean + distribution/SD + exact threshold + P(clear) + exact price;
-- do not label ~41% full-ticket probability “Safe”;
-- surface repeated-player and same-game concentration;
-- no universal anchor across every tier;
-- ATD remains uncertified/fun and separate.
+Durable docs:
+- `docs/research/PRISM_WEEK7_WALKER_ENVIRONMENT_TRANSMISSION_DECOMPOSITION_V1.md`
+- `docs/research/PRISM_WEEK7_SEA_RECEIVERS_VS_KC_ENVIRONMENT_TRANSMISSION_V1.md`
+- `docs/research/PRISM_WEEK7_ZERO_HISTORY_POSITION_PRIOR_ALLOCATION_AUDIT_V1.md`
 
-Do not invent numeric exposure caps or threshold rules from Week 7.
+### STAGE-2
 
-### EXISTING SCIENCE BOUNDARIES
+Week-7 readiness is:
+`PRISM_FUTURE_STAGE2_TRANSLATION_NOT_READY__FAIL_CLOSED`
 
-Preserve all qualified/closed/source-blocked dispositions from the 2026-10-22 V2 handoff.
+Reason:
+`target/future stat rows already present; refuse audit: weeks=[7]`
 
-Especially:
-- QB M89/M90 + C2 active
-- WR-R15 active
-- TE-R5P active
-- RB P3/R22 Week-1-only, not active Week 7
-- Stage-2 conditional allocation qualified in research but not production-wired
-- direct WR/CB unavailable/gated off
-- dedicated ATD model not certified
-- RB rushing Stage-1 source reset remains SOURCE BLOCKED
-- RB/TE team-context reset candidates remain PREDICTIVE CLOSED
+Do not weaken the guard or reconstruct a postgame Week-7 Stage-2 shadow.
 
-### EXACT CURRENT NEXT ACTIONS
+### BETTING CONSTRUCTION — SEPARATE
 
-After live reconciliation:
+Week-7 ticket failure was primarily construction:
+- ~41-47% naive probability on "safe" tickets;
+- 25/57 unique yardage legs bought-down OVER against canonical UNDER direction;
+- SD/P(clear) mishandled;
+- repeated-player concentration;
+- uncertified ATD.
 
-1. audit newest Claude work first;
-2. continue descriptive Player Identity Card construction if not already advanced;
-3. run/verify fresh Stage-2 source-readiness re-probe under the frozen contract if not already completed;
-4. run Walker-first read-only opponent/environment projection decomposition;
-5. extend to representative WR/TE player identities;
-6. freeze any new predictive mechanism before scoring;
-7. separately develop evidence-backed alt-threshold / portfolio construction V2;
-8. preserve richer football-state/explanation evidence going forward.
+Until evidence-backed Construction V2:
+direction conflict => PASS; cushion != safety; require mean + SD + exact threshold + P(clear) + price + exposure; do not label ~41% "Safe"; surface concentration; ATD separate.
 
-No paid OddsAPI.
-No sportsbook upstream.
-No aggregate-MAE optimization.
-No post-hoc subgroup rescue.
+### EXACT NEXT ACTIONS
 
-Newest visible #535 comment at final pre-handoff reconciliation:
-**6420198257**
+1. re-fetch #535 for Claude work after `6426366490`;
+2. if present, independently audit exact diff/code/artifacts/runs;
+3. otherwise fix/assign BLOCKER A and BLOCKER B;
+4. produce the required authority/materiality decomposition;
+5. rebase/port the research lane onto current main without losing the accepted forensic docs;
+6. require a new fixed head + exact green runs;
+7. no predictive scoring until independent re-audit clears it;
+8. after clearance, freeze the first predictive use prospectively before scoring;
+9. keep opponent/environment transmission and betting construction as separate lanes.
+
+No paid OddsAPI. No Week-7 fitting. No sportsbook upstream. No aggregate-MAE optimization. No post-hoc subgroup rescue. No reopening closed science without new causal evidence.
 
 The next chat MUST re-fetch #535 and live GitHub before asserting that this remains current.
