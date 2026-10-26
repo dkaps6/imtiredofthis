@@ -264,8 +264,21 @@ def test_optional_passing_columns_do_not_crash_when_absent():
     ev = player_opportunity_rows(rows)
     tgt = ev[ev.opportunity_kind == "target"]
     assert len(tgt) == 1
-    assert tgt["complete"].iloc[0] == 0
+    # Absent column is unknown, not "incomplete": a 0 here would feed
+    # catch_rate a confident "catches nothing".
+    assert np.isnan(tgt["complete"].iloc[0])
     assert np.isnan(tgt["air_yards"].iloc[0])
+
+
+def test_present_but_null_complete_pass_reads_as_incomplete():
+    rows = pbp([(1, GSIS_A, 50, 4)])
+    rows.loc[:, "pass_attempt"] = 1
+    rows.loc[:, "rush_attempt"] = 0
+    rows.loc[:, "receiver_player_id"] = GSIS_A
+    rows.loc[:, "complete_pass"] = np.nan
+    ev = player_opportunity_rows(rows)
+    tgt = ev[ev.opportunity_kind == "target"]
+    assert tgt["complete"].iloc[0] == 0
 
 
 def test_cards_never_carry_sportsbook_input():

@@ -274,7 +274,11 @@ def player_opportunity_rows(pbp: pd.DataFrame) -> pd.DataFrame:
                          if "receiver_player_name" in p.columns else None)
         o["opportunity_kind"] = "target"
         o["yards"] = _num_series(p, "yards_gained")
-        o["complete"] = _num_series(p, "complete_pass", 0.0).fillna(0.0)
+        # Present-but-null means an incomplete pass (nflverse encodes 0/1), so
+        # fill it. Column absent entirely means unknown, and must stay NaN:
+        # a 0.0 here would feed catch_rate a confident "catches nothing".
+        o["complete"] = (_num_series(p, "complete_pass").fillna(0.0)
+                         if "complete_pass" in p.columns else np.nan)
         o["air_yards"] = _num_series(p, "air_yards")
         frames.append(o)
 
