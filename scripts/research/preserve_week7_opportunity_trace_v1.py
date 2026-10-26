@@ -75,6 +75,20 @@ _DENY_EXEMPT = frozenset({
 })
 
 
+# Substrings that mark a field as part of the opportunity/allocation route.
+# Pattern matching catches production's own names without my having to guess
+# each one; the §3 denylist still vetoes anything market-shaped.
+_ROUTE_PATTERNS = (
+    "entitl", "alloc", "admit", "top5", "top_5", "top_n", "room", "normal",
+    "carries", "expected_", "selected_", "share",
+)
+
+
+def _is_route_column(col: str) -> bool:
+    n = str(col).strip().lower()
+    return (not _denied(n)) and any(k in n for k in _ROUTE_PATTERNS)
+
+
 def _denied(col: str) -> bool:
     n = str(col).strip().lower()
     if n in _DENY_EXEMPT:
@@ -114,13 +128,22 @@ def extract(root: Path, week: int) -> tuple[dict, dict]:
             diag["scanned"].append({"path": str(p.relative_to(root)),
                                     "error": f"{type(exc).__name__}: {exc}"})
             continue
-        cols = [c for c in head.columns if str(c).strip().lower() in wanted]
+        cols = [c for c in head.columns
+                if str(c).strip().lower() in wanted or _is_route_column(c)]
         keep = [c for c in cols if not _denied(c)]
+        # Full column-NAME inventory. Names are metadata, not market data, and
+        # without them an explanatory field whose name I guessed wrong is
+        # silently dropped -- which is exactly what happened to production's
+        # own final target entitlement on the first pass. Recording the
+        # inventory means the next widening of _WANTED is informed rather than
+        # another guess.
+        allowed = [str(c) for c in head.columns if not _denied(c)]
         diag["scanned"].append({
             "path": str(p.relative_to(root)),
             "columns": int(len(head.columns)),
             "explanatory_columns_matched": len(keep),
             "matched": sorted(str(c) for c in keep),
+            "all_non_market_column_names": sorted(allowed),
         })
         if len(keep) < 3:
             continue

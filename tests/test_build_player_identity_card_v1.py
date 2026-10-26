@@ -1308,3 +1308,28 @@ def test_extraction_reports_columns_absent_from_the_artifact(tmp_path):
     missing = diag["required_columns_missing_from_artifact"]
     assert "bayes_rush_share" in missing
     assert "player" not in missing
+
+
+def test_route_columns_are_captured_by_pattern_not_by_guessed_name():
+    """Production's final target entitlement was dropped on the first pass
+    because I guessed its column name. Pattern capture fixes that without
+    loosening the §3 denylist."""
+    from scripts.research.preserve_week7_opportunity_trace_v1 import (
+        _is_route_column)
+    for c in ("final_target_entitlement_v1", "rush_top5_admitted",
+              "room_normalization_factor", "expected_carries",
+              "sim_selected_rush_share", "rules_tgt_share"):
+        assert _is_route_column(c), c
+    # ...and the denylist still wins over the pattern.
+    for c in ("vegas_line", "edge_pct", "model_proj", "fair_prob"):
+        assert not _is_route_column(c), c
+
+
+def test_column_inventory_is_recorded_for_non_market_columns(tmp_path):
+    (tmp_path / "t.csv").write_text(
+        "player,team,prior_games,current_games,mystery_entitlement,vegas_line\n"
+        "A,SEA,0,0,0.5,72.5\n")
+    _, diag = extract(tmp_path, 7)
+    inv = diag["scanned"][0]["all_non_market_column_names"]
+    assert "mystery_entitlement" in inv
+    assert "vegas_line" not in inv
