@@ -691,3 +691,72 @@ def test_healthy_weeks_are_usable_and_unaffected_by_the_resolver():
     # Listed questionable but played a normal snap count: not an anomaly.
     assert out.loc[3, "player_state"] == STATE_HEALTHY
     assert out.loc[3, "gate_disposition"] == DISPOSITION_USABLE
+
+
+# ------------------------------------- week-matched team-share denominators
+
+def test_team_share_denominator_moves_with_the_numerator():
+    """Gating only the player numerator while leaving the team denominator on
+    all weeks mechanically depresses every share. Pin the arithmetic.
+
+    A and B share a team. Weeks 1-3 are clean for both; in week 4 A's snaps
+    collapse (withheld) and B absorbs the work.
+
+      A carries: 5,5,5 then 1   = 16      B carries: 5,5,5 then 9 = 24
+      team all weeks            = 40      team weeks 1-3          = 30
+
+      ungated          16/40 = 0.400
+      naive wrong      15/40 = 0.375   <- numerator gated, denominator not
+      week-matched     15/30 = 0.500
+    """
+    snap = {(w, PFR_A): n for w, n in [(1, 60), (2, 60), (3, 60), (4, 8)]}
+    snap.update({(w, PFR_B): 60 for w in (1, 2, 3, 4)})
+    ev = []
+    for w in (1, 2, 3):
+        ev += [(w, GSIS_A, 50, 4)] * 5 + [(w, GSIS_B, 50, 4)] * 5
+    ev += [(4, GSIS_A, 50, 4)] + [(4, GSIS_B, 50, 4)] * 9
+
+    cards, _ = _gated_cards(snap, ev)
+    a = cards[(cards.gsis_id == GSIS_A)
+              & (cards.opportunity_kind == "carry")].iloc[0]
+
+    assert a["opp_total_current_season"] == 16          # raw fact, ungated
+    assert a["team_share_current_all_weeks"] == pytest.approx(0.400)
+    assert a["team_share_current"] == pytest.approx(0.500)
+    assert a["team_share_current"] != pytest.approx(0.375)   # the trap
+    # Reconstructible from its own published inputs.
+    assert a["player_opp_in_gate_weeks_current"] == 15
+    assert a["team_opp_in_gate_weeks"] == 30
+    assert (a["player_opp_in_gate_weeks_current"] / a["team_opp_in_gate_weeks"]
+            == pytest.approx(a["team_share_current"]))
+
+
+def test_high_value_shares_are_also_week_matched():
+    snap = {(w, PFR_A): n for w, n in [(1, 60), (2, 60), (3, 60), (4, 8)]}
+    snap.update({(w, PFR_B): 60 for w in (1, 2, 3, 4)})
+    ev = []
+    for w in (1, 2, 3):
+        ev += [(w, GSIS_A, 3, 1), (w, GSIS_B, 3, 1)]       # one inside-5 each
+    ev += [(4, GSIS_B, 3, 1)] * 4                           # B owns week 4
+    cards, _ = _gated_cards(snap, ev)
+    a = cards[(cards.gsis_id == GSIS_A)
+              & (cards.opportunity_kind == "carry")].iloc[0]
+    # 3 of 6 inside-5 in weeks 1-3; week 4's four go to B and are excluded
+    # from BOTH sides of A's share.
+    assert a["player_i5_opp_in_gate_weeks"] == 3
+    assert a["team_i5_opp_in_gate_weeks"] == 6
+    assert a["team_inside_5_share_current"] == pytest.approx(0.5)
+    assert a["team_inside_5_share_current_all_weeks"] == pytest.approx(0.3)
+
+
+def test_share_is_nan_not_zero_when_no_week_is_accepted():
+    """An untrusted denominator must not yield a confident 0% share."""
+    ros = rosters(weeks=WK)
+    part, _ = build_participation(ros, snaps({(1, PFR_A): 60, (2, PFR_A): 60}))
+    cards, _ = build_cards(
+        pbp([(1, GSIS_A, 50, 4)]), ros, part, 2026, [6], [],
+        untrusted_denominator_ids={GSIS_A})
+    a = cards[(cards.gsis_id == GSIS_A)
+              & (cards.opportunity_kind == "carry")].iloc[0]
+    assert np.isnan(a["team_share_current"])
+    assert a["team_opp_in_gate_weeks"] == 0

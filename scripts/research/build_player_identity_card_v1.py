@@ -755,6 +755,16 @@ def build_cards(
             withheld_pw = set()
             wh_expl, wh_unexpl = {}, {}
 
+        # Week-grained team totals, so a share can be built over the SAME
+        # accepted player-week set as its numerator. Gating only the numerator
+        # while leaving the team denominator on all weeks would mechanically
+        # depress every share -- a worse error than the one being fixed.
+        team_wk = cur.groupby(["posteam", "opportunity_kind", "week"]).size()
+        team_wk_rz = cur.loc[cur["is_red_zone"]].groupby(
+            ["posteam", "opportunity_kind", "week"]).size()
+        team_wk_i5 = cur.loc[cur["is_inside_5"]].groupby(
+            ["posteam", "opportunity_kind", "week"]).size()
+
         team_tot = cur.groupby(["posteam", "opportunity_kind"]).size()
         team_rz = cur.loc[cur["is_red_zone"]].groupby(
             ["posteam", "opportunity_kind"]).size()
@@ -821,6 +831,23 @@ def build_cards(
                 trz = team_rz.get((team_now, kind), 0)
                 ti5 = team_i5.get((team_now, kind), 0)
 
+                # Gated shares: numerator and denominator over the identical
+                # accepted week set. Empty set -> NaN, never a fabricated 0.
+                acc = weeks_clean.get(pid, []) if trusted else []
+                def _team_sum(idx, weeks=acc, t=team_now, k=kind):
+                    return float(sum(idx.get((t, k, int(w)), 0) for w in weeks))
+                g_tn = _team_sum(team_wk)
+                g_trz = _team_sum(team_wk_rz)
+                g_ti5 = _team_sum(team_wk_i5)
+                if acc and n_cur:
+                    acc_set = set(acc)
+                    gca = gc.loc[gc["week"].astype(int).isin(acc_set)]
+                else:
+                    gca = gc.iloc[0:0]
+                g_num = float(len(gca))
+                g_num_rz = float(gca["is_red_zone"].sum()) if len(gca) else 0.0
+                g_num_i5 = float(gca["is_inside_5"].sum()) if len(gca) else 0.0
+
                 rows.append({
                     "season": season,
                     "target_week": wk,
@@ -856,7 +883,12 @@ def build_cards(
                     "participation_denominator_contradicted": (
                         bool(trusted and n_part < len(obs))),
                     "opp_per_participation_week": per_week,
-                    "team_share_current": _rate(n_cur, tn),
+                    # Gated (canonical) and ungated, plus the exact numerator
+                    # and denominator used, so the share is reconstructible.
+                    "team_share_current": _rate(g_num, g_tn),
+                    "team_share_current_all_weeks": _rate(n_cur, tn),
+                    "team_opp_in_gate_weeks": g_tn,
+                    "player_opp_in_gate_weeks_current": g_num,
                     # --- trajectory / stability ---------------------------
                     "opp_per_week_recent2": per_week_recent,
                     "opp_per_week_earlier": per_week_earlier,
@@ -899,10 +931,16 @@ def build_cards(
                         g["is_red_zone"].sum() if n else 0, n),
                     "inside_5_rate_of_own_opp": _rate(
                         g["is_inside_5"].sum() if n else 0, n),
-                    "team_red_zone_share_current": _rate(
+                    "team_red_zone_share_current": _rate(g_num_rz, g_trz),
+                    "team_inside_5_share_current": _rate(g_num_i5, g_ti5),
+                    "team_red_zone_share_current_all_weeks": _rate(
                         gc["is_red_zone"].sum() if n_cur else 0, trz),
-                    "team_inside_5_share_current": _rate(
+                    "team_inside_5_share_current_all_weeks": _rate(
                         gc["is_inside_5"].sum() if n_cur else 0, ti5),
+                    "team_rz_opp_in_gate_weeks": g_trz,
+                    "team_i5_opp_in_gate_weeks": g_ti5,
+                    "player_rz_opp_in_gate_weeks": g_num_rz,
+                    "player_i5_opp_in_gate_weeks": g_num_i5,
                     # --- efficiency identity ------------------------------
                     # Gate-compliant: opportunities taken in weeks whose state
                     # is unexplained are excluded, because their yardage is not

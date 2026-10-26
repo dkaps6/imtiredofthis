@@ -246,6 +246,32 @@ jobs:
               fail.append(f"{int(bad.sum())} cards publish a rate that does "
                           "not equal opp_in_gate_weeks / gate_weeks_used")
 
+          # Week-matched team-share denominators (audit 6425282770 #2).
+          ts = pd.to_numeric(cards["team_share_current"], errors="coerce")
+          tsa = pd.to_numeric(cards["team_share_current_all_weeks"],
+                              errors="coerce")
+          pnum = pd.to_numeric(cards["player_opp_in_gate_weeks_current"],
+                               errors="coerce")
+          tden = pd.to_numeric(cards["team_opp_in_gate_weeks"], errors="coerce")
+          recon = pnum / tden.replace(0, np.nan)
+          off = ts.notna() & recon.notna() & (ts - recon).abs().gt(1e-9)
+          if off.any():
+              fail.append(f"{int(off.sum())} cards publish a team share that "
+                          "is not player_opp_in_gate_weeks_current / "
+                          "team_opp_in_gate_weeks")
+          # A zero accepted-week denominator must give NaN, never a confident 0%.
+          z = (tden.fillna(0) == 0) & ts.notna()
+          if z.any():
+              fail.append(f"{int(z.sum())} cards publish a share on a zero "
+                          "accepted-week denominator")
+          if (ts.dropna() > 1.0 + 1e-9).any():
+              fail.append("team share above 1.0: denominator is not the team "
+                          "total over the same weeks")
+          bo = ts.notna() & tsa.notna()
+          if not (ts[bo] != tsa[bo]).any():
+              fail.append("gated and all-weeks team shares identical on every "
+                          "card: the share gate has no effect")
+
           # The gate names efficiency as well as trajectory.
           effw = pd.to_numeric(cards["efficiency_opp_withheld"],
                                errors="coerce").fillna(0)
