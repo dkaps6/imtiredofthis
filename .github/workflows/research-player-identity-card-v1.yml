@@ -283,9 +283,26 @@ jobs:
                                errors="coerce").fillna(0)
           if (tgt > allt).any():
               fail.append("target-team opportunity exceeds all-teams count")
-          if not (cards["target_team_tenure_source"]
-                  == "participation_team").all():
-              fail.append("tenure not sourced from the participation authority")
+          # Target week 1 has no earlier weeks by construction, so no tenure
+          # authority exists for it. The gate is therefore semantic rather than
+          # positional: whatever the source, a card that did NOT use the
+          # participation authority must publish no tenure and no share.
+          src = cards["target_team_tenure_source"]
+          known = {"participation_team", "opportunity_posteam_fallback",
+                   "no_prior_participation"}
+          if not set(src.dropna().unique()) <= known:
+              fail.append(f"unexpected tenure sources: "
+                          f"{set(src.unique()) - known}")
+          if "participation_team" not in set(src.unique()):
+              fail.append("participation tenure authority never used")
+          weak = src.ne("participation_team")
+          leaked_weak = weak & ~cards["no_target_team_tenure_evidence"].astype(bool)
+          if leaked_weak.any():
+              fail.append(f"{int(leaked_weak.sum())} cards claim target-team "
+                          "tenure without the participation authority")
+          print("tenure sources:", json.dumps(
+              {k: int(v) for k, v in src.value_counts().items()},
+              sort_keys=True))
           print("cards without target-team tenure:",
                 status.get("cards_without_target_team_tenure"))
           print("NO_BASELINE despite limiting designation:",

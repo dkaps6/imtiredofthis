@@ -813,6 +813,13 @@ def build_cards(
                              .groupby(["gsis_id", "team"])["week"]
                              .apply(lambda x: {int(v) for v in x}).to_dict())
                 tenure_src = "participation_team"
+            elif pw.empty:
+                # Target week 1: strictly-prior means there are no earlier
+                # weeks at all, so there is nothing to derive tenure from and
+                # nothing to fall back to either. Saying
+                # "opportunity_posteam_fallback" here would imply an inference
+                # was made when none was possible.
+                tenure_by, tenure_src = {}, "no_prior_participation"
             else:
                 tenure_by, tenure_src = {}, "opportunity_posteam_fallback"
             # The gate names EFFICIENCY as well as trajectory. A carry taken
@@ -911,14 +918,15 @@ def build_cards(
                 # OLD-team opportunities against the NEW team's denominator,
                 # which is not a current-role share even when it stays <= 1.
                 # No tenure evidence yet -> NaN, never the previous team's role.
-                tenure = tenure_by.get((pid, team_now))
-                if tenure is None and not tenure_by:
-                    # No participation team authority: fall back to the weeks
-                    # the player demonstrably played FOR team_now.
-                    tenure = ({int(w) for w in
-                               gc.loc[gc["posteam"].eq(team_now), "week"]}
-                              if n_cur else set())
-                tenure = tenure or set()
+                # ONLY the participation authority may establish tenure.
+                # Deriving it from opportunity instead looks reasonable and is
+                # biased: it cannot see a week the player was on the team and
+                # took no carry or target, so those weeks leave the denominator
+                # while his touch weeks keep the numerator complete -- which
+                # INFLATES the share. That is the same class of error as
+                # blocker B itself, so the weaker source fails closed to no
+                # tenure and no share rather than to a flattering one.
+                tenure = tenure_by.get((pid, team_now)) or set()
 
                 gc_team = (gc.loc[gc["posteam"].eq(team_now)]
                            if n_cur else gc.iloc[0:0])

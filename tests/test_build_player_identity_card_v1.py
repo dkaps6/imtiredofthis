@@ -1065,6 +1065,35 @@ def test_tenure_source_is_reported():
     assert (c["target_team_tenure_source"] == "participation_team").all()
 
 
+def test_target_week_one_has_no_tenure_authority_and_claims_no_share():
+    """Strictly-prior means week 1 has no earlier weeks at all, so there is
+    nothing to derive tenure from and nothing to fall back to. It must say so
+    rather than implying an inference, and it must publish no share."""
+    ros = rosters(weeks=WK)
+    part, _ = build_participation(ros, snaps({(1, PFR_A): 60}))
+    cards, _ = build_cards(pbp([(1, GSIS_A, 50, 4)]), ros, part, 2026, [1], [])
+    assert (cards["target_team_tenure_source"]
+            == "no_prior_participation").all()
+    assert cards["no_target_team_tenure_evidence"].astype(bool).all()
+    assert pd.to_numeric(cards["team_share_current"],
+                         errors="coerce").isna().all()
+    assert pd.to_numeric(cards["team_share_current_all_weeks"],
+                         errors="coerce").isna().all()
+
+
+def test_a_weak_tenure_source_may_never_publish_a_share():
+    """The safety property the CI gate asserts, pinned in code: if the
+    participation authority was not used, no tenure and no share."""
+    ros = rosters(weeks=WK)
+    part, _ = build_participation(ros, snaps_no_team({(1, PFR_A): 60,
+                                                      (2, PFR_A): 60}))
+    cards, _ = build_cards(pbp([(1, GSIS_A, 50, 4)]), ros, part, 2026, [3], [])
+    weak = cards["target_team_tenure_source"].ne("participation_team")
+    assert weak.any()
+    leaked = weak & ~cards["no_target_team_tenure_evidence"].astype(bool)
+    assert not leaked.any()
+
+
 # ------------- audit 6425282770 MATERIALITY: fallback decomposition
 
 from scripts.research.decompose_position_prior_fallback_materiality_v1 import (  # noqa: E402
