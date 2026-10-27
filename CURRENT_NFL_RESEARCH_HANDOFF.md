@@ -1,25 +1,39 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-27 — V12 — ROLE ROUTING MECHANISM + ALLOCATOR SUPPORTED / NO WR ROLE READS ZONE / KUPP DOUBLE-PENALTY FRAMING WITHDRAWN / WALKER NOT TO BE REDONE / NO PREDICTIVE CLEARANCE
+## TOP CHECKPOINT — 2026-10-27 — V12 — ROLE-ROUTING TRACE **CLEARED** (READ-ONLY SCOPE) / NO WR ROLE READS ZONE / KUPP DOUBLE-PENALTY FRAMING WITHDRAWN / FINAL-MEAN ATTRIBUTION NOT ESTABLISHED / WALKER NOT TO BE REDONE
 
 **Model:** PRISM — Player Role & Individual Situation Model
 
 ### WHAT THE NEXT SESSION SHOULD DO FIRST
 
-Read newest #535 **after comment 6446039579**.
+Read newest #535 **after comment 6446595260**.
 
 **The named-player trace core finding is SUPPORTED** (audit `6445134492`); its
 three blockers are **FIXED** at revised executor target
-**`4f95723154d5473b362f33c450b6f2d5fd8f6b60`** and awaiting final check. Audit
-`6445801491` **supported the mechanism and the allocator chain** and required
-two narrow truth corrections plus one caution; all three are landed. The next GPT's first job is to audit
+**`4f95723154d5473b362f33c450b6f2d5fd8f6b60`** is **CLEARED** by final re-audit
+`6446595260`, disposition
+`NAMED_PLAYER_ROLE_ROUTING_V1_CLEARED_READ_ONLY__PREDICTIVE_AND_FINAL_MEAN_ATTRIBUTION_NOT_ESTABLISHED`.
+Its two documentation follow-throughs are landed (doc @ `e9a1f4d0`, this
+checkpoint).
+
+**CLEARED:** the compact JSN/Kupp/Barner role-routing *mechanism*, the matching
+pregame rule-layer multipliers, the conditional gate decode, the true archived
+target-share allocator chain, and the documented stranded role-specific
+efficiency signals.
+
+**NOT CLEARED:** fully measured opponent attribution to final receiving-yard
+means; predictive value of any new channel; league-wide gate prevalence;
+Stage-2 Week 7; any new fitting or promotion. **No** coefficient/threshold
+selection, outcome scoring, sportsbook upstream, paid OddsAPI, or Walker
+revisit. **A clearance is not implied permission** — a new
+implementation/fitting/promotion needs its own scoped proposal and audit. The next GPT's first job is to audit
 that exact target/code/artifacts, then post the ruling.
 
 The source-wide opponent/environment transmission corrections at research target **`8ed1d1778d388d54e6de9ed37ffc62d2d300e2ea` are CLEARED**. Walker's Week-7 exact case remains CLEARED and must **not** be redone.
 
 The prior disagreement about named-player work is settled: **run/audit the compact JSN/Kupp/Barner named-player role-routing trace** because canonical role assignment is itself an untraced player-first mechanism step.
 
-### WHAT THE TRACE FOUND (target `4f957231`, awaiting final check)
+### WHAT THE TRACE FOUND (target `4f957231`, CLEARED read-only)
 
 - script `scripts/research/trace_named_player_role_routing_v1.py`; doc `docs/research/PRISM_NAMED_PLAYER_ROLE_ROUTING_TRACE_V1.md`; artifacts `data/research/named_player_routing/`; 13 tests.
 - In 2026 W7 all three authorized names are **SEA** players facing **KC**, so the same-offense/same-opponent contrast holds with no substitution. Walker is the **KC** back facing **SEA** in that same game — opposite sides of one matchup. Walker was **not** redone.
@@ -27,7 +41,7 @@ The prior disagreement about named-player work is settled: **run/audit the compa
 - **Cooper Kupp misses the WR1_5 label by 0.008206 of raw target share** and is structurally ineligible for every opponent-coverage target gate, while SEA's **third-string TE** and its **fullback** are both eligible by position. JSN = WR1, Shaheed = WR1_5, Kupp/Horton/Foster = unlabeled, Barner eligible via the TE position branch.
 - **The cutoff is discontinuous** — rank 2 vs rank 3 is the whole difference between a potential ±15% multiplier and structurally none.
 - **The ranking key is inconsistent with the allocated quantity.** `_wr_role_labels` sorts by **raw** `tgt_share` (0.0 default) while production scales **`bayes_tgt_share`**. Montorie Foster is the clean case: raw key `NaN → 0.0` so he sorts last and gets no label, yet his posterior **0.165842** is the **second-largest in the room**, above both the labeled WR1_5 and Kupp.
-- **Structural vs circumstantial zero kept apart.** Every SEA WR had 0.0 opponent-attributable movement, but Kupp was ineligible whatever the defense did while JSN was eligible and the gate did not fire. **Man-coverage gate certified NOT fired for KC** by exact argument: WR1 ×0.95 vs WR1_5 ×1.15 would split their `rules`/`bayes` ratios; both are exactly 1.000.
+- **Structural vs circumstantial zero kept apart.** Every SEA WR had 0.0 **direct WR coverage-target rule-layer delta** — this is ONE channel, **not** all opponent channels and **not** total opponent attribution. Within that scope: Kupp was ineligible whatever the defense did, while JSN was eligible and the gate did not fire. **Man-coverage gate certified NOT fired for KC** by exact argument: WR1 ×0.95 vs WR1_5 ×1.15 would split their `rules`/`bayes` ratios; both are exactly 1.000.
 - **RETRACTED FROM V10: the rules/bayes ratio is NOT room normalization.** `apply_rules_to_metrics()` performs no team-room normalization at all, so the ratio **is** the rule-layer matchup multiplier. V10 called it a per-group room scale; that was wrong (audit `6445134492` blocker 1).
 - **Because of that, the KC gate state is DECODED, not unknown** — a **source-conditioned inverse reconstruction**, NOT a reading of preserved `coverage_*_rate` values, which were not preserved. Each role's achievable multiplier products are distinct, so an exact match identifies the state uniquely: `coverage_zone_rate >= 0.60` **FIRED**, `middle_open_rate >= 0.50` **FIRED**, `coverage_man_rate >= 0.50` not fired, `pressure_mismatch > 0.075` not fired. Zone is decoded independently by the **TE and RB** groups and man independently by **WR1 and WR1_5**, and they agree — corroboration, not a single-group inference. Residual condition: holds for rows with no injury redistribution/limitation, which the uniform exact ratios evidence but do not prove.
 - **Derived:** `volatility_mult = 1.0`; `pass_eff_mult` **bounded to {1.00, 1.01}** (not 0.98, since pressure did not fire). `rules_pass_eff_mult` is emitted by production but was not preserved, so field 8 is **BOUNDED, not resolved**.
