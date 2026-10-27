@@ -1,90 +1,113 @@
-# PRISM — Stranded Opponent Signal Dispersion: Results V1
+# PRISM — Stranded Opponent Signal Dispersion: Results V2
 
-**Design frozen in:** `PRISM_STRANDED_SIGNAL_DISPERSION_PREREGISTRATION_V1.md`
-(commit `fb803940`, before this measurement)
+**Design:** `PRISM_STRANDED_SIGNAL_DISPERSION_PREREGISTRATION_V1.md` + **Addendum
+V2** (frozen at `5618937d`, **before** the disjoint test was run)
+**Revised per:** GPT audit `6449349551`
+(`STRANDED_DISPERSION_2026_DESCRIPTIVE_SPREAD_SUPPORTED__PERSISTENCE_AND_SOURCE_LINEAGE_CLAIMS_REVISION_REQUIRED`)
 **Reproduce:** `python scripts/research/measure_stranded_signal_dispersion_v1.py`
-**Artifacts:** `data/research/stranded_dispersion/stranded_signal_dispersion_v1_{as_of.csv,status.json}`
+**Artifacts:** `data/research/stranded_dispersion/`
 
-2026, target weeks **2–7**, 17,713 plays. Week 1 excluded — no prior evidence.
-Outcomes inspected: **none**. Player-level columns read: **none**. Sportsbook
-inputs: **0**. Nothing fitted, scored or promoted. No threshold proposed.
+2026, 17,713 plays. **No target-week outcomes**; prior-game play results used
+only to build as-of defensive statistics; **no model scoring**. Sportsbook
+inputs: 0. Player-level columns: none. Nothing fitted or promoted.
 
-## Correction this study rests on
+## The headline reverses V1
 
-My earlier claim that "2026 history is gone" was **too broad and wrong**.
-Verified directly:
+**V1 claimed these signals were "persistent properties of a defense, not noise."
+That is WITHDRAWN. Measured properly, it is false.**
 
-- **2026 nflverse PBP exists** — 18,738 plays, weeks 1–7.
-- **2026 participation does not** — `load_participation(seasons=[2026])` raises
-  `Season must be between 2016 and 2025`.
-- The box/coverage fields are **absent from PBP entirely**.
+V1's consecutive-week rank correlations compared cumulative windows that shared
+all but one week — target week 6 is built from weeks 1–5 and week 7 from weeks
+1–6. A cumulative aggregate correlated with itself-plus-one-week is
+near-tautological, so the 0.764–0.883 figures were forced by sample reuse. I
+built a statistic that could only come out high and read it as a finding.
 
-The correct boundary: **2026 game data is available; the 2026 personnel/NGS feed
-is not.** Box and coverage gate prevalence genuinely cannot be measured on 2026.
-Every *stranded* signal can.
+The replacement, frozen before it ran, uses **two disjoint windows sharing no
+play**: EARLY weeks 1–3 against LATE weeks 4–7.
 
-## Result
-
-All six stranded signals are both **widely dispersed across defenses** and
-**stable properties of those defenses**, on the pre-committed criteria:
-
-| signal | median IQR | consecutive-week rank r | median faced range | label |
+| signal | V1 overlapping | **disjoint rho** | eligible | verdict |
 |---|---|---|---|---|
-| `def_rush_epa` | 0.1369 | **0.810** | 0.3073 | MATERIAL_DISPERSION |
-| `def_pass_epa` | 0.1887 | **0.764** | 0.4588 | MATERIAL_DISPERSION |
-| `success_rate_def` | 0.0439 | **0.781** | 0.0929 | MATERIAL_DISPERSION |
-| `explosive_rush_rate_allowed` | 0.0346 | **0.849** | 0.0813 | MATERIAL_DISPERSION |
-| `explosive_pass_rate_allowed` | 0.0413 | **0.849** | 0.0755 | MATERIAL_DISPERSION |
-| `rush_stuff_rate` | 0.0595 | **0.883** | 0.1247 | MATERIAL_DISPERSION |
+| `def_rush_epa` | 0.810 | **−0.350** | 32 | NOT_PERSISTENT |
+| `def_pass_epa` | 0.764 | **0.113** | 32 | NOT_PERSISTENT |
+| `success_rate_def` | 0.781 | **0.080** | 32 | NOT_PERSISTENT |
+| `explosive_rush_rate_allowed` | 0.849 | **0.256** | 32 | WEAKLY_PERSISTENT |
+| `explosive_pass_rate_allowed` | 0.849 | **0.103** | 32 | NOT_PERSISTENT |
+| `rush_stuff_rate` | 0.883 | **0.017** | 32 | NOT_PERSISTENT |
 
-"Faced range" is, for each offense, the spread of opponent values it actually
-confronted across weeks 2–7 — so a back's opponents varied by **0.3073** of rush
-EPA and **0.1247** of stuff rate, median across offenses.
+Cutoffs (`PERSISTENT` ≥ 0.40, `WEAKLY_PERSISTENT` ≥ 0.20) were fixed in the
+addendum before the test ran. Eligibility required ≥ 40 qualifying plays per
+half; all 32 defenses qualified for every signal, so nothing was excluded.
 
-Rank correlations of 0.76–0.88 between consecutive target weeks mean these are
-**persistent characteristics of a defense**, not week-to-week noise. That
-matters: the pre-registration committed in advance to reporting a wide-but-
-unstable signal as `UNSTABLE` rather than material. None of the six is unstable.
+**The signal V1 singled out as most stable — `rush_stuff_rate` at 0.883 —
+measures 0.017 on disjoint samples.** Five of six show no persistence; one is
+weak.
 
-**The most rank-stable signal of the six — `rush_stuff_rate` at 0.883 — is
-referenced by no production module at all.** Not carried, not merged, not read.
+## What now stands, and what it means
 
-## What this does and does not mean
+**Stands:** the six signals have real **cross-sectional dispersion**. Within a
+given week, defenses differ substantially — median IQR 0.0346–0.1887, and the
+median range an offense faced across weeks 2–7 was 0.3073 of rush EPA. Defenses
+are not interchangeable in any single snapshot.
 
-**Does:** the cleared transmission trace established that these signals are
-built and discarded. This establishes that what is discarded is **not noise and
-not uniform** — it is substantial, persistent, week-specific variation in the
-football obstacle a player faces. Combined with the cleared finding that the one
-live opponent→RB-rushing channel is a box gate whose two branches are a
-near-constant and a corpse, the RB rushing path is discarding measurable
-matchup information and retaining almost none.
+**Does not stand:** that this dispersion is a stable, exploitable property.
+**Dispersion without rank persistence is closer to noise than to signal.** The
+V1 conclusion — that production discards "substantial, persistent, week-specific
+variation" — is withdrawn. What production discards is substantial and
+week-specific; on this evidence it is **not** demonstrably persistent.
 
-**Does not:** show that consuming any of it would improve a projection.
-Dispersion and persistence are **necessary but not sufficient**. A signal can
-vary widely, persist, and still add nothing once the player's own baseline and
-the finite allocation are accounted for. Establishing value requires a scoring
-window, which is closed, and would need its own scoped proposal.
+**Symmetric caution.** This does not establish that the signals *are* noise
+either. With 32 defenses and a 3-week / 4-week split, one rho per signal carries
+wide uncertainty, the halves differ in length and in opponent schedule, and the
+pre-registration said so in advance. The test separates "clearly persistent"
+from "clearly not"; it cannot finely rank the six, and it is not used to.
+
+So the correct position is: **persistence is NOT ESTABLISHED**, and the case for
+consuming these signals is correspondingly weaker than V1 presented it.
+
+## The six are not six stranded production fields
+
+V1's framing was wrong. Per-signal provenance:
+
+| signal | class |
+|---|---|
+| `def_rush_epa` | **TRANSPORTED_BUT_STRANDED** — on `TeamContext`, read by no rule |
+| `def_pass_epa` | **CONSUMED** on the promoted QB route (`qb_pass_synthesis_v1`) |
+| `success_rate_def` | **READ BY PRODUCTION** — `rules_v2.success_diff()` reads `defense.success_rate_def`, called in `project_game_script()` |
+| `explosive_rush_rate_allowed` | **NEW PBP-DERIVED CANDIDATE** — lineage to production's `explosive_play_rate_allowed` not established |
+| `explosive_pass_rate_allowed` | **NEW PBP-DERIVED CANDIDATE** — lineage not established |
+| `rush_stuff_rate` | **NEW PBP-DERIVED CANDIDATE** — production has a column of this name referenced by no module, but lineage to this construct is not established |
+
+Only **`def_rush_epa`** is transported-but-stranded on the cleared evidence.
+Whether `success_rate_def` changes a named player's final projection is a
+separate routing question, since `pass_share` is hardcoded at 0.57 downstream.
+
+## `MATERIAL_DISPERSION` was not a predeclared verdict
+
+The `TRIVIAL_IQR` cutoffs (0.05 EPA, 0.02 rates) were **never in the frozen V1
+design**, which said only "non-trivial". They are **post-preregistration
+operationalization**. The numeric dispersion results stand; the label is not a
+validated predeclared verdict and is not treated as one.
+
+## Outcome language, corrected
+
+`load_pbp` reads realized `epa`, `success` and `yards_gained` from games already
+played — prior-play outcomes by construction. V1's absolute "outcomes inspected:
+none" is **withdrawn**. The precise claim: **no target-week outcomes**;
+prior-game play results used only to construct as-of defensive statistics; **no
+model scoring**.
 
 ## Chronology
 
-Every opponent aggregate for target week N is built from weeks 1..N-1 only,
-play-weighted, and `_assert_strictly_prior()` raises if any aggregate draws on a
-play at week ≥ N. Week 1 is **excluded, not backfilled**. The study reads
-defensive team aggregates from prior weeks plus the schedule; it asserts that no
-player-level column is present.
+The as-of construction for target week N uses weeks 1..N-1 only, and
+`_assert_strictly_prior()` raises on a leak — a test injects one to confirm. The
+disjoint persistence test is not an as-of construction and has no chronology
+requirement between halves; it asks only whether a characteristic measured in
+one window predicts its rank in a separate one.
 
 ## Not established
 
-- **Predictive value of any signal.** Untested; scoring window closed.
-- **Box and coverage gate prevalence on 2026** — participation-locked.
-- **That production's `def_rush_epa` is constructed like this one.** These are
-  PBP-derived; production's provenance is a separate question.
-- Anything about a named player's projection.
-
-## Disclosed
-
-Source qualification required building one signal to confirm the join. Seen
-before the design was frozen: 214 team-weeks across 32 teams for `def_rush_epa`,
-and four ARI rows (weeks 1–4: −0.325440, −0.178375, 0.048237, −0.311366).
-Nothing else — no dispersion statistic and no other signal. Declared in the
-pre-registration.
+- **Persistence of any of the six.** Five NOT_PERSISTENT, one WEAKLY.
+- **That the signals are noise** — the test is underpowered to assert that.
+- **Predictive value for any player projection.** Untested; scoring closed.
+- **Lineage** from three of the constructs to any production column.
+- Box/coverage gate behaviour on 2026 — participation-locked.

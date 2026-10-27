@@ -160,6 +160,86 @@ def dispersion(as_of: pd.DataFrame) -> dict:
     return out
 
 
+# Addendum V2, frozen at 5618937d. Disjoint windows sharing no play, so the
+# correlation is a genuine out-of-sample persistence estimate rather than the
+# overlapping-history autocorrelation V1 reported.
+EARLY_WEEKS, LATE_WEEKS = (1, 2, 3), (4, 5, 6, 7)
+MIN_PLAYS_PER_HALF = 40
+PERSIST_STRONG, PERSIST_WEAK = 0.40, 0.20
+
+RUSH_FAMILY = ("def_rush_epa", "explosive_rush_rate_allowed", "rush_stuff_rate")
+PASS_FAMILY = ("def_pass_epa", "explosive_pass_rate_allowed")
+
+# Blocker 3: provenance per signal, not one blanket "stranded" label.
+PROVENANCE = {
+    "def_rush_epa": ("TRANSPORTED_BUT_STRANDED",
+                     "populated onto TeamContext by context_bridge_v3 and read "
+                     "by no rule (cleared transmission trace)"),
+    "def_pass_epa": ("TRANSPORTED_AND_CONSUMED_ON_THE_QB_ROUTE",
+                     "read by qb_pass_synthesis_v1, the promoted M89/M90 path"),
+    "success_rate_def": ("READ_BY_PRODUCTION",
+                         "rules_v2.success_diff(offense, defense) reads "
+                         "defense.success_rate_def, called in "
+                         "project_game_script; whether it changes a named "
+                         "player's final projection is a SEPARATE routing "
+                         "question, since pass_share is hardcoded at 0.57"),
+    "explosive_rush_rate_allowed": ("NEW_PBP_DERIVED_CANDIDATE",
+                                    "computed here; production has a column "
+                                    "named explosive_play_rate_allowed which is "
+                                    "transported-but-stranded, but lineage from "
+                                    "it to this construct is NOT established"),
+    "explosive_pass_rate_allowed": ("NEW_PBP_DERIVED_CANDIDATE",
+                                    "as above; lineage NOT established"),
+    "rush_stuff_rate": ("NEW_PBP_DERIVED_CANDIDATE",
+                        "production has a column of this name referenced by no "
+                        "module; lineage from it to this construct is NOT "
+                        "established"),
+}
+
+
+def _family_mask(plays: pd.DataFrame, sig: str) -> pd.Series:
+    if sig in RUSH_FAMILY:
+        return plays["play_type"].eq("run")
+    if sig in PASS_FAMILY:
+        return plays["play_type"].eq("pass")
+    return pd.Series(True, index=plays.index)
+
+
+def disjoint_persistence(pbp: pd.DataFrame) -> dict:
+    """Spearman rho between two windows that share no play."""
+    early = pbp.loc[pbp["week"].isin(EARLY_WEEKS)]
+    late = pbp.loc[pbp["week"].isin(LATE_WEEKS)]
+    assert set(EARLY_WEEKS).isdisjoint(LATE_WEEKS), "windows overlap"
+    ea, la = _aggregate(early), _aggregate(late)
+    out = {}
+    for sig in SIGNALS:
+        m_e, m_l = _family_mask(early, sig), _family_mask(late, sig)
+        ce = early.loc[m_e].groupby("defteam").size()
+        cl = late.loc[m_l].groupby("defteam").size()
+        ok = set(ce[ce >= MIN_PLAYS_PER_HALF].index) & \
+             set(cl[cl >= MIN_PLAYS_PER_HALF].index)
+        a = ea.set_index("defense")[sig]
+        b = la.set_index("defense")[sig]
+        j = pd.concat([a, b], axis=1, keys=["early", "late"]).dropna()
+        j = j.loc[j.index.isin(ok)]
+        excluded = sorted(set(a.index) - set(j.index))
+        if len(j) < 8:
+            out[sig] = {"eligible_defenses": int(len(j)),
+                        "label": "INSUFFICIENT_ELIGIBLE"}
+            continue
+        rho = float(j["early"].corr(j["late"], method="spearman"))
+        out[sig] = {
+            "eligible_defenses": int(len(j)),
+            "excluded_defenses": excluded,
+            "min_plays_per_half": MIN_PLAYS_PER_HALF,
+            "disjoint_spearman_rho": round(rho, 4),
+            "label": ("PERSISTENT" if rho >= PERSIST_STRONG
+                      else "WEAKLY_PERSISTENT" if rho >= PERSIST_WEAK
+                      else "NOT_PERSISTENT"),
+        }
+    return out
+
+
 def faced_dispersion(as_of: pd.DataFrame, pbp: pd.DataFrame) -> dict:
     """How much the matchup an offense confronts changes week to week."""
     sched = (pbp.loc[pbp["week"].isin(list(TARGET_WEEKS))]
@@ -210,7 +290,16 @@ def main() -> int:
         "target_weeks": list(TARGET_WEEKS),
         "week1_excluded_no_prior_evidence": True,
         "chronology": "every aggregate for week N uses weeks 1..N-1 only; asserted",
-        "outcomes_inspected": False,
+        # Blocker 4: "no outcomes" was absolute and wrong. load_pbp reads
+        # realized epa/success/yards_gained from played games.
+        "target_week_outcomes_inspected": False,
+        "prior_game_play_results_used": True,
+        "outcome_language_note": (
+            "prior-game play results (epa, success, yards_gained) are used ONLY "
+            "to construct as-of defensive statistics. No target-week outcome is "
+            "read and no model is scored. The V1 phrasing 'outcomes inspected: "
+            "none' was absolute and is withdrawn (audit 6449349551 blocker 4)."),
+        "model_scoring_performed": False,
         "player_level_columns_read": False,
         "sportsbook_inputs_used": 0,
         "plays": int(len(pbp)),
@@ -220,6 +309,29 @@ def main() -> int:
             "stuff": f"yards_gained <= {STUFF_MAX_YDS}",
             "note": "conventional nflverse definitions, fixed not tuned",
         },
+        "signal_provenance": {k: {"class": v[0], "note": v[1]}
+                              for k, v in PROVENANCE.items()},
+        "NOT_SIX_STRANDED_PRODUCTION_FIELDS": (
+            "audit 6449349551 blocker 3. These are not six discarded production "
+            "columns. success_rate_def IS read by production via "
+            "rules_v2.success_diff inside project_game_script; def_pass_epa is "
+            "consumed on the promoted QB route; and the explosive/stuff "
+            "constructs are NEW PBP-derived candidates whose lineage to any "
+            "production column is NOT established. Only def_rush_epa is "
+            "transported-but-stranded on the cleared evidence."),
+        "disjoint_persistence": disjoint_persistence(pbp),
+        "RETRACTED_OVERLAPPING_PERSISTENCE": (
+            "the V1 consecutive-week rank correlations (0.764-0.883) compare "
+            "cumulative windows sharing all but one week, so they are "
+            "overlapping-history autocorrelations and are forced by sample "
+            "reuse. 'Persistent properties of a defense' and 'not noise' are "
+            "WITHDRAWN as established. See disjoint_persistence for the "
+            "replacement, frozen at 5618937d before it was run."),
+        "IQR_CUTOFFS_NOT_PREREGISTERED": (
+            "TRIVIAL_IQR (0.05 EPA, 0.02 rates) was never in the frozen V1 "
+            "design, which said only 'non-trivial'. MATERIAL_DISPERSION is "
+            "POST-PREREGISTRATION OPERATIONALIZATION, not a predeclared "
+            "verdict. The numeric dispersion results stand."),
         "cross_sectional_dispersion": disp,
         "faced_dispersion": faced,
         "labels_are_dispersion_only": (
@@ -247,7 +359,17 @@ def main() -> int:
         print(f"{sig:30s} {mi if mi is None else f'{mi:9.4f}'} "
               f"{mc if mc is None else f'{mc:7.3f}'} "
               f"{fr if fr is None else f'{fr:12.4f}'}  {d['label']}")
-    print("\nDispersion and rank stability only. No predictive claim.")
+    print("\n=== DISJOINT PERSISTENCE (weeks 1-3 vs 4-7, no shared play) ===")
+    dp = status["disjoint_persistence"]
+    print(f"{'signal':30s} {'rho':>7s} {'n':>4s}  label")
+    for sig in SIGNALS:
+        d = dp[sig]
+        r = d.get("disjoint_spearman_rho")
+        print(f"{sig:30s} {'n/a' if r is None else f'{r:7.3f}'} "
+              f"{d['eligible_defenses']:4d}  {d['label']}")
+    print("\nThe V1 consecutive-week correlations are WITHDRAWN as evidence of")
+    print("persistence: they compared windows sharing all but one week.")
+    print("Dispersion and rank persistence only. No predictive claim.")
     return 0
 
 

@@ -1,4 +1,7 @@
 {
+  "IQR_CUTOFFS_NOT_PREREGISTERED": "TRIVIAL_IQR (0.05 EPA, 0.02 rates) was never in the frozen V1 design, which said only 'non-trivial'. MATERIAL_DISPERSION is POST-PREREGISTRATION OPERATIONALIZATION, not a predeclared verdict. The numeric dispersion results stand.",
+  "NOT_SIX_STRANDED_PRODUCTION_FIELDS": "audit 6449349551 blocker 3. These are not six discarded production columns. success_rate_def IS read by production via rules_v2.success_diff inside project_game_script; def_pass_epa is consumed on the promoted QB route; and the explosive/stuff constructs are NEW PBP-derived candidates whose lineage to any production column is NOT established. Only def_rush_epa is transported-but-stranded on the cleared evidence.",
+  "RETRACTED_OVERLAPPING_PERSISTENCE": "the V1 consecutive-week rank correlations (0.764-0.883) compare cumulative windows sharing all but one week, so they are overlapping-history autocorrelations and are forced by sample reuse. 'Persistent properties of a defense' and 'not noise' are WITHDRAWN as established. See disjoint_persistence for the replacement, frozen at 5618937d before it was run.",
   "authorized_by": "USER_2026_10_27",
   "cannot_establish": [
     "that consuming any stranded signal would improve accuracy",
@@ -428,6 +431,50 @@
     "note": "conventional nflverse definitions, fixed not tuned",
     "stuff": "yards_gained <= 0"
   },
+  "disjoint_persistence": {
+    "def_pass_epa": {
+      "disjoint_spearman_rho": 0.1129,
+      "eligible_defenses": 32,
+      "excluded_defenses": [],
+      "label": "NOT_PERSISTENT",
+      "min_plays_per_half": 40
+    },
+    "def_rush_epa": {
+      "disjoint_spearman_rho": -0.3497,
+      "eligible_defenses": 32,
+      "excluded_defenses": [],
+      "label": "NOT_PERSISTENT",
+      "min_plays_per_half": 40
+    },
+    "explosive_pass_rate_allowed": {
+      "disjoint_spearman_rho": 0.1027,
+      "eligible_defenses": 32,
+      "excluded_defenses": [],
+      "label": "NOT_PERSISTENT",
+      "min_plays_per_half": 40
+    },
+    "explosive_rush_rate_allowed": {
+      "disjoint_spearman_rho": 0.2563,
+      "eligible_defenses": 32,
+      "excluded_defenses": [],
+      "label": "WEAKLY_PERSISTENT",
+      "min_plays_per_half": 40
+    },
+    "rush_stuff_rate": {
+      "disjoint_spearman_rho": 0.0172,
+      "eligible_defenses": 32,
+      "excluded_defenses": [],
+      "label": "NOT_PERSISTENT",
+      "min_plays_per_half": 40
+    },
+    "success_rate_def": {
+      "disjoint_spearman_rho": 0.0795,
+      "eligible_defenses": 32,
+      "excluded_defenses": [],
+      "label": "NOT_PERSISTENT",
+      "min_plays_per_half": 40
+    }
+  },
   "faced_dispersion": {
     "def_pass_epa": {
       "max_faced_range": 0.899363,
@@ -461,13 +508,42 @@
     }
   },
   "labels_are_dispersion_only": "MATERIAL_DISPERSION / UNSTABLE / NARROW describe spread and rank stability. They are NOT evidence of predictive value and no threshold, coefficient or sign is proposed.",
-  "outcomes_inspected": false,
+  "model_scoring_performed": false,
+  "outcome_language_note": "prior-game play results (epa, success, yards_gained) are used ONLY to construct as-of defensive statistics. No target-week outcome is read and no model is scored. The V1 phrasing 'outcomes inspected: none' was absolute and is withdrawn (audit 6449349551 blocker 4).",
   "player_level_columns_read": false,
   "plays": 17713,
   "preregistration": "docs/research/PRISM_STRANDED_SIGNAL_DISPERSION_PREREGISTRATION_V1.md",
+  "prior_game_play_results_used": true,
   "scientific_boundary": "DISPERSION_AND_STABILITY_ONLY_NO_FITTING_NO_SCORING",
   "season": 2026,
+  "signal_provenance": {
+    "def_pass_epa": {
+      "class": "TRANSPORTED_AND_CONSUMED_ON_THE_QB_ROUTE",
+      "note": "read by qb_pass_synthesis_v1, the promoted M89/M90 path"
+    },
+    "def_rush_epa": {
+      "class": "TRANSPORTED_BUT_STRANDED",
+      "note": "populated onto TeamContext by context_bridge_v3 and read by no rule (cleared transmission trace)"
+    },
+    "explosive_pass_rate_allowed": {
+      "class": "NEW_PBP_DERIVED_CANDIDATE",
+      "note": "as above; lineage NOT established"
+    },
+    "explosive_rush_rate_allowed": {
+      "class": "NEW_PBP_DERIVED_CANDIDATE",
+      "note": "computed here; production has a column named explosive_play_rate_allowed which is transported-but-stranded, but lineage from it to this construct is NOT established"
+    },
+    "rush_stuff_rate": {
+      "class": "NEW_PBP_DERIVED_CANDIDATE",
+      "note": "production has a column of this name referenced by no module; lineage from it to this construct is NOT established"
+    },
+    "success_rate_def": {
+      "class": "READ_BY_PRODUCTION",
+      "note": "rules_v2.success_diff(offense, defense) reads defense.success_rate_def, called in project_game_script; whether it changes a named player's final projection is a SEPARATE routing question, since pass_share is hardcoded at 0.57"
+    }
+  },
   "sportsbook_inputs_used": 0,
+  "target_week_outcomes_inspected": false,
   "target_weeks": [
     2,
     3,
