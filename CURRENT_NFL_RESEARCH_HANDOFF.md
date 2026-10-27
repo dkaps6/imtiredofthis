@@ -1,18 +1,34 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-27 — V9 — TRANSMISSION V2 CLEARED / NAMED-PLAYER ROLE-ROUTING TRACE AUTHORIZED / WALKER NOT TO BE REDONE / NO PREDICTIVE CLEARANCE
+## TOP CHECKPOINT — 2026-10-27 — V10 — NAMED-PLAYER ROLE-ROUTING TRACE DELIVERED, AWAITING AUDIT / WR TRANSMISSION IS RANK-GATED / WALKER NOT TO BE REDONE / NO PREDICTIVE CLEARANCE
 
 **Model:** PRISM — Player Role & Individual Situation Model
 
 ### WHAT THE NEXT SESSION SHOULD DO FIRST
 
-Read newest #535 **after comment 6441088661**.
+Read newest #535 **after comment 6444908127**.
+
+**The authorized named-player trace is DONE and awaiting audit.** Executor target
+**`083fb482c0a9a57c76b08eb73f655886d1cec65c`**, posted as #535 comment
+**`6444908127`**. The next GPT's first job is to audit that exact
+target/code/artifacts, then post the ruling.
 
 The source-wide opponent/environment transmission corrections at research target **`8ed1d1778d388d54e6de9ed37ffc62d2d300e2ea` are CLEARED**. Walker's Week-7 exact case remains CLEARED and must **not** be redone.
 
 The prior disagreement about named-player work is settled: **run/audit the compact JSN/Kupp/Barner named-player role-routing trace** because canonical role assignment is itself an untraced player-first mechanism step.
 
-If Claude has already posted a target after 6441088661, the next GPT's first job is to **audit that exact target/code/artifacts**, not merely the summary, then post the ruling to #535.
+### WHAT THE DELIVERED TRACE FOUND (target `083fb482`, awaiting audit)
+
+- script `scripts/research/trace_named_player_role_routing_v1.py`; doc `docs/research/PRISM_NAMED_PLAYER_ROLE_ROUTING_TRACE_V1.md`; artifacts `data/research/named_player_routing/`; 13 tests.
+- In 2026 W7 all three authorized names are **SEA** players facing **KC**, so the same-offense/same-opponent contrast holds with no substitution. Walker is the **KC** back facing **SEA** in that same game — opposite sides of one matchup. Walker was **not** redone.
+- **Answer to the mechanism question: WR transmission is rank-gated; TE and RB transmission is position-gated.** In `simulation_rules.py:201-210` the three WR branches key on the **computed role label** while the TE and RB/FB branches key on **position**. `_wr_role_labels()` labels slot plus only the top two perimeter WRs by target share. So every TE and every RB/FB gets an opponent-coverage target channel automatically, and any other WR falls through the whole chain to `tgt_mult = 1.0` with **no diagnostic recording it**. An unlabeled WR is the only offensive skill position with no opponent-coverage target channel at all.
+- **Cooper Kupp misses the WR1_5 label by 0.008206 of raw target share** and is structurally ineligible for every opponent-coverage target gate, while SEA's **third-string TE** and its **fullback** are both eligible by position. JSN = WR1, Shaheed = WR1_5, Kupp/Horton/Foster = unlabeled, Barner eligible via the TE position branch.
+- **The cutoff is discontinuous** — rank 2 vs rank 3 is the whole difference between a potential ±15% multiplier and structurally none.
+- **The ranking key is inconsistent with the allocated quantity.** `_wr_role_labels` sorts by **raw** `tgt_share` (0.0 default) while production scales **`bayes_tgt_share`**. Montorie Foster is the clean case: raw key `NaN → 0.0` so he sorts last and gets no label, yet his posterior **0.165842** is the **second-largest in the room**, above both the labeled WR1_5 and Kupp.
+- **Structural vs circumstantial zero kept apart.** Every SEA WR had 0.0 opponent-attributable movement, but Kupp was ineligible whatever the defense did while JSN was eligible and the gate did not fire. **Man-coverage gate certified NOT fired for KC** by exact argument: WR1 ×0.95 vs WR1_5 ×1.15 would split their `rules`/`bayes` ratios; both are exactly 1.000.
+- Per-group room normalization: WR 1.000, RB/FB 1.200, TE 1.265.
+- **NOT ESTABLISHED, reported not guessed:** whether the TE/RB coverage/pressure gates fired (a uniform within-group multiplier is indistinguishable from that group's normalization scale, and `rules_*_mult` was not preserved); shared `pass_eff_mult` movement (`rules_ypt` not preserved); league-wide firing frequency; predictive value of consuming `ypt_allowed_*`. **Both blocks are my own preservation filter, not production.**
+- Zero-history entitlement defect (Foster above Kupp) recorded as an observation only and kept a **separate cause**.
 
 Deep handoff:
 `docs/handoffs/NFL_HANDOFF_2026-10-27_V9_SEAMLESS_CONTINUITY_NAMED_PLAYER_TRACE_AUTHORIZED.md`
@@ -48,16 +64,17 @@ GPT = independent auditor / project control. Claude = executor / research lead. 
 ### LIVE STATE AT V9 FREEZE
 
 Before V9 continuity writes:
-- `main` = **`f3eef8b8a77386208f4ecebcf346df5c1888da5c`**
-- research branch `research-prism-player-first-identity-environment-2026-10-26` = **`8ed1d1778d388d54e6de9ed37ffc62d2d300e2ea`**
-- newest #535 = **6441088661**
-- research branch compare confirmed exact identity with `8ed1d177`
+- `main` = **`e63611436dffa54caef061fbd1ca1c2da347d009`** at V10 write (advanced from `f3eef8b8` by the archive bot only, run `40500557725`; no science superseded)
+- research branch `research-prism-player-first-identity-environment-2026-10-26` = **`083fb482c0a9a57c76b08eb73f655886d1cec65c`**
+- newest #535 = **6444908127** (executor target posted; audit pending)
+- cleared transmission target `8ed1d1778d388d54e6de9ed37ffc62d2d300e2ea`; governing audit `6441088661`
+- tests 792 passed, 1 known pre-existing failure (stale no-credit `FETCH_LIVE_ODDS`; **do not weaken the guard**), `audit_repo.py --strict` clean
 - betting CLOSED
 - no paid OddsAPI authorized
 
 Always re-fetch live state before asserting this remains current.
 
-### IMMEDIATE AUTHORIZED TASK — COMPACT NAMED-PLAYER TRACE
+### IMMEDIATE AUTHORIZED TASK — AUDIT THE DELIVERED TRACE (was: run it)
 
 Question:
 

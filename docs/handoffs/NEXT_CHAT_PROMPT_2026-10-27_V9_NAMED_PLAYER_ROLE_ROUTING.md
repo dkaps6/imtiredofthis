@@ -1,5 +1,12 @@
 # NEXT CHAT PROMPT — NFL PRISM V9
 
+> **STATUS UPDATE — the task this prompt authorizes is now DONE and awaiting audit.**
+> Claude posted executor target **`083fb482c0a9a57c76b08eb73f655886d1cec65c`** as
+> #535 comment **`6444908127`**. Your first job is to **audit that exact
+> target/code/artifacts**, not to re-commission the trace. The active TOP
+> checkpoint is **V10** in root `CURRENT_NFL_RESEARCH_HANDOFF.md`; read it
+> rather than this prompt's task section for current state.
+
 Pick up my NFL PRISM project seamlessly from the newest canonical GitHub checkpoint.
 
 Repo: `dkaps6/imtiredofthis`.
