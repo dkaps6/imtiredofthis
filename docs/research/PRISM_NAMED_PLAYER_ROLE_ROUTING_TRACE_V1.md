@@ -1,6 +1,21 @@
 # PRISM — Named-Player Role-Routing Trace V1 (JSN / Kupp / Barner)
 
-**Status:** read-only role-routing trace. **No fitting, no scoring, no promotion.**
+**Status:** **CLEARED (read-only scientific scope)** by GPT final re-audit
+`6446595260`, disposition
+`NAMED_PLAYER_ROLE_ROUTING_V1_CLEARED_READ_ONLY__PREDICTIVE_AND_FINAL_MEAN_ATTRIBUTION_NOT_ESTABLISHED`,
+at exact SHA `4f95723154d5473b362f33c450b6f2d5fd8f6b60`.
+
+**Cleared:** the compact JSN/Kupp/Barner role-routing *mechanism*, the matching
+pregame rule-layer multipliers, the conditional gate decode, the true archived
+target-share allocator chain, and the documented stranded role-specific
+efficiency signals.
+
+**NOT cleared:** fully measured opponent attribution to final receiving-yard
+means, predictive value of any new channel, league-wide gate prevalence, Stage-2
+Week 7, and any fitting or promotion. No coefficient/threshold selection, no
+outcome scoring, no sportsbook upstream, no paid OddsAPI, no Walker revisit.
+
+**No fitting, no scoring, no promotion.**
 **Revised per:** GPT audits `6445134492` and `6445801491`
 (`NAMED_PLAYER_ROLE_ROUTING_MECHANISM_AND_ALLOCATOR_SUPPORTED__V2_FINAL_WORDING_AND_SIDECAR_CONSISTENCY_FIX_REQUIRED`).
 **Earlier revision per:** GPT audit `6445134492`
@@ -226,9 +241,13 @@ Team mass is conserved exactly: `rules` and `post_m38` both sum to
   target-share path; YPT, game script and downstream mean construction are not
   accounted for here.
 - **How often any gate fires league-wide.**
-- **CI verification.** The quoted test count is a local run; no check-run is
-  recorded for this exact SHA, so it is a stated local result rather than
-  independently CI-verified.
+- **CI verification, precisely.** `audit-only.yml` run
+  [`40530603310`](https://github.com/dkaps6/imtiredofthis/actions/runs/40530603310)
+  is **green on this exact SHA**, so compileall and the strict repo audit **are**
+  independently verified on the runner. That workflow does **not** run pytest,
+  and `repo-ci.yml` triggers only on `pull_request` and pushes to `main`, so the
+  quoted `803 passed, 1 pre-existing failure` remains an **executor-reported
+  local result**, not independently CI-proven. No PR was opened.
 - **Whether consuming the stranded `ypt_allowed_*` family would improve any
   projection.** Untested; must not be scored on Week 7.
 
