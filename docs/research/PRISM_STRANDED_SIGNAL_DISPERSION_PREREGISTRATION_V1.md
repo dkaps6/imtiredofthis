@@ -96,3 +96,76 @@ else — no dispersion statistic, no cross-team comparison, no other signal.
 - Production behaviour. These are PBP-derived values; whether production's
   `def_rush_epa` matches them in construction is a separate provenance question.
 - Any claim about a named player's projection.
+
+---
+
+# ADDENDUM V2 — disjoint-sample persistence test
+
+**Frozen before running the test below.** Required by GPT audit `6449349551`
+blocker 1. **No fitting, no scoring, no threshold selection.**
+
+## What is retracted and why
+
+V1's "consecutive-week rank correlation" is **not** evidence of persistence and
+the claims built on it are withdrawn. `build_as_of` constructs target week N
+from weeks 1..N-1, so the week-6 vs week-7 comparison places weeks 1–5 against
+weeks 1–6 — **five of six weeks shared**. A cumulative aggregate correlated with
+itself-plus-one-week is near-tautological; high coefficients are forced by
+sample reuse, not by defensive skill. The reported 0.764–0.883 figures are
+**overlapping-history autocorrelations** and nothing more.
+
+Withdrawn as established: "persistent properties of a defense", "not noise",
+and the `MATERIAL_DISPERSION` label insofar as it depended on rank stability.
+
+## Frozen design — disjoint split-half
+
+**Samples.** Two fully disjoint, non-overlapping week ranges from 2026:
+**EARLY = weeks 1–3**, **LATE = weeks 4–7**. They share no play. Week 1 is
+included here because this test is not an as-of pregame construction and has no
+chronology requirement between the halves — it asks only whether a defensive
+characteristic measured in one window predicts its rank in a separate window.
+
+**Statistic.** For each signal, Spearman rank correlation of defensive values
+between EARLY and LATE, across eligible defenses. This is a genuine
+out-of-sample persistence estimate because no play contributes to both sides.
+
+**Eligibility, fixed now.** A defense enters a signal's correlation only if it
+has **≥ 40 qualifying plays in each half** — run plays for the rush-family
+signals (`def_rush_epa`, `explosive_rush_rate_allowed`, `rush_stuff_rate`),
+pass plays for the pass-family (`def_pass_epa`, `explosive_pass_rate_allowed`),
+and all plays for `success_rate_def`. Eligible-defense counts and any exclusions
+are reported, not hidden.
+
+**Pre-committed interpretation, with numeric cutoffs stated here rather than
+left to the script.** A signal is reported:
+
+- `PERSISTENT` if the disjoint Spearman rho **≥ 0.40**;
+- `WEAKLY_PERSISTENT` if **0.20 ≤ rho < 0.40**;
+- `NOT_PERSISTENT` if **rho < 0.20**.
+
+These cutoffs are conventional and are fixed before the test is run. They
+describe rank persistence between two windows **only**. They are not evidence of
+predictive value for any player projection, and no threshold, coefficient or
+sign is proposed from them.
+
+**Honest limitation, stated in advance.** With 32 defenses and a 3-week / 4-week
+split, a single rho carries wide uncertainty and the halves differ in length and
+in opponent schedule. This test can distinguish "clearly rank-persistent" from
+"clearly not" — it cannot finely rank the six signals against one another, and
+it will not be used to.
+
+## Also corrected in V2
+
+- **The `TRIVIAL_IQR` cutoffs (0.05 EPA, 0.02 rates) were NOT in the frozen V1
+  design**, which said only "non-trivial". They are **post-preregistration
+  operationalization** and are relabelled as such. The numeric dispersion
+  results stand; the `MATERIAL_DISPERSION` verdict is not a predeclared one.
+- **"Outcome-blind" is restated precisely.** `load_pbp` reads realized `epa`,
+  `success` and `yards_gained` from games already played — these are prior-play
+  outcomes by construction. The correct statement is: **no target-week
+  outcomes**; prior-game play results are used only to construct as-of defensive
+  statistics; **no model scoring**. The absolute phrasing "outcomes inspected:
+  none" is withdrawn.
+- **The six signals are not six stranded production fields.** A per-signal
+  provenance classification is required, because `success_rate_def` **is** read
+  by production via `rules_v2.success_diff()` inside `project_game_script()`.
