@@ -6,7 +6,7 @@
 
 ### WHAT THE NEXT SESSION SHOULD DO FIRST
 
-Read newest #535 **after comment 6449349551**.
+Read newest #535 **after comment 6451033568**.
 
 **Two studies have landed since the role-routing clearance.** Both are
 read-only, outcome-blind and awaiting audit; neither licenses a production
@@ -196,10 +196,31 @@ Week 7 explanatory state recovered to git.
 
 Residual gap:
 - Weeks 1–6 explanatory state unavailable;
-- current preservation retained opponent/environment column names but not values.
+- Week-7 opponent/environment **values** were destroyed by my own filter and are **unrecoverable**.
 
-Future fix:
-preserve opponent values + `rules_*_mult` so gate firing frequency can be measured on future runs.
+**PRESERVATION FIX — CLOSED FORWARD (`e7264023`).** It was worse than recorded
+here: the filter reduced `cb_coverage_team.csv` — the **canonical** coverage
+artifact — to `team,season,week`, destroying `man_rate`, `zone_rate`,
+`coverage_available` and `coverage_source`. I stripped the canonical values
+without realising which artifact it was, because I had not found Coverage-v2.
+
+Added `_OPPONENT_PATTERNS` to `preserve_week7_opportunity_trace_v1.py` covering
+coverage/box rates, middle-open/closed, defensive EPA/sack/ypa, explosive
+allowance, success/pressure/blitz/stuff rates, yards-before-contact, the
+`ypt_allowed` family, proe/pace, and — critically — the **realized**
+`rules_*_eff_mult`, `_target_mult`, `volatility_mult`, `rules_ypt/ypc/ypa`.
+Without the multipliers a gate's firing state is unrecoverable even when inputs
+are kept. Deny-list still runs first; verified both ways and pinned by tests —
+**23/23** opponent/multiplier columns survive, **12/12** market columns still
+excluded. **Recovers nothing lost; stops the bleeding forward.**
+
+**STILL UNREADABLE FROM A CLOUD SESSION:** per-team availability and real
+coverage source semantics live in Actions-artifact-only files
+(`team_context_v3_provenance.csv`, `cb_coverage_team.csv`,
+`sharp_v2_recovery_status.json`, `team_context_v3.csv`; e.g. run
+`40551229604`). The network policy denies the artifact host and none are
+committed, so **no claim about per-team finiteness has been made.** Needs a
+reader with artifact access or a runner-side extraction.
 
 ### GATE PREVALENCE — 2025 PROXY — **CLEARED, DESCRIPTIVE ONLY** (`91c3b81e`)
 
@@ -248,6 +269,26 @@ zero-box rows are scrimmage plays).
 script `scripts/research/measure_stranded_signal_dispersion_v1.py`; artifacts
 `data/research/stranded_dispersion/`; 7 tests. CI `audit-only` run
 `40550668785` green on that SHA. Local suite 818 passed, 1 known failure.
+
+**PRISM DOES HAVE box/scheme/coverage INPUTS — do not say otherwise** (source
+clarification `6450467357`). `full-slate.yml` runs `run_sharpfootball_v2.py`
+then `run_coverage_v2.py`; `scripts/build/build_coverage_v2.py` writes
+`cb_coverage_team.csv`; `team_context_v3.py` reads it with priority over
+`team_form.csv` and carries `light_box_rate`, `heavy_box_rate`,
+`middle_open_rate` and defensive EPA into `context_bridge_v3.TeamContext`;
+`rules_v2.matchup_multipliers` consumes coverage, box and pressure. **My earlier
+provenance tracing went Sharp → `team_form` and never reached Coverage-v2** —
+treat any "Sharp is the source for the coverage fields" phrasing of mine as
+incomplete.
+
+**What survives that correction:** `build_team_coverage()` reads
+`sharp_team_form.csv`, finds man/zone by name and applies a `>1 → /100`
+rescale. It is a **pass-through, not a play-level computation**, so it does not
+define a denominator — **Sharp's denominator remains UNESTABLISHED.**
+
+**Required phrasing:** "2026 **play-level participation** and **historically
+frozen source values** are not presently available for **independent
+gate-frequency reconstruction**" — NOT "no 2026 box/coverage inputs".
 
 **SCOPE OF THE 2026 SOURCE BLOCK — I stated this too broadly once.** Only the
 **box/coverage gate fields** are blocked: `load_participation(seasons=[2026])`
