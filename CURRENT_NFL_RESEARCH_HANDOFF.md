@@ -6,7 +6,11 @@
 
 ### WHAT THE NEXT SESSION SHOULD DO FIRST
 
-Read newest #535 **after comment 6448026674**.
+Read newest #535 **after comment 6448217205**.
+
+**Two studies have landed since the role-routing clearance.** Both are
+read-only, outcome-blind and awaiting audit; neither licenses a production
+change.
 
 **The named-player trace core finding is SUPPORTED** (audit `6445134492`); its
 three blockers are **FIXED** at revised executor target
@@ -197,11 +201,94 @@ Residual gap:
 Future fix:
 preserve opponent values + `rules_*_mult` so gate firing frequency can be measured on future runs.
 
+### GATE PREVALENCE — 2025 PROXY (target `91c3b81e`, re-audit pending)
+
+`docs/research/PRISM_GATE_PREVALENCE_{PREREGISTRATION,RESULTS}_V1.md`; script
+`scripts/research/measure_opponent_gate_prevalence_v1.py`; artifacts
+`data/research/gate_prevalence/`; 8 tests. CI `audit-only` run `40546135824`
+green on that SHA (compileall + strict audit, **not** pytest).
+
+**A 2025 nflverse-participation PROXY, not production gate firing** — production
+**prefers Sharp Football** and no past-week Sharp values or snapshots exist.
+
+**Only ONE gate is unconditionally non-informative**, across all 16 arm × basis
+combinations: `heavy_box_rate >= 0.60` is NEAR_DEAD **16/16**. `light_box_rate`
+splits 8 NEAR_CONSTANT / 8 DISCRIMINATING by **basis**; `coverage_zone_rate`
+8/8 by **denominator**; `coverage_man_rate` NEAR_DEAD in 14 of 16.
+
+**RETRACTED (audit `6448026674`):** my headline "three of four gates
+non-informative, robust across every methodological choice" — the time basis is
+a **ninth dimension** I held fixed while claiming robustness. Also retracted:
+that production's Sharp-fed coverage fields behave like the
+`COVERAGE_CLASSIFIED` arm. **Sharp's denominator and provenance are
+UNESTABLISHED.** Only **four** gates were studied — `middle_open_rate` and the
+**pressure** gate are **unmeasured**.
+
+**Sizing correction to my own work:** the WR label apparatus reads **only** the
+man gate (≤5.9% of as-of team-weeks), so the WR1/WR1_5/unlabelled distinction —
+and the Cooper Kupp exclusion — would be inert in the large majority of weeks on
+this proxy. **The rank-gating defect is low-frequency and I reported it more
+prominently than it deserved.** The surviving asymmetry: no WR role reads
+`coverage_zone_rate` while `te_target_mult` and `rb_rec_target_mult` do.
+
+Also: production counts kickoffs and punts as light boxes
+(`compute_personnel_rates` applies no play-type filter; only 52 of 9,093
+zero-box rows are scrimmage plays).
+
+### STRANDED SIGNAL DISPERSION — 2026 WEEKS 2–7 (target `945eb02e`, audit pending)
+
+`docs/research/PRISM_STRANDED_SIGNAL_DISPERSION_{PREREGISTRATION,RESULTS}_V1.md`;
+script `scripts/research/measure_stranded_signal_dispersion_v1.py`; artifacts
+`data/research/stranded_dispersion/`; 7 tests. CI `audit-only` run
+`40550668785` green on that SHA. Local suite 818 passed, 1 known failure.
+
+**SCOPE OF THE 2026 SOURCE BLOCK — I stated this too broadly once.** Only the
+**box/coverage gate fields** are blocked: `load_participation(seasons=[2026])`
+raises `Season must be between 2016 and 2025`, and `defenders_in_box` /
+`defense_man_zone_type` / `defense_personnel` are **absent from PBP entirely**.
+**2026 nflverse PBP itself EXISTS** — 18,738 plays, weeks 1–7. *Game* data is
+available; only the *personnel/NGS feed* is not. **Do not repeat "2026 history
+is gone"** — that was wrong and the user correctly challenged it.
+
+17,713 plays, target weeks 2–7 (week 1 excluded, no prior evidence).
+Outcome-blind, **player-blind**, chronology fails closed (`_assert_strictly_prior`
+raises on a leak; aggregates for week N use weeks 1..N-1 only).
+
+**All six stranded signals are widely dispersed AND persistent:**
+
+| signal | median IQR | rank r | median faced range |
+|---|---|---|---|
+| `def_rush_epa` | 0.1369 | **0.810** | 0.3073 |
+| `def_pass_epa` | 0.1887 | **0.764** | 0.4588 |
+| `success_rate_def` | 0.0439 | **0.781** | 0.0929 |
+| `explosive_rush_rate_allowed` | 0.0346 | **0.849** | 0.0813 |
+| `explosive_pass_rate_allowed` | 0.0413 | **0.849** | 0.0755 |
+| `rush_stuff_rate` | 0.0595 | **0.883** | 0.1247 |
+
+All six `MATERIAL_DISPERSION`. Rank r of 0.76–0.88 means these are **persistent
+properties of a defense, not noise**; the pre-registration committed in advance
+to labelling a wide-but-unstable signal `UNSTABLE` and a test exercises that
+path on synthetic noise. The most rank-stable — `rush_stuff_rate` at 0.883 — is
+referenced by **no production module at all**.
+
+So what production discards is **neither noise nor uniform**. With the cleared
+finding that the one live opponent→RB-rushing channel is a box gate whose
+branches are a near-constant and a corpse, the RB rushing path discards
+measurable matchup information and retains almost none.
+
+**WHAT THIS DOES NOT SHOW, and a test asserts it:** dispersion and persistence
+are **necessary but not sufficient**. A signal can vary widely, persist, and
+still add nothing once the player's own baseline and the finite allocation are
+accounted for. **Value requires a scoring window, which is CLOSED, and its own
+scoped proposal.** No threshold, coefficient or sign is proposed.
+
 ### STILL OPEN
 
 - hardcoded generic `pass_share = 0.57`
 - lead/trail not altering generic pass/rush split
-- future gate-frequency measurement once values are preserved
+- gate-frequency on **2026** box/coverage fields (participation-locked; 2025 proxy done)
+- `middle_open_rate` and **pressure** gate prevalence (unmeasured)
+- Sharp denominator/provenance (UNESTABLISHED)
 - Inside-5 TD design audit / future legal prospective test
 - betting construction V2 spec
 - orphan grading-tool port
@@ -247,9 +334,9 @@ Future construction rules remain:
 
 ### EXACT NEXT QUEUE
 
-1. Re-fetch #535 after **6441088661**.
-2. Audit Claude's compact JSN/Kupp/Barner role-routing target if posted; otherwise wait for/coordinate that exact authorized read-only executor item.
-3. Fix future trace preservation to retain opponent values + multipliers.
+1. Re-fetch #535 after **6448217205**.
+2. Audit the two landed targets: gate prevalence `91c3b81e` (re-audit) and stranded dispersion `945eb02e`.
+3. Fix future trace preservation to retain opponent values + multipliers — still the gate on grounding any opponent effect in real Sharp-fed pregame values.
 4. Trace hardcoded pass-share / lead-trail game-script path.
 5. Audit/freeze Inside-5 TD design before any legal test.
 6. Betting-layer V2 spec.
