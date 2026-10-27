@@ -1071,6 +1071,16 @@
   "durable_files": [
     {
       "columns": [
+        "pass_rate_over_expected_prior",
+        "pass_rate_over_expected_source",
+        "prior_proe_plays"
+      ],
+      "durable_file": "week7_trace__data___debug__team_form_prior_bridge.csv",
+      "rows": 32,
+      "source_in_artifact": "data/_debug/team_form_prior_bridge.csv"
+    },
+    {
+      "columns": [
         "opponent",
         "player_clean_key",
         "season",
@@ -1107,8 +1117,20 @@
         "m65_pred_leading_share",
         "m65_pred_neutral_share",
         "m65_pred_trailing_share",
+        "opp_coverage_man_rate",
+        "opp_coverage_zone_rate",
+        "opp_def_pass_epa",
+        "opp_explosive_play_rate_allowed",
+        "opp_pressure_rate_generated",
+        "opp_success_rate_def",
         "opponent",
         "player_clean_key",
+        "realized_def_heavy_box_rate",
+        "realized_def_light_box_rate",
+        "realized_def_man_rate",
+        "realized_def_pass_rushers_mean",
+        "realized_def_pressure_rate",
+        "realized_def_zone_rate",
         "season",
         "team",
         "trailing_share_surprise",
@@ -1143,11 +1165,13 @@
     },
     {
       "columns": [
+        "man_rate",
         "opponent",
         "player",
         "season",
         "team",
-        "week"
+        "week",
+        "zone_rate"
       ],
       "durable_file": "week7_trace__data__cb_coverage_player.csv",
       "rows": 147,
@@ -1155,9 +1179,13 @@
     },
     {
       "columns": [
+        "coverage_available",
+        "coverage_source",
+        "man_rate",
         "season",
         "team",
-        "week"
+        "week",
+        "zone_rate"
       ],
       "durable_file": "week7_trace__data__cb_coverage_team.csv",
       "rows": 28,
@@ -1192,9 +1220,18 @@
         "prior_games",
         "role",
         "rules_applied",
+        "rules_catch_rate",
+        "rules_pass_eff_mult",
+        "rules_pass_rate",
+        "rules_plays_est",
         "rules_role",
+        "rules_rush_eff_mult",
         "rules_rush_share",
         "rules_tgt_share",
+        "rules_volatility_mult",
+        "rules_ypa",
+        "rules_ypc",
+        "rules_ypt",
         "rush_share",
         "rush_share_current",
         "rush_share_prior",
@@ -1259,8 +1296,72 @@
     },
     {
       "columns": [
+        "blitz_rate",
+        "blitz_rate_opp",
+        "blitz_rate_sharp",
+        "blitz_rate_sharp_opp",
+        "coverage_man_rate",
+        "coverage_man_rate_opp_x",
+        "coverage_man_rate_opp_y",
+        "coverage_zone_rate",
+        "coverage_zone_rate_opp_x",
+        "coverage_zone_rate_opp_y",
         "current_games",
+        "def_pass_epa",
+        "def_pass_epa_allowed",
+        "def_pass_epa_allowed_opp",
+        "def_pass_epa_opp",
+        "def_pass_epa_z",
+        "def_pass_epa_z_opp",
+        "def_pass_success_allowed",
+        "def_pass_success_allowed_opp",
+        "def_rush_epa",
+        "def_rush_epa_opp",
+        "def_rush_epa_z",
+        "def_rush_epa_z_opp",
+        "def_sack_rate",
+        "def_sack_rate_opp",
+        "def_sack_rate_z",
+        "def_sack_rate_z_opp",
+        "def_sacks",
+        "def_sacks_opp",
+        "def_ypa_allowed",
+        "def_ypa_allowed_opp",
+        "explosive_play_rate_allowed",
+        "explosive_play_rate_allowed_opp",
+        "explosive_play_rate_allowed_z",
+        "explosive_play_rate_allowed_z_opp",
+        "heavy_box_rate",
+        "heavy_box_rate_opp",
+        "heavy_box_rate_sharp",
+        "heavy_box_rate_sharp_opp",
+        "heavy_box_rate_z",
+        "heavy_box_rate_z_opp",
+        "light_box_rate",
+        "light_box_rate_opp",
+        "light_box_rate_sharp",
+        "light_box_rate_sharp_opp",
+        "light_box_rate_z",
+        "light_box_rate_z_opp",
+        "middle_closed_rate",
+        "middle_closed_rate_opp",
+        "middle_open_rate",
+        "middle_open_rate_opp",
+        "neutral_pace",
+        "neutral_pace_opp",
+        "neutral_pace_score",
+        "neutral_pace_score_opp",
+        "neutral_pace_true",
+        "neutral_pace_true_opp",
+        "no_blitz_pressure_rate",
+        "no_blitz_pressure_rate_allowed",
+        "no_blitz_pressure_rate_allowed_opp",
+        "no_blitz_pressure_rate_opp",
         "opponent",
+        "pace",
+        "pace_neutral_z",
+        "pace_neutral_z_opp",
+        "pace_opp",
         "pass_rate_over_expected_opp",
         "pass_rate_over_expected_prior",
         "pass_rate_over_expected_prior_opp",
@@ -1269,23 +1370,74 @@
         "player",
         "player_clean_key",
         "position",
+        "pressure_rate",
+        "pressure_rate_allowed",
+        "pressure_rate_allowed_opp",
+        "pressure_rate_generated",
+        "pressure_rate_generated_opp",
+        "pressure_rate_opp",
         "prior_games",
+        "prior_proe_plays",
+        "prior_proe_plays_opp",
+        "proe",
+        "proe_opp",
+        "proe_z",
+        "proe_z_opp",
         "role",
         "rush_share",
         "rush_share_current",
         "rush_share_prior",
+        "rush_stuff_rate_x",
+        "rush_stuff_rate_x_opp",
+        "rush_stuff_rate_y",
+        "rush_stuff_rate_y_opp",
         "rz_carry_share",
         "rz_rush_share",
         "rz_share",
         "rz_tgt_share",
         "season",
         "source",
+        "success_explosive_source",
+        "success_explosive_source_opp",
+        "success_explosive_source_season",
+        "success_explosive_source_season_opp",
+        "success_explosive_target_week",
+        "success_explosive_target_week_opp",
+        "success_rate_def",
+        "success_rate_def_opp",
+        "success_rate_def_z",
+        "success_rate_def_z_opp",
+        "success_rate_diff",
+        "success_rate_diff_opp",
+        "success_rate_diff_z",
+        "success_rate_diff_z_opp",
+        "success_rate_off",
+        "success_rate_off_opp",
+        "success_rate_off_z",
+        "success_rate_off_z_opp",
         "target_share",
         "team",
         "tgt_share",
         "tgt_share_current",
         "tgt_share_prior",
-        "week"
+        "true_proe",
+        "true_proe_opp",
+        "volatility_pace_std",
+        "week",
+        "yards_before_contact_per_rb_rush_x",
+        "yards_before_contact_per_rb_rush_x_opp",
+        "yards_before_contact_per_rb_rush_y",
+        "yards_before_contact_per_rb_rush_y_opp",
+        "ypt_allowed_outside",
+        "ypt_allowed_outside_opp",
+        "ypt_allowed_rb",
+        "ypt_allowed_rb_opp",
+        "ypt_allowed_slot",
+        "ypt_allowed_slot_opp",
+        "ypt_allowed_te",
+        "ypt_allowed_te_opp",
+        "ypt_allowed_wr",
+        "ypt_allowed_wr_opp"
       ],
       "durable_file": "week7_trace__data__make_metrics_output.csv",
       "rows": 1447,
@@ -1293,8 +1445,72 @@
     },
     {
       "columns": [
+        "blitz_rate",
+        "blitz_rate_opp",
+        "blitz_rate_sharp",
+        "blitz_rate_sharp_opp",
+        "coverage_man_rate",
+        "coverage_man_rate_opp_x",
+        "coverage_man_rate_opp_y",
+        "coverage_zone_rate",
+        "coverage_zone_rate_opp_x",
+        "coverage_zone_rate_opp_y",
         "current_games",
+        "def_pass_epa",
+        "def_pass_epa_allowed",
+        "def_pass_epa_allowed_opp",
+        "def_pass_epa_opp",
+        "def_pass_epa_z",
+        "def_pass_epa_z_opp",
+        "def_pass_success_allowed",
+        "def_pass_success_allowed_opp",
+        "def_rush_epa",
+        "def_rush_epa_opp",
+        "def_rush_epa_z",
+        "def_rush_epa_z_opp",
+        "def_sack_rate",
+        "def_sack_rate_opp",
+        "def_sack_rate_z",
+        "def_sack_rate_z_opp",
+        "def_sacks",
+        "def_sacks_opp",
+        "def_ypa_allowed",
+        "def_ypa_allowed_opp",
+        "explosive_play_rate_allowed",
+        "explosive_play_rate_allowed_opp",
+        "explosive_play_rate_allowed_z",
+        "explosive_play_rate_allowed_z_opp",
+        "heavy_box_rate",
+        "heavy_box_rate_opp",
+        "heavy_box_rate_sharp",
+        "heavy_box_rate_sharp_opp",
+        "heavy_box_rate_z",
+        "heavy_box_rate_z_opp",
+        "light_box_rate",
+        "light_box_rate_opp",
+        "light_box_rate_sharp",
+        "light_box_rate_sharp_opp",
+        "light_box_rate_z",
+        "light_box_rate_z_opp",
+        "middle_closed_rate",
+        "middle_closed_rate_opp",
+        "middle_open_rate",
+        "middle_open_rate_opp",
+        "neutral_pace",
+        "neutral_pace_opp",
+        "neutral_pace_score",
+        "neutral_pace_score_opp",
+        "neutral_pace_true",
+        "neutral_pace_true_opp",
+        "no_blitz_pressure_rate",
+        "no_blitz_pressure_rate_allowed",
+        "no_blitz_pressure_rate_allowed_opp",
+        "no_blitz_pressure_rate_opp",
         "opponent",
+        "pace",
+        "pace_neutral_z",
+        "pace_neutral_z_opp",
+        "pace_opp",
         "pass_rate_over_expected_opp",
         "pass_rate_over_expected_prior",
         "pass_rate_over_expected_prior_opp",
@@ -1303,23 +1519,74 @@
         "player",
         "player_clean_key",
         "position",
+        "pressure_rate",
+        "pressure_rate_allowed",
+        "pressure_rate_allowed_opp",
+        "pressure_rate_generated",
+        "pressure_rate_generated_opp",
+        "pressure_rate_opp",
         "prior_games",
+        "prior_proe_plays",
+        "prior_proe_plays_opp",
+        "proe",
+        "proe_opp",
+        "proe_z",
+        "proe_z_opp",
         "role",
         "rush_share",
         "rush_share_current",
         "rush_share_prior",
+        "rush_stuff_rate_x",
+        "rush_stuff_rate_x_opp",
+        "rush_stuff_rate_y",
+        "rush_stuff_rate_y_opp",
         "rz_carry_share",
         "rz_rush_share",
         "rz_share",
         "rz_tgt_share",
         "season",
         "source",
+        "success_explosive_source",
+        "success_explosive_source_opp",
+        "success_explosive_source_season",
+        "success_explosive_source_season_opp",
+        "success_explosive_target_week",
+        "success_explosive_target_week_opp",
+        "success_rate_def",
+        "success_rate_def_opp",
+        "success_rate_def_z",
+        "success_rate_def_z_opp",
+        "success_rate_diff",
+        "success_rate_diff_opp",
+        "success_rate_diff_z",
+        "success_rate_diff_z_opp",
+        "success_rate_off",
+        "success_rate_off_opp",
+        "success_rate_off_z",
+        "success_rate_off_z_opp",
         "target_share",
         "team",
         "tgt_share",
         "tgt_share_current",
         "tgt_share_prior",
-        "week"
+        "true_proe",
+        "true_proe_opp",
+        "volatility_pace_std",
+        "week",
+        "yards_before_contact_per_rb_rush_x",
+        "yards_before_contact_per_rb_rush_x_opp",
+        "yards_before_contact_per_rb_rush_y",
+        "yards_before_contact_per_rb_rush_y_opp",
+        "ypt_allowed_outside",
+        "ypt_allowed_outside_opp",
+        "ypt_allowed_rb",
+        "ypt_allowed_rb_opp",
+        "ypt_allowed_slot",
+        "ypt_allowed_slot_opp",
+        "ypt_allowed_te",
+        "ypt_allowed_te_opp",
+        "ypt_allowed_wr",
+        "ypt_allowed_wr_opp"
       ],
       "durable_file": "week7_trace__data__metrics_ready.csv",
       "rows": 1447,
@@ -1354,6 +1621,7 @@
         "rush_share",
         "season",
         "team",
+        "team_coverage_available",
         "tgt_share",
         "week"
       ],
@@ -1377,13 +1645,21 @@
     {
       "columns": [
         "opponent",
+        "pass_eff_mult",
         "player",
         "position",
+        "rb_rec_target_mult",
         "role",
         "rules_role",
+        "rush_eff_mult",
         "season",
+        "slot_target_mult",
+        "te_target_mult",
         "team",
-        "week"
+        "volatility_mult",
+        "week",
+        "wr1_5_target_mult",
+        "wr1_target_mult"
       ],
       "durable_file": "week7_trace__data__model_rule_diagnostics.csv",
       "rows": 396,
@@ -1398,8 +1674,72 @@
         "bayes_rush_share_effective_n",
         "bayes_tgt_share",
         "bayes_tgt_share_effective_n",
+        "blitz_rate",
+        "blitz_rate_opp",
+        "blitz_rate_sharp",
+        "blitz_rate_sharp_opp",
+        "coverage_man_rate",
+        "coverage_man_rate_opp_x",
+        "coverage_man_rate_opp_y",
+        "coverage_zone_rate",
+        "coverage_zone_rate_opp_x",
+        "coverage_zone_rate_opp_y",
         "current_games",
+        "def_pass_epa",
+        "def_pass_epa_allowed",
+        "def_pass_epa_allowed_opp",
+        "def_pass_epa_opp",
+        "def_pass_epa_z",
+        "def_pass_epa_z_opp",
+        "def_pass_success_allowed",
+        "def_pass_success_allowed_opp",
+        "def_rush_epa",
+        "def_rush_epa_opp",
+        "def_rush_epa_z",
+        "def_rush_epa_z_opp",
+        "def_sack_rate",
+        "def_sack_rate_opp",
+        "def_sack_rate_z",
+        "def_sack_rate_z_opp",
+        "def_sacks",
+        "def_sacks_opp",
+        "def_ypa_allowed",
+        "def_ypa_allowed_opp",
+        "explosive_play_rate_allowed",
+        "explosive_play_rate_allowed_opp",
+        "explosive_play_rate_allowed_z",
+        "explosive_play_rate_allowed_z_opp",
+        "heavy_box_rate",
+        "heavy_box_rate_opp",
+        "heavy_box_rate_sharp",
+        "heavy_box_rate_sharp_opp",
+        "heavy_box_rate_z",
+        "heavy_box_rate_z_opp",
+        "light_box_rate",
+        "light_box_rate_opp",
+        "light_box_rate_sharp",
+        "light_box_rate_sharp_opp",
+        "light_box_rate_z",
+        "light_box_rate_z_opp",
+        "middle_closed_rate",
+        "middle_closed_rate_opp",
+        "middle_open_rate",
+        "middle_open_rate_opp",
+        "neutral_pace",
+        "neutral_pace_opp",
+        "neutral_pace_score",
+        "neutral_pace_score_opp",
+        "neutral_pace_true",
+        "neutral_pace_true_opp",
+        "no_blitz_pressure_rate",
+        "no_blitz_pressure_rate_allowed",
+        "no_blitz_pressure_rate_allowed_opp",
+        "no_blitz_pressure_rate_opp",
         "opponent",
+        "pace",
+        "pace_neutral_z",
+        "pace_neutral_z_opp",
+        "pace_opp",
         "pass_rate_over_expected_opp",
         "pass_rate_over_expected_prior",
         "pass_rate_over_expected_prior_opp",
@@ -1408,27 +1748,87 @@
         "player",
         "player_clean_key",
         "position",
+        "pressure_rate",
+        "pressure_rate_allowed",
+        "pressure_rate_allowed_opp",
+        "pressure_rate_generated",
+        "pressure_rate_generated_opp",
+        "pressure_rate_opp",
         "prior_games",
+        "prior_proe_plays",
+        "prior_proe_plays_opp",
+        "proe",
+        "proe_opp",
+        "proe_z",
+        "proe_z_opp",
         "role",
         "rules_applied",
+        "rules_catch_rate",
+        "rules_pass_eff_mult",
+        "rules_pass_rate",
+        "rules_plays_est",
         "rules_role",
+        "rules_rush_eff_mult",
         "rules_rush_share",
         "rules_tgt_share",
+        "rules_volatility_mult",
+        "rules_ypa",
+        "rules_ypc",
+        "rules_ypt",
         "rush_share",
         "rush_share_current",
         "rush_share_prior",
+        "rush_stuff_rate_x",
+        "rush_stuff_rate_x_opp",
+        "rush_stuff_rate_y",
+        "rush_stuff_rate_y_opp",
         "rz_carry_share",
         "rz_rush_share",
         "rz_share",
         "rz_tgt_share",
         "season",
         "source",
+        "success_explosive_source",
+        "success_explosive_source_opp",
+        "success_explosive_source_season",
+        "success_explosive_source_season_opp",
+        "success_explosive_target_week",
+        "success_explosive_target_week_opp",
+        "success_rate_def",
+        "success_rate_def_opp",
+        "success_rate_def_z",
+        "success_rate_def_z_opp",
+        "success_rate_diff",
+        "success_rate_diff_opp",
+        "success_rate_diff_z",
+        "success_rate_diff_z_opp",
+        "success_rate_off",
+        "success_rate_off_opp",
+        "success_rate_off_z",
+        "success_rate_off_z_opp",
         "target_share",
         "team",
         "tgt_share",
         "tgt_share_current",
         "tgt_share_prior",
-        "week"
+        "true_proe",
+        "true_proe_opp",
+        "volatility_pace_std",
+        "week",
+        "yards_before_contact_per_rb_rush_x",
+        "yards_before_contact_per_rb_rush_x_opp",
+        "yards_before_contact_per_rb_rush_y",
+        "yards_before_contact_per_rb_rush_y_opp",
+        "ypt_allowed_outside",
+        "ypt_allowed_outside_opp",
+        "ypt_allowed_rb",
+        "ypt_allowed_rb_opp",
+        "ypt_allowed_slot",
+        "ypt_allowed_slot_opp",
+        "ypt_allowed_te",
+        "ypt_allowed_te_opp",
+        "ypt_allowed_wr",
+        "ypt_allowed_wr_opp"
       ],
       "durable_file": "week7_trace__data__model_rule_simulation_inputs.csv",
       "rows": 1447,
@@ -1519,6 +1919,9 @@
       "columns": [
         "air_yards_share",
         "carries",
+        "def_pass_defended",
+        "def_sack_yards",
+        "def_sacks",
         "opponent",
         "player",
         "player_clean_key",
@@ -1652,8 +2055,17 @@
     },
     {
       "columns": [
+        "def_pass_epa_allowed",
+        "def_pass_success_allowed",
+        "def_ypa_allowed",
+        "neutral_pace",
+        "neutral_pace_true",
+        "pressure_rate_allowed",
+        "pressure_rate_generated",
+        "proe",
         "season",
         "team",
+        "true_proe",
         "week"
       ],
       "durable_file": "week7_trace__data__qb_promoted_team_context.csv",
@@ -1723,9 +2135,89 @@
     },
     {
       "columns": [
+        "team",
+        "ypt_allowed_outside",
+        "ypt_allowed_rb",
+        "ypt_allowed_slot",
+        "ypt_allowed_te",
+        "ypt_allowed_wr"
+      ],
+      "durable_file": "week7_trace__data__sharp_coverage_pos_2026.csv",
+      "rows": 32,
+      "source_in_artifact": "data/sharp_coverage_pos_2026.csv"
+    },
+    {
+      "columns": [
+        "middle_closed_rate",
+        "middle_open_rate",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__sharp_coverage_scheme_2026.csv",
+      "rows": 32,
+      "source_in_artifact": "data/sharp_coverage_scheme_2026.csv"
+    },
+    {
+      "columns": [
+        "blitz_rate",
+        "heavy_box_rate",
+        "light_box_rate",
+        "team"
+      ],
+      "durable_file": "week7_trace__data__sharp_def_tend_2026.csv",
+      "rows": 32,
+      "source_in_artifact": "data/sharp_def_tend_2026.csv"
+    },
+    {
+      "columns": [
+        "no_blitz_pressure_rate",
+        "pressure_rate",
+        "rush_stuff_rate",
+        "team",
+        "yards_before_contact_per_rb_rush"
+      ],
+      "durable_file": "week7_trace__data__sharp_dl_2026.csv",
+      "rows": 32,
+      "source_in_artifact": "data/sharp_dl_2026.csv"
+    },
+    {
+      "columns": [
+        "no_blitz_pressure_rate_allowed",
+        "pressure_rate_allowed",
+        "rush_stuff_rate",
+        "team",
+        "yards_before_contact_per_rb_rush"
+      ],
+      "durable_file": "week7_trace__data__sharp_ol_2026.csv",
+      "rows": 32,
+      "source_in_artifact": "data/sharp_ol_2026.csv"
+    },
+    {
+      "columns": [
+        "blitz_rate",
+        "coverage_man_rate",
+        "coverage_zone_rate",
+        "heavy_box_rate",
+        "light_box_rate",
+        "middle_closed_rate",
+        "middle_open_rate",
+        "neutral_pace",
+        "no_blitz_pressure_rate",
+        "no_blitz_pressure_rate_allowed",
         "pass_rate_over_expected_prior",
         "pass_rate_over_expected_source",
-        "team"
+        "pressure_rate",
+        "pressure_rate_allowed",
+        "prior_proe_plays",
+        "rush_stuff_rate_x",
+        "rush_stuff_rate_y",
+        "team",
+        "yards_before_contact_per_rb_rush_x",
+        "yards_before_contact_per_rb_rush_y",
+        "ypt_allowed_outside",
+        "ypt_allowed_rb",
+        "ypt_allowed_slot",
+        "ypt_allowed_te",
+        "ypt_allowed_wr"
       ],
       "durable_file": "week7_trace__data__sharp_team_form.csv",
       "rows": 32,
@@ -1767,8 +2259,29 @@
     },
     {
       "columns": [
+        "coverage_man_rate",
+        "coverage_zone_rate",
+        "def_pass_epa",
+        "def_pass_epa_allowed",
+        "def_pass_success_allowed",
+        "def_rush_epa",
+        "def_ypa_allowed",
+        "explosive_play_rate_allowed",
+        "heavy_box_rate",
+        "light_box_rate",
+        "middle_open_rate",
+        "neutral_pace",
+        "neutral_pace_last5",
+        "neutral_pace_true",
+        "pressure_rate_allowed",
+        "pressure_rate_generated",
+        "proe",
         "season",
+        "success_rate_def",
+        "success_rate_diff",
+        "success_rate_off",
         "team",
+        "true_proe",
         "week"
       ],
       "durable_file": "week7_trace__data__team_context_v3.csv",
@@ -1777,10 +2290,66 @@
     },
     {
       "columns": [
+        "blitz_rate",
+        "blitz_rate_sharp",
+        "coverage_man_rate",
+        "coverage_zone_rate",
+        "def_pass_epa",
+        "def_pass_epa_allowed",
+        "def_pass_epa_z",
+        "def_pass_success_allowed",
+        "def_rush_epa",
+        "def_rush_epa_z",
+        "def_sack_rate",
+        "def_sack_rate_z",
+        "def_sacks",
+        "def_ypa_allowed",
+        "explosive_play_rate_allowed",
+        "explosive_play_rate_allowed_z",
+        "heavy_box_rate",
+        "heavy_box_rate_sharp",
+        "heavy_box_rate_z",
+        "light_box_rate",
+        "light_box_rate_sharp",
+        "light_box_rate_z",
+        "middle_closed_rate",
+        "middle_open_rate",
+        "neutral_pace",
+        "neutral_pace_score",
+        "neutral_pace_true",
+        "no_blitz_pressure_rate",
+        "no_blitz_pressure_rate_allowed",
+        "pace",
+        "pace_neutral_z",
         "pass_rate_over_expected_prior",
         "pass_rate_over_expected_source",
+        "pressure_rate",
+        "pressure_rate_allowed",
+        "pressure_rate_generated",
+        "prior_proe_plays",
+        "proe",
+        "proe_z",
+        "rush_stuff_rate_x",
+        "rush_stuff_rate_y",
         "season",
-        "team"
+        "success_explosive_source",
+        "success_explosive_source_season",
+        "success_explosive_target_week",
+        "success_rate_def",
+        "success_rate_def_z",
+        "success_rate_diff",
+        "success_rate_diff_z",
+        "success_rate_off",
+        "success_rate_off_z",
+        "team",
+        "true_proe",
+        "yards_before_contact_per_rb_rush_x",
+        "yards_before_contact_per_rb_rush_y",
+        "ypt_allowed_outside",
+        "ypt_allowed_rb",
+        "ypt_allowed_slot",
+        "ypt_allowed_te",
+        "ypt_allowed_wr"
       ],
       "durable_file": "week7_trace__data__team_form.csv",
       "rows": 32,
@@ -1814,11 +2383,15 @@
     },
     {
       "columns": [
+        "man_rate",
         "opponent",
         "player",
         "season",
         "team",
-        "week"
+        "team_coverage_available",
+        "team_coverage_source",
+        "week",
+        "zone_rate"
       ],
       "durable_file": "week7_trace__data__wr_cb_exposure.csv",
       "rows": 147,
@@ -1983,8 +2556,74 @@
         "data/model_bayesian_diagnostics.csv",
         "data/model_rule_simulation_inputs.csv"
       ],
+      "blitz_rate": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_def_tend_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "blitz_rate_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "blitz_rate_sharp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "blitz_rate_sharp_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
       "carries": [
         "data/player_game_logs.csv"
+      ],
+      "coverage_available": [
+        "data/cb_coverage_team.csv"
+      ],
+      "coverage_man_rate": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_team_form.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "coverage_man_rate_opp_x": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "coverage_man_rate_opp_y": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "coverage_source": [
+        "data/cb_coverage_team.csv"
+      ],
+      "coverage_zone_rate": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_team_form.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "coverage_zone_rate_opp_x": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "coverage_zone_rate_opp_y": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
       ],
       "current_games": [
         "data/football_simulation_universe.csv",
@@ -1994,6 +2633,131 @@
         "data/model_rule_simulation_inputs.csv",
         "data/player_form.csv",
         "data/player_form_consensus.csv"
+      ],
+      "def_pass_defended": [
+        "data/player_game_logs.csv"
+      ],
+      "def_pass_epa": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "def_pass_epa_allowed": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/qb_promoted_team_context.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "def_pass_epa_allowed_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "def_pass_epa_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "def_pass_epa_z": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "def_pass_epa_z_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "def_pass_success_allowed": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/qb_promoted_team_context.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "def_pass_success_allowed_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "def_rush_epa": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "def_rush_epa_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "def_rush_epa_z": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "def_rush_epa_z_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "def_sack_rate": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "def_sack_rate_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "def_sack_rate_z": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "def_sack_rate_z_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "def_sack_yards": [
+        "data/player_game_logs.csv"
+      ],
+      "def_sacks": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/player_game_logs.csv",
+        "data/team_form.csv"
+      ],
+      "def_sacks_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "def_ypa_allowed": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/qb_promoted_team_context.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "def_ypa_allowed_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
       ],
       "entitlement_delta": [
         "data/te_r5p_full_slate_entitlement_trace.csv",
@@ -2014,8 +2778,103 @@
       "entitlement_version": [
         "data/target_entitlement_v1_trace.csv"
       ],
+      "explosive_play_rate_allowed": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "explosive_play_rate_allowed_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "explosive_play_rate_allowed_z": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "explosive_play_rate_allowed_z_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "heavy_box_rate": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_def_tend_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "heavy_box_rate_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "heavy_box_rate_sharp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "heavy_box_rate_sharp_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "heavy_box_rate_z": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "heavy_box_rate_z_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
       "leading_share_surprise": [
         "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
+      "light_box_rate": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_def_tend_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "light_box_rate_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "light_box_rate_sharp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "light_box_rate_sharp_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "light_box_rate_z": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "light_box_rate_z_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
       ],
       "m38_explicit_entitlement_tgt_share": [
         "data/target_entitlement_v1_trace.csv"
@@ -2044,6 +2903,123 @@
       "m65_pred_trailing_share": [
         "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
       ],
+      "man_rate": [
+        "data/cb_coverage_player.csv",
+        "data/cb_coverage_team.csv",
+        "data/wr_cb_exposure.csv"
+      ],
+      "middle_closed_rate": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_coverage_scheme_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "middle_closed_rate_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "middle_open_rate": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_coverage_scheme_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "middle_open_rate_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "neutral_pace": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/qb_promoted_team_context.csv",
+        "data/sharp_team_form.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "neutral_pace_last5": [
+        "data/team_context_v3.csv"
+      ],
+      "neutral_pace_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "neutral_pace_score": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "neutral_pace_score_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "neutral_pace_true": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/qb_promoted_team_context.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "neutral_pace_true_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "no_blitz_pressure_rate": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_dl_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "no_blitz_pressure_rate_allowed": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_ol_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "no_blitz_pressure_rate_allowed_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "no_blitz_pressure_rate_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "opp_coverage_man_rate": [
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
+      "opp_coverage_zone_rate": [
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
+      "opp_def_pass_epa": [
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
+      "opp_explosive_play_rate_allowed": [
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
+      "opp_pressure_rate_generated": [
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
+      "opp_success_rate_def": [
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
       "opponent": [
         "data/backtests/full_stack_vegas_benchmark_v1/non_qb_detail.csv",
         "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv",
@@ -2068,12 +3044,38 @@
         "data/wr_cb_exposure.csv",
         "outputs/props_priced_clean.csv"
       ],
+      "pace": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "pace_neutral_z": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "pace_neutral_z_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "pace_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "pass_eff_mult": [
+        "data/model_rule_diagnostics.csv"
+      ],
       "pass_rate_over_expected_opp": [
         "data/make_metrics_output.csv",
         "data/metrics_ready.csv",
         "data/model_rule_simulation_inputs.csv"
       ],
       "pass_rate_over_expected_prior": [
+        "data/_debug/team_form_prior_bridge.csv",
         "data/make_metrics_output.csv",
         "data/metrics_ready.csv",
         "data/model_rule_simulation_inputs.csv",
@@ -2086,6 +3088,7 @@
         "data/model_rule_simulation_inputs.csv"
       ],
       "pass_rate_over_expected_source": [
+        "data/_debug/team_form_prior_bridge.csv",
         "data/make_metrics_output.csv",
         "data/metrics_ready.csv",
         "data/model_rule_simulation_inputs.csv",
@@ -2206,6 +3209,47 @@
       "post_m38_tgt_share": [
         "data/target_entitlement_v1_trace.csv"
       ],
+      "pressure_rate": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_dl_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "pressure_rate_allowed": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/qb_promoted_team_context.csv",
+        "data/sharp_ol_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "pressure_rate_allowed_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "pressure_rate_generated": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/qb_promoted_team_context.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "pressure_rate_generated_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "pressure_rate_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
       "prior_games": [
         "data/football_simulation_universe.csv",
         "data/make_metrics_output.csv",
@@ -2215,6 +3259,43 @@
         "data/player_form.csv",
         "data/player_form_consensus.csv"
       ],
+      "prior_proe_plays": [
+        "data/_debug/team_form_prior_bridge.csv",
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "prior_proe_plays_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "proe": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/qb_promoted_team_context.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "proe_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "proe_z": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "proe_z_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
       "qb_pass_att_share": [
         "outputs/props_priced_clean.csv"
       ],
@@ -2223,6 +3304,27 @@
       ],
       "raw_target_share_sum": [
         "data/football_simulation_universe_audit.csv"
+      ],
+      "rb_rec_target_mult": [
+        "data/model_rule_diagnostics.csv"
+      ],
+      "realized_def_heavy_box_rate": [
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
+      "realized_def_light_box_rate": [
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
+      "realized_def_man_rate": [
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
+      "realized_def_pass_rushers_mean": [
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
+      "realized_def_pressure_rate": [
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
+      "realized_def_zone_rate": [
+        "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
       ],
       "residual_share": [
         "data/target_entitlement_v1_trace.csv",
@@ -2249,14 +3351,34 @@
         "data/model_rule_simulation_inputs.csv",
         "outputs/props_priced_clean.csv"
       ],
+      "rules_catch_rate": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "rules_pass_eff_mult": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "rules_pass_rate": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
       "rules_players_with_share": [
         "data/team_target_pool_audit.csv"
+      ],
+      "rules_plays_est": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv"
       ],
       "rules_role": [
         "data/football_simulation_universe.csv",
         "data/model_rule_diagnostics.csv",
         "data/model_rule_simulation_inputs.csv",
         "outputs/props_priced_clean.csv"
+      ],
+      "rules_rush_eff_mult": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv"
       ],
       "rules_rush_share": [
         "data/football_simulation_universe.csv",
@@ -2266,6 +3388,25 @@
         "data/football_simulation_universe.csv",
         "data/model_rule_simulation_inputs.csv",
         "data/target_entitlement_v1_trace.csv"
+      ],
+      "rules_volatility_mult": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "rules_ypa": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "rules_ypc": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "rules_ypt": [
+        "data/football_simulation_universe.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "rush_eff_mult": [
+        "data/model_rule_diagnostics.csv"
       ],
       "rush_share": [
         "data/football_simulation_universe.csv",
@@ -2295,6 +3436,34 @@
         "data/model_rule_simulation_inputs.csv",
         "data/player_form.csv",
         "data/player_form_consensus.csv"
+      ],
+      "rush_stuff_rate": [
+        "data/sharp_dl_2026.csv",
+        "data/sharp_ol_2026.csv"
+      ],
+      "rush_stuff_rate_x": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "rush_stuff_rate_x_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "rush_stuff_rate_y": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "rush_stuff_rate_y_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
       ],
       "rz_carry_share": [
         "data/football_simulation_universe.csv",
@@ -2375,6 +3544,9 @@
       "secondary_snap_share_prior3_anyteam": [
         "data/wr_r15_full_slate_entitlement_trace.csv"
       ],
+      "slot_target_mult": [
+        "data/model_rule_diagnostics.csv"
+      ],
       "source": [
         "data/current_player_availability.csv",
         "data/injuries.csv",
@@ -2392,6 +3564,108 @@
         "data/qb_distribution_state_context_audit.csv",
         "data/rb_rush_rec_conservation_v2_integration_audit.csv"
       ],
+      "success_explosive_source": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "success_explosive_source_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "success_explosive_source_season": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "success_explosive_source_season_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "success_explosive_target_week": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "success_explosive_target_week_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "success_rate_def": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "success_rate_def_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "success_rate_def_z": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "success_rate_def_z_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "success_rate_diff": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "success_rate_diff_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "success_rate_diff_z": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "success_rate_diff_z_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "success_rate_off": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "success_rate_off_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "success_rate_off_z": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/team_form.csv"
+      ],
+      "success_rate_off_z_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
       "target_share": [
         "data/football_simulation_universe.csv",
         "data/make_metrics_output.csv",
@@ -2406,6 +3680,9 @@
       ],
       "te_r5p_room_share": [
         "data/te_r5p_full_slate_entitlement_trace.csv"
+      ],
+      "te_target_mult": [
+        "data/model_rule_diagnostics.csv"
       ],
       "team": [
         "data/backtests/full_stack_vegas_benchmark_v1/non_qb_detail.csv",
@@ -2448,6 +3725,11 @@
         "data/roles_ourlads.csv",
         "data/roles_ourlads_active_v1.csv",
         "data/roles_ourlads_status_v1.csv",
+        "data/sharp_coverage_pos_2026.csv",
+        "data/sharp_coverage_scheme_2026.csv",
+        "data/sharp_def_tend_2026.csv",
+        "data/sharp_dl_2026.csv",
+        "data/sharp_ol_2026.csv",
         "data/sharp_team_form.csv",
         "data/target_entitlement_v1_trace.csv",
         "data/te_r5p_full_slate_entitlement_trace.csv",
@@ -2461,6 +3743,13 @@
         "outputs/props_priced_clean.csv",
         "outputs/roles_current_production_eligible_v1.csv",
         "outputs/roles_ourlads.csv"
+      ],
+      "team_coverage_available": [
+        "data/model_context_bridge.csv",
+        "data/wr_cb_exposure.csv"
+      ],
+      "team_coverage_source": [
+        "data/wr_cb_exposure.csv"
       ],
       "tgt_share": [
         "data/football_simulation_universe.csv",
@@ -2493,6 +3782,27 @@
       ],
       "trailing_share_surprise": [
         "data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv"
+      ],
+      "true_proe": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/qb_promoted_team_context.csv",
+        "data/team_context_v3.csv",
+        "data/team_form.csv"
+      ],
+      "true_proe_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "volatility_mult": [
+        "data/model_rule_diagnostics.csv"
+      ],
+      "volatility_pace_std": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
       ],
       "week": [
         "data/backtests/full_stack_vegas_benchmark_v1/non_qb_detail.csv",
@@ -2530,6 +3840,12 @@
         "data/wr_r15_full_slate_entitlement_trace.csv",
         "outputs/props_priced_clean.csv"
       ],
+      "wr1_5_target_mult": [
+        "data/model_rule_diagnostics.csv"
+      ],
+      "wr1_target_mult": [
+        "data/model_rule_diagnostics.csv"
+      ],
       "wr_r15_baseline_entitlement_tgt_share": [
         "data/wr_r15_full_slate_entitlement_trace.csv"
       ],
@@ -2538,6 +3854,104 @@
       ],
       "wr_r15_secondary_room_share": [
         "data/wr_r15_full_slate_entitlement_trace.csv"
+      ],
+      "yards_before_contact_per_rb_rush": [
+        "data/sharp_dl_2026.csv",
+        "data/sharp_ol_2026.csv"
+      ],
+      "yards_before_contact_per_rb_rush_x": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "yards_before_contact_per_rb_rush_x_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "yards_before_contact_per_rb_rush_y": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "yards_before_contact_per_rb_rush_y_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "ypt_allowed_outside": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_coverage_pos_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "ypt_allowed_outside_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "ypt_allowed_rb": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_coverage_pos_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "ypt_allowed_rb_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "ypt_allowed_slot": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_coverage_pos_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "ypt_allowed_slot_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "ypt_allowed_te": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_coverage_pos_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "ypt_allowed_te_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "ypt_allowed_wr": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv",
+        "data/sharp_coverage_pos_2026.csv",
+        "data/sharp_team_form.csv",
+        "data/team_form.csv"
+      ],
+      "ypt_allowed_wr_opp": [
+        "data/make_metrics_output.csv",
+        "data/metrics_ready.csv",
+        "data/model_rule_simulation_inputs.csv"
+      ],
+      "zone_rate": [
+        "data/cb_coverage_player.csv",
+        "data/cb_coverage_team.csv",
+        "data/wr_cb_exposure.csv"
       ]
     },
     "scanned": [
@@ -2552,10 +3966,11 @@
           "team_form_prior_season"
         ],
         "columns": 7,
-        "explanatory_columns_matched": 2,
+        "explanatory_columns_matched": 3,
         "matched": [
           "pass_rate_over_expected_prior",
-          "pass_rate_over_expected_source"
+          "pass_rate_over_expected_source",
+          "prior_proe_plays"
         ],
         "path": "data/_debug/team_form_prior_bridge.csv"
       },
@@ -2890,7 +4305,7 @@
           "ypa_residual_actual_minus_pred"
         ],
         "columns": 127,
-        "explanatory_columns_matched": 18,
+        "explanatory_columns_matched": 30,
         "matched": [
           "actual_leading8_share",
           "actual_neutral_share",
@@ -2904,8 +4319,20 @@
           "m65_pred_leading_share",
           "m65_pred_neutral_share",
           "m65_pred_trailing_share",
+          "opp_coverage_man_rate",
+          "opp_coverage_zone_rate",
+          "opp_def_pass_epa",
+          "opp_explosive_play_rate_allowed",
+          "opp_pressure_rate_generated",
+          "opp_success_rate_def",
           "opponent",
           "player_clean_key",
+          "realized_def_heavy_box_rate",
+          "realized_def_light_box_rate",
+          "realized_def_man_rate",
+          "realized_def_pass_rushers_mean",
+          "realized_def_pressure_rate",
+          "realized_def_zone_rate",
           "season",
           "team",
           "trailing_share_surprise",
@@ -2980,13 +4407,15 @@
           "zone_rate"
         ],
         "columns": 18,
-        "explanatory_columns_matched": 5,
+        "explanatory_columns_matched": 7,
         "matched": [
+          "man_rate",
           "opponent",
           "player",
           "season",
           "team",
-          "week"
+          "week",
+          "zone_rate"
         ],
         "path": "data/cb_coverage_player.csv"
       },
@@ -3001,11 +4430,15 @@
           "zone_rate"
         ],
         "columns": 7,
-        "explanatory_columns_matched": 3,
+        "explanatory_columns_matched": 7,
         "matched": [
+          "coverage_available",
+          "coverage_source",
+          "man_rate",
           "season",
           "team",
-          "week"
+          "week",
+          "zone_rate"
         ],
         "path": "data/cb_coverage_team.csv"
       },
@@ -3200,7 +4633,7 @@
           "ypt_prior"
         ],
         "columns": 108,
-        "explanatory_columns_matched": 32,
+        "explanatory_columns_matched": 41,
         "matched": [
           "bayes_applied",
           "bayes_evidence_state",
@@ -3217,9 +4650,18 @@
           "prior_games",
           "role",
           "rules_applied",
+          "rules_catch_rate",
+          "rules_pass_eff_mult",
+          "rules_pass_rate",
+          "rules_plays_est",
           "rules_role",
+          "rules_rush_eff_mult",
           "rules_rush_share",
           "rules_tgt_share",
+          "rules_volatility_mult",
+          "rules_ypa",
+          "rules_ypc",
+          "rules_ypt",
           "rush_share",
           "rush_share_current",
           "rush_share_prior",
@@ -3729,10 +5171,74 @@
           "ypt_prior"
         ],
         "columns": 343,
-        "explanatory_columns_matched": 27,
+        "explanatory_columns_matched": 142,
         "matched": [
+          "blitz_rate",
+          "blitz_rate_opp",
+          "blitz_rate_sharp",
+          "blitz_rate_sharp_opp",
+          "coverage_man_rate",
+          "coverage_man_rate_opp_x",
+          "coverage_man_rate_opp_y",
+          "coverage_zone_rate",
+          "coverage_zone_rate_opp_x",
+          "coverage_zone_rate_opp_y",
           "current_games",
+          "def_pass_epa",
+          "def_pass_epa_allowed",
+          "def_pass_epa_allowed_opp",
+          "def_pass_epa_opp",
+          "def_pass_epa_z",
+          "def_pass_epa_z_opp",
+          "def_pass_success_allowed",
+          "def_pass_success_allowed_opp",
+          "def_rush_epa",
+          "def_rush_epa_opp",
+          "def_rush_epa_z",
+          "def_rush_epa_z_opp",
+          "def_sack_rate",
+          "def_sack_rate_opp",
+          "def_sack_rate_z",
+          "def_sack_rate_z_opp",
+          "def_sacks",
+          "def_sacks_opp",
+          "def_ypa_allowed",
+          "def_ypa_allowed_opp",
+          "explosive_play_rate_allowed",
+          "explosive_play_rate_allowed_opp",
+          "explosive_play_rate_allowed_z",
+          "explosive_play_rate_allowed_z_opp",
+          "heavy_box_rate",
+          "heavy_box_rate_opp",
+          "heavy_box_rate_sharp",
+          "heavy_box_rate_sharp_opp",
+          "heavy_box_rate_z",
+          "heavy_box_rate_z_opp",
+          "light_box_rate",
+          "light_box_rate_opp",
+          "light_box_rate_sharp",
+          "light_box_rate_sharp_opp",
+          "light_box_rate_z",
+          "light_box_rate_z_opp",
+          "middle_closed_rate",
+          "middle_closed_rate_opp",
+          "middle_open_rate",
+          "middle_open_rate_opp",
+          "neutral_pace",
+          "neutral_pace_opp",
+          "neutral_pace_score",
+          "neutral_pace_score_opp",
+          "neutral_pace_true",
+          "neutral_pace_true_opp",
+          "no_blitz_pressure_rate",
+          "no_blitz_pressure_rate_allowed",
+          "no_blitz_pressure_rate_allowed_opp",
+          "no_blitz_pressure_rate_opp",
           "opponent",
+          "pace",
+          "pace_neutral_z",
+          "pace_neutral_z_opp",
+          "pace_opp",
           "pass_rate_over_expected_opp",
           "pass_rate_over_expected_prior",
           "pass_rate_over_expected_prior_opp",
@@ -3741,23 +5247,74 @@
           "player",
           "player_clean_key",
           "position",
+          "pressure_rate",
+          "pressure_rate_allowed",
+          "pressure_rate_allowed_opp",
+          "pressure_rate_generated",
+          "pressure_rate_generated_opp",
+          "pressure_rate_opp",
           "prior_games",
+          "prior_proe_plays",
+          "prior_proe_plays_opp",
+          "proe",
+          "proe_opp",
+          "proe_z",
+          "proe_z_opp",
           "role",
           "rush_share",
           "rush_share_current",
           "rush_share_prior",
+          "rush_stuff_rate_x",
+          "rush_stuff_rate_x_opp",
+          "rush_stuff_rate_y",
+          "rush_stuff_rate_y_opp",
           "rz_carry_share",
           "rz_rush_share",
           "rz_share",
           "rz_tgt_share",
           "season",
           "source",
+          "success_explosive_source",
+          "success_explosive_source_opp",
+          "success_explosive_source_season",
+          "success_explosive_source_season_opp",
+          "success_explosive_target_week",
+          "success_explosive_target_week_opp",
+          "success_rate_def",
+          "success_rate_def_opp",
+          "success_rate_def_z",
+          "success_rate_def_z_opp",
+          "success_rate_diff",
+          "success_rate_diff_opp",
+          "success_rate_diff_z",
+          "success_rate_diff_z_opp",
+          "success_rate_off",
+          "success_rate_off_opp",
+          "success_rate_off_z",
+          "success_rate_off_z_opp",
           "target_share",
           "team",
           "tgt_share",
           "tgt_share_current",
           "tgt_share_prior",
-          "week"
+          "true_proe",
+          "true_proe_opp",
+          "volatility_pace_std",
+          "week",
+          "yards_before_contact_per_rb_rush_x",
+          "yards_before_contact_per_rb_rush_x_opp",
+          "yards_before_contact_per_rb_rush_y",
+          "yards_before_contact_per_rb_rush_y_opp",
+          "ypt_allowed_outside",
+          "ypt_allowed_outside_opp",
+          "ypt_allowed_rb",
+          "ypt_allowed_rb_opp",
+          "ypt_allowed_slot",
+          "ypt_allowed_slot_opp",
+          "ypt_allowed_te",
+          "ypt_allowed_te_opp",
+          "ypt_allowed_wr",
+          "ypt_allowed_wr_opp"
         ],
         "path": "data/make_metrics_output.csv"
       },
@@ -4538,10 +6095,74 @@
           "ypt_prior"
         ],
         "columns": 343,
-        "explanatory_columns_matched": 27,
+        "explanatory_columns_matched": 142,
         "matched": [
+          "blitz_rate",
+          "blitz_rate_opp",
+          "blitz_rate_sharp",
+          "blitz_rate_sharp_opp",
+          "coverage_man_rate",
+          "coverage_man_rate_opp_x",
+          "coverage_man_rate_opp_y",
+          "coverage_zone_rate",
+          "coverage_zone_rate_opp_x",
+          "coverage_zone_rate_opp_y",
           "current_games",
+          "def_pass_epa",
+          "def_pass_epa_allowed",
+          "def_pass_epa_allowed_opp",
+          "def_pass_epa_opp",
+          "def_pass_epa_z",
+          "def_pass_epa_z_opp",
+          "def_pass_success_allowed",
+          "def_pass_success_allowed_opp",
+          "def_rush_epa",
+          "def_rush_epa_opp",
+          "def_rush_epa_z",
+          "def_rush_epa_z_opp",
+          "def_sack_rate",
+          "def_sack_rate_opp",
+          "def_sack_rate_z",
+          "def_sack_rate_z_opp",
+          "def_sacks",
+          "def_sacks_opp",
+          "def_ypa_allowed",
+          "def_ypa_allowed_opp",
+          "explosive_play_rate_allowed",
+          "explosive_play_rate_allowed_opp",
+          "explosive_play_rate_allowed_z",
+          "explosive_play_rate_allowed_z_opp",
+          "heavy_box_rate",
+          "heavy_box_rate_opp",
+          "heavy_box_rate_sharp",
+          "heavy_box_rate_sharp_opp",
+          "heavy_box_rate_z",
+          "heavy_box_rate_z_opp",
+          "light_box_rate",
+          "light_box_rate_opp",
+          "light_box_rate_sharp",
+          "light_box_rate_sharp_opp",
+          "light_box_rate_z",
+          "light_box_rate_z_opp",
+          "middle_closed_rate",
+          "middle_closed_rate_opp",
+          "middle_open_rate",
+          "middle_open_rate_opp",
+          "neutral_pace",
+          "neutral_pace_opp",
+          "neutral_pace_score",
+          "neutral_pace_score_opp",
+          "neutral_pace_true",
+          "neutral_pace_true_opp",
+          "no_blitz_pressure_rate",
+          "no_blitz_pressure_rate_allowed",
+          "no_blitz_pressure_rate_allowed_opp",
+          "no_blitz_pressure_rate_opp",
           "opponent",
+          "pace",
+          "pace_neutral_z",
+          "pace_neutral_z_opp",
+          "pace_opp",
           "pass_rate_over_expected_opp",
           "pass_rate_over_expected_prior",
           "pass_rate_over_expected_prior_opp",
@@ -4550,23 +6171,74 @@
           "player",
           "player_clean_key",
           "position",
+          "pressure_rate",
+          "pressure_rate_allowed",
+          "pressure_rate_allowed_opp",
+          "pressure_rate_generated",
+          "pressure_rate_generated_opp",
+          "pressure_rate_opp",
           "prior_games",
+          "prior_proe_plays",
+          "prior_proe_plays_opp",
+          "proe",
+          "proe_opp",
+          "proe_z",
+          "proe_z_opp",
           "role",
           "rush_share",
           "rush_share_current",
           "rush_share_prior",
+          "rush_stuff_rate_x",
+          "rush_stuff_rate_x_opp",
+          "rush_stuff_rate_y",
+          "rush_stuff_rate_y_opp",
           "rz_carry_share",
           "rz_rush_share",
           "rz_share",
           "rz_tgt_share",
           "season",
           "source",
+          "success_explosive_source",
+          "success_explosive_source_opp",
+          "success_explosive_source_season",
+          "success_explosive_source_season_opp",
+          "success_explosive_target_week",
+          "success_explosive_target_week_opp",
+          "success_rate_def",
+          "success_rate_def_opp",
+          "success_rate_def_z",
+          "success_rate_def_z_opp",
+          "success_rate_diff",
+          "success_rate_diff_opp",
+          "success_rate_diff_z",
+          "success_rate_diff_z_opp",
+          "success_rate_off",
+          "success_rate_off_opp",
+          "success_rate_off_z",
+          "success_rate_off_z_opp",
           "target_share",
           "team",
           "tgt_share",
           "tgt_share_current",
           "tgt_share_prior",
-          "week"
+          "true_proe",
+          "true_proe_opp",
+          "volatility_pace_std",
+          "week",
+          "yards_before_contact_per_rb_rush_x",
+          "yards_before_contact_per_rb_rush_x_opp",
+          "yards_before_contact_per_rb_rush_y",
+          "yards_before_contact_per_rb_rush_y_opp",
+          "ypt_allowed_outside",
+          "ypt_allowed_outside_opp",
+          "ypt_allowed_rb",
+          "ypt_allowed_rb_opp",
+          "ypt_allowed_slot",
+          "ypt_allowed_slot_opp",
+          "ypt_allowed_te",
+          "ypt_allowed_te_opp",
+          "ypt_allowed_wr",
+          "ypt_allowed_wr_opp"
         ],
         "path": "data/metrics_ready.csv"
       },
@@ -4653,7 +6325,7 @@
           "ypt"
         ],
         "columns": 29,
-        "explanatory_columns_matched": 9,
+        "explanatory_columns_matched": 10,
         "matched": [
           "opponent",
           "player",
@@ -4662,6 +6334,7 @@
           "rush_share",
           "season",
           "team",
+          "team_coverage_available",
           "tgt_share",
           "week"
         ],
@@ -4758,16 +6431,24 @@
           "wr1_target_mult"
         ],
         "columns": 22,
-        "explanatory_columns_matched": 8,
+        "explanatory_columns_matched": 16,
         "matched": [
           "opponent",
+          "pass_eff_mult",
           "player",
           "position",
+          "rb_rec_target_mult",
           "role",
           "rules_role",
+          "rush_eff_mult",
           "season",
+          "slot_target_mult",
+          "te_target_mult",
           "team",
-          "week"
+          "volatility_mult",
+          "week",
+          "wr1_5_target_mult",
+          "wr1_target_mult"
         ],
         "path": "data/model_rule_diagnostics.csv"
       },
@@ -5163,7 +6844,7 @@
           "ypt_prior"
         ],
         "columns": 409,
-        "explanatory_columns_matched": 38,
+        "explanatory_columns_matched": 162,
         "matched": [
           "bayes_applied",
           "bayes_evidence_state",
@@ -5172,8 +6853,72 @@
           "bayes_rush_share_effective_n",
           "bayes_tgt_share",
           "bayes_tgt_share_effective_n",
+          "blitz_rate",
+          "blitz_rate_opp",
+          "blitz_rate_sharp",
+          "blitz_rate_sharp_opp",
+          "coverage_man_rate",
+          "coverage_man_rate_opp_x",
+          "coverage_man_rate_opp_y",
+          "coverage_zone_rate",
+          "coverage_zone_rate_opp_x",
+          "coverage_zone_rate_opp_y",
           "current_games",
+          "def_pass_epa",
+          "def_pass_epa_allowed",
+          "def_pass_epa_allowed_opp",
+          "def_pass_epa_opp",
+          "def_pass_epa_z",
+          "def_pass_epa_z_opp",
+          "def_pass_success_allowed",
+          "def_pass_success_allowed_opp",
+          "def_rush_epa",
+          "def_rush_epa_opp",
+          "def_rush_epa_z",
+          "def_rush_epa_z_opp",
+          "def_sack_rate",
+          "def_sack_rate_opp",
+          "def_sack_rate_z",
+          "def_sack_rate_z_opp",
+          "def_sacks",
+          "def_sacks_opp",
+          "def_ypa_allowed",
+          "def_ypa_allowed_opp",
+          "explosive_play_rate_allowed",
+          "explosive_play_rate_allowed_opp",
+          "explosive_play_rate_allowed_z",
+          "explosive_play_rate_allowed_z_opp",
+          "heavy_box_rate",
+          "heavy_box_rate_opp",
+          "heavy_box_rate_sharp",
+          "heavy_box_rate_sharp_opp",
+          "heavy_box_rate_z",
+          "heavy_box_rate_z_opp",
+          "light_box_rate",
+          "light_box_rate_opp",
+          "light_box_rate_sharp",
+          "light_box_rate_sharp_opp",
+          "light_box_rate_z",
+          "light_box_rate_z_opp",
+          "middle_closed_rate",
+          "middle_closed_rate_opp",
+          "middle_open_rate",
+          "middle_open_rate_opp",
+          "neutral_pace",
+          "neutral_pace_opp",
+          "neutral_pace_score",
+          "neutral_pace_score_opp",
+          "neutral_pace_true",
+          "neutral_pace_true_opp",
+          "no_blitz_pressure_rate",
+          "no_blitz_pressure_rate_allowed",
+          "no_blitz_pressure_rate_allowed_opp",
+          "no_blitz_pressure_rate_opp",
           "opponent",
+          "pace",
+          "pace_neutral_z",
+          "pace_neutral_z_opp",
+          "pace_opp",
           "pass_rate_over_expected_opp",
           "pass_rate_over_expected_prior",
           "pass_rate_over_expected_prior_opp",
@@ -5182,27 +6927,87 @@
           "player",
           "player_clean_key",
           "position",
+          "pressure_rate",
+          "pressure_rate_allowed",
+          "pressure_rate_allowed_opp",
+          "pressure_rate_generated",
+          "pressure_rate_generated_opp",
+          "pressure_rate_opp",
           "prior_games",
+          "prior_proe_plays",
+          "prior_proe_plays_opp",
+          "proe",
+          "proe_opp",
+          "proe_z",
+          "proe_z_opp",
           "role",
           "rules_applied",
+          "rules_catch_rate",
+          "rules_pass_eff_mult",
+          "rules_pass_rate",
+          "rules_plays_est",
           "rules_role",
+          "rules_rush_eff_mult",
           "rules_rush_share",
           "rules_tgt_share",
+          "rules_volatility_mult",
+          "rules_ypa",
+          "rules_ypc",
+          "rules_ypt",
           "rush_share",
           "rush_share_current",
           "rush_share_prior",
+          "rush_stuff_rate_x",
+          "rush_stuff_rate_x_opp",
+          "rush_stuff_rate_y",
+          "rush_stuff_rate_y_opp",
           "rz_carry_share",
           "rz_rush_share",
           "rz_share",
           "rz_tgt_share",
           "season",
           "source",
+          "success_explosive_source",
+          "success_explosive_source_opp",
+          "success_explosive_source_season",
+          "success_explosive_source_season_opp",
+          "success_explosive_target_week",
+          "success_explosive_target_week_opp",
+          "success_rate_def",
+          "success_rate_def_opp",
+          "success_rate_def_z",
+          "success_rate_def_z_opp",
+          "success_rate_diff",
+          "success_rate_diff_opp",
+          "success_rate_diff_z",
+          "success_rate_diff_z_opp",
+          "success_rate_off",
+          "success_rate_off_opp",
+          "success_rate_off_z",
+          "success_rate_off_z_opp",
           "target_share",
           "team",
           "tgt_share",
           "tgt_share_current",
           "tgt_share_prior",
-          "week"
+          "true_proe",
+          "true_proe_opp",
+          "volatility_pace_std",
+          "week",
+          "yards_before_contact_per_rb_rush_x",
+          "yards_before_contact_per_rb_rush_x_opp",
+          "yards_before_contact_per_rb_rush_y",
+          "yards_before_contact_per_rb_rush_y_opp",
+          "ypt_allowed_outside",
+          "ypt_allowed_outside_opp",
+          "ypt_allowed_rb",
+          "ypt_allowed_rb_opp",
+          "ypt_allowed_slot",
+          "ypt_allowed_slot_opp",
+          "ypt_allowed_te",
+          "ypt_allowed_te_opp",
+          "ypt_allowed_wr",
+          "ypt_allowed_wr_opp"
         ],
         "path": "data/model_rule_simulation_inputs.csv"
       },
@@ -5727,10 +7532,13 @@
           "ypt_game"
         ],
         "columns": 176,
-        "explanatory_columns_matched": 13,
+        "explanatory_columns_matched": 16,
         "matched": [
           "air_yards_share",
           "carries",
+          "def_pass_defended",
+          "def_sack_yards",
+          "def_sacks",
           "opponent",
           "player",
           "player_clean_key",
@@ -6277,10 +8085,19 @@
           "week"
         ],
         "columns": 27,
-        "explanatory_columns_matched": 3,
+        "explanatory_columns_matched": 12,
         "matched": [
+          "def_pass_epa_allowed",
+          "def_pass_success_allowed",
+          "def_ypa_allowed",
+          "neutral_pace",
+          "neutral_pace_true",
+          "pressure_rate_allowed",
+          "pressure_rate_generated",
+          "proe",
           "season",
           "team",
+          "true_proe",
           "week"
         ],
         "path": "data/qb_promoted_team_context.csv"
@@ -6571,9 +8388,14 @@
           "ypt_allowed_wr"
         ],
         "columns": 7,
-        "explanatory_columns_matched": 1,
+        "explanatory_columns_matched": 6,
         "matched": [
-          "team"
+          "team",
+          "ypt_allowed_outside",
+          "ypt_allowed_rb",
+          "ypt_allowed_slot",
+          "ypt_allowed_te",
+          "ypt_allowed_wr"
         ],
         "path": "data/sharp_coverage_pos_2026.csv"
       },
@@ -6587,8 +8409,10 @@
           "team_raw"
         ],
         "columns": 6,
-        "explanatory_columns_matched": 1,
+        "explanatory_columns_matched": 3,
         "matched": [
+          "middle_closed_rate",
+          "middle_open_rate",
           "team"
         ],
         "path": "data/sharp_coverage_scheme_2026.csv"
@@ -6603,8 +8427,11 @@
           "team_raw"
         ],
         "columns": 6,
-        "explanatory_columns_matched": 1,
+        "explanatory_columns_matched": 4,
         "matched": [
+          "blitz_rate",
+          "heavy_box_rate",
+          "light_box_rate",
           "team"
         ],
         "path": "data/sharp_def_tend_2026.csv"
@@ -6619,9 +8446,13 @@
           "yards_before_contact_per_rb_rush"
         ],
         "columns": 6,
-        "explanatory_columns_matched": 1,
+        "explanatory_columns_matched": 5,
         "matched": [
-          "team"
+          "no_blitz_pressure_rate",
+          "pressure_rate",
+          "rush_stuff_rate",
+          "team",
+          "yards_before_contact_per_rb_rush"
         ],
         "path": "data/sharp_dl_2026.csv"
       },
@@ -6653,9 +8484,13 @@
           "yards_before_contact_per_rb_rush"
         ],
         "columns": 7,
-        "explanatory_columns_matched": 1,
+        "explanatory_columns_matched": 5,
         "matched": [
-          "team"
+          "no_blitz_pressure_rate_allowed",
+          "pressure_rate_allowed",
+          "rush_stuff_rate",
+          "team",
+          "yards_before_contact_per_rb_rush"
         ],
         "path": "data/sharp_ol_2026.csv"
       },
@@ -6675,8 +8510,9 @@
           "time_of_possession"
         ],
         "columns": 12,
-        "explanatory_columns_matched": 1,
+        "explanatory_columns_matched": 2,
         "matched": [
+          "neutral_pace",
           "team"
         ],
         "path": "data/sharp_pace_2026.csv"
@@ -6732,11 +8568,33 @@
           "ypt_allowed_wr"
         ],
         "columns": 47,
-        "explanatory_columns_matched": 3,
+        "explanatory_columns_matched": 25,
         "matched": [
+          "blitz_rate",
+          "coverage_man_rate",
+          "coverage_zone_rate",
+          "heavy_box_rate",
+          "light_box_rate",
+          "middle_closed_rate",
+          "middle_open_rate",
+          "neutral_pace",
+          "no_blitz_pressure_rate",
+          "no_blitz_pressure_rate_allowed",
           "pass_rate_over_expected_prior",
           "pass_rate_over_expected_source",
-          "team"
+          "pressure_rate",
+          "pressure_rate_allowed",
+          "prior_proe_plays",
+          "rush_stuff_rate_x",
+          "rush_stuff_rate_y",
+          "team",
+          "yards_before_contact_per_rb_rush_x",
+          "yards_before_contact_per_rb_rush_y",
+          "ypt_allowed_outside",
+          "ypt_allowed_rb",
+          "ypt_allowed_slot",
+          "ypt_allowed_te",
+          "ypt_allowed_wr"
         ],
         "path": "data/sharp_team_form.csv"
       },
@@ -6922,10 +8780,31 @@
           "week"
         ],
         "columns": 45,
-        "explanatory_columns_matched": 3,
+        "explanatory_columns_matched": 24,
         "matched": [
+          "coverage_man_rate",
+          "coverage_zone_rate",
+          "def_pass_epa",
+          "def_pass_epa_allowed",
+          "def_pass_success_allowed",
+          "def_rush_epa",
+          "def_ypa_allowed",
+          "explosive_play_rate_allowed",
+          "heavy_box_rate",
+          "light_box_rate",
+          "middle_open_rate",
+          "neutral_pace",
+          "neutral_pace_last5",
+          "neutral_pace_true",
+          "pressure_rate_allowed",
+          "pressure_rate_generated",
+          "proe",
           "season",
+          "success_rate_def",
+          "success_rate_diff",
+          "success_rate_off",
           "team",
+          "true_proe",
           "week"
         ],
         "path": "data/team_context_v3.csv"
@@ -7063,12 +8942,68 @@
           "ypt_allowed_wr"
         ],
         "columns": 110,
-        "explanatory_columns_matched": 4,
+        "explanatory_columns_matched": 60,
         "matched": [
+          "blitz_rate",
+          "blitz_rate_sharp",
+          "coverage_man_rate",
+          "coverage_zone_rate",
+          "def_pass_epa",
+          "def_pass_epa_allowed",
+          "def_pass_epa_z",
+          "def_pass_success_allowed",
+          "def_rush_epa",
+          "def_rush_epa_z",
+          "def_sack_rate",
+          "def_sack_rate_z",
+          "def_sacks",
+          "def_ypa_allowed",
+          "explosive_play_rate_allowed",
+          "explosive_play_rate_allowed_z",
+          "heavy_box_rate",
+          "heavy_box_rate_sharp",
+          "heavy_box_rate_z",
+          "light_box_rate",
+          "light_box_rate_sharp",
+          "light_box_rate_z",
+          "middle_closed_rate",
+          "middle_open_rate",
+          "neutral_pace",
+          "neutral_pace_score",
+          "neutral_pace_true",
+          "no_blitz_pressure_rate",
+          "no_blitz_pressure_rate_allowed",
+          "pace",
+          "pace_neutral_z",
           "pass_rate_over_expected_prior",
           "pass_rate_over_expected_source",
+          "pressure_rate",
+          "pressure_rate_allowed",
+          "pressure_rate_generated",
+          "prior_proe_plays",
+          "proe",
+          "proe_z",
+          "rush_stuff_rate_x",
+          "rush_stuff_rate_y",
           "season",
-          "team"
+          "success_explosive_source",
+          "success_explosive_source_season",
+          "success_explosive_target_week",
+          "success_rate_def",
+          "success_rate_def_z",
+          "success_rate_diff",
+          "success_rate_diff_z",
+          "success_rate_off",
+          "success_rate_off_z",
+          "team",
+          "true_proe",
+          "yards_before_contact_per_rb_rush_x",
+          "yards_before_contact_per_rb_rush_y",
+          "ypt_allowed_outside",
+          "ypt_allowed_rb",
+          "ypt_allowed_slot",
+          "ypt_allowed_te",
+          "ypt_allowed_wr"
         ],
         "path": "data/team_form.csv"
       },
@@ -7141,8 +9076,9 @@
           "week"
         ],
         "columns": 5,
-        "explanatory_columns_matched": 2,
+        "explanatory_columns_matched": 3,
         "matched": [
+          "pace_std",
           "team",
           "week"
         ],
@@ -7214,13 +9150,17 @@
           "zone_rate"
         ],
         "columns": 22,
-        "explanatory_columns_matched": 5,
+        "explanatory_columns_matched": 9,
         "matched": [
+          "man_rate",
           "opponent",
           "player",
           "season",
           "team",
-          "week"
+          "team_coverage_available",
+          "team_coverage_source",
+          "week",
+          "zone_rate"
         ],
         "path": "data/wr_cb_exposure.csv"
       },
