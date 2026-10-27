@@ -140,6 +140,67 @@ GATE_SPECS = {
 }
 
 
+def derive_gate_specs_from_source() -> dict[str, tuple[tuple[str, float], ...]]:
+    """Derive the gate table from `rules_v2.matchup_multipliers` source.
+
+    Audit 6445801491 noted that GATE_SPECS was a hand-authored mirror and that
+    the zone-route test checked the mirror rather than production. This parses
+    the real function -- the `var = _num(defense.attr)` bindings, then each
+    `if var OP threshold:` block and the `values["mult"] *= factor` lines inside
+    it -- so the mirror becomes a verified contract instead of an assertion.
+    """
+    src = Path("scripts/modeling/rules_v2.py").read_text(encoding="utf-8")
+    body = src.split("def matchup_multipliers(", 1)[1].split(
+        "\n    return MatchupMultipliers(", 1)[0]
+    binding = dict(re.findall(
+        r"^\s*(\w+)\s*=\s*_num\(defense\.(\w+)\)", body, re.M))
+    # pressure comes from a helper rather than a defense attribute
+    if re.search(r"^\s*pressure\s*=\s*offensive_pressure_mismatch\(",
+                 body, re.M):
+        binding["pressure"] = "pressure_mismatch"
+    out: dict[str, list[tuple[str, float]]] = {}
+    for var, op, thr, block in re.findall(
+            r"^\s*(?:el)?if\s+(\w+)\s*(>=|>|<=|<)\s*([\d.]+)\s*:\n"
+            r"((?:\s{8,}.*\n)+)", body, re.M):
+        attr = binding.get(var)
+        if attr is None:
+            continue
+        cond = f"{attr} {op} {float(thr):g}"
+        for mult, factor in re.findall(
+                r'values\["(\w+)"\]\s*\*=\s*([\d.]+)', block):
+            out.setdefault(mult, []).append((cond, float(factor)))
+    return {k: tuple(v) for k, v in out.items()}
+
+
+def _canon_gate(cond: str, factor: float) -> tuple[str, str, float, float]:
+    """Normalize a gate so the comparison is semantic, not textual.
+
+    The mirror writes `>= 0.60` and the source formats `>= 0.6`; those are the
+    same gate, so compare parsed numbers rather than strings.
+    """
+    m = re.match(r"^(\w+)\s*(>=|>|<=|<)\s*(-?[\d.]+)$", cond.strip())
+    if not m:
+        raise RuntimeError(f"ungrammatical gate condition {cond!r}")
+    return (m.group(1), m.group(2), float(m.group(3)), round(float(factor), 9))
+
+
+def assert_gate_specs_match_source() -> dict:
+    """Fail closed if the hand mirror drifts from production."""
+    derived = derive_gate_specs_from_source()
+    mismatch = {}
+    for mult, gates in GATE_SPECS.items():
+        d = derived.get(mult)
+        want = sorted(_canon_gate(c, f) for c, f in gates)
+        got = sorted(_canon_gate(c, f) for c, f in d) if d else None
+        if got != want:
+            mismatch[mult] = {"mirror": want, "source": got}
+    if mismatch:
+        raise RuntimeError(
+            f"GATE_SPECS no longer matches rules_v2 source: {mismatch}")
+    return {"gate_specs_verified_against_source": True,
+            "source_derived_multipliers": sorted(derived)}
+
+
 def decode_gates(observed: dict[str, float], tol: float = 1e-9) -> dict:
     """Recover the gate state from observed rule-layer multipliers.
 
@@ -273,6 +334,56 @@ def eligible_gates(role: str, position: str) -> tuple[str, tuple[str, ...]]:
     return ("", ())
 
 
+def _not_established(decoded: dict) -> list[str]:
+    """Build the open-questions list FROM the decode, never beside it."""
+    items = [
+        "total opponent attribution to the final receiving mean -- the traced "
+        "chain is the target-share path only; YPT, game script and mean "
+        "construction are not accounted for",
+        "how often any gate fires league-wide",
+        "whether consuming the stranded ypt_allowed_* family would improve any "
+        "projection",
+    ]
+    gs = decoded.get("gate_state", {})
+    undecoded = [g for g, v in gs.items() if v == "CONTRADICTION"]
+    if undecoded or not gs:
+        items.insert(0, f"gate state for {undecoded or 'all gates'}")
+    else:
+        items.insert(0, (
+            "the gate decode's residual premise -- that no traced row carried "
+            "injury redistribution or limitation. Evidenced by the uniform "
+            "exact ratios, not proven. The decode is a source-conditioned "
+            "inverse reconstruction, NOT a reading of preserved "
+            "coverage_*_rate values."))
+    pe = decoded.get("derived_consequences", {}).get("pass_eff_mult_bound")
+    items.insert(1, (
+        f"shared pass_eff_mult EXACTLY -- bounded to {pe}, not observed; "
+        "rules_pass_eff_mult is emitted by production but was not preserved")
+        if isinstance(pe, list) else "shared pass_eff_mult movement")
+    return items
+
+
+def _self_consistency(decoded: dict) -> dict:
+    """Assert the sidecar's own claims agree before it is written."""
+    gs = decoded.get("gate_state", {})
+    decided = {g: v for g, v in gs.items() if v != "CONTRADICTION"}
+    ne = " ".join(_not_established(decoded)).lower()
+    problems = []
+    for g in decided:
+        if f"whether any te/rb coverage or pressure gate fired" in ne:
+            problems.append("not_established still calls decoded gates unknown")
+        if g.lower() in ne and "residual premise" not in ne:
+            problems.append(f"{g} listed as unknown while decoded")
+    if "pass_eff_mult movement" in " ".join(_not_established(decoded)) and \
+            isinstance(decoded.get("derived_consequences", {})
+                       .get("pass_eff_mult_bound"), list):
+        problems.append("pass_eff_mult called unbounded while bounded")
+    if problems:
+        raise RuntimeError(f"status sidecar contradicts itself: {problems}")
+    return {"checked": True, "decoded_gates": sorted(decided),
+            "contradictions": []}
+
+
 def build(u: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     sea = u.loc[u["team"].eq("SEA")
                 & u["position"].isin(["WR", "SWR", "TE", "RB", "FB"])].copy()
@@ -386,6 +497,7 @@ def build(u: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
                        "opponent, roles vary. Walker is the KC back facing SEA "
                        "in the same game and is not re-examined."),
         "routing_source_checks": assert_routing_matches_source(),
+        "gate_spec_source_contract": assert_gate_specs_match_source(),
         "THE_ROUTING_ASYMMETRY": (
             "in simulation_rules.py the WR branches key on the COMPUTED role "
             "label while the TE and RB branches key on POSITION. So every TE "
@@ -415,6 +527,22 @@ def build(u: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             "labelled WR1_5 and Cooper Kupp. So the role ranking and the "
             "allocated share are keyed on different quantities."),
         "kupp_exclusion_is_structural_not_circumstantial": True,
+        "KUPP_EXCLUSION_HAD_NO_REALIZED_COVERAGE_EFFECT_THIS_WEEK": (
+            "audit 6445801491 correction. Both labelled WR multipliers were "
+            "1.000 because the man gate did not fire, and no WR role reads "
+            "zone. So had Kupp been labelled WR1 or WR1_5 in this same frozen "
+            "gate state, his direct coverage-target multiplier would ALSO have "
+            "been 1.000. His unlabelled status is therefore STRUCTURAL "
+            "ELIGIBILITY EXPOSURE WITH ZERO REALIZED DIRECT COVERAGE EFFECT in "
+            "this matchup -- a missing potential channel, not an additional "
+            "numeric penalty. An earlier version said 'reduced twice over' and "
+            "called the exclusion 'not academic this week'; both overstated it."),
+        "M38_REDUCTION_IS_NOT_AN_OPPONENT_EFFECT": (
+            "Kupp's -28.0% is observed and real, but the WR hierarchy "
+            "sharpening stage is keyed on WR rank, NOT on the defense. It must "
+            "not be attributed to the KC zone gate or to any opponent context. "
+            "Both consequences follow from his rank; only one is an opponent "
+            "channel, and that one had no realized effect this week."),
         "gate_firing": {
             "man_coverage_gate_fired_for_KC": man_gate_fired,
             "man_gate_argument": ("WR1 takes x0.95 and WR1_5 x1.15, so a fired "
@@ -464,13 +592,11 @@ def build(u: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             "a larger rules_tgt_share than Cooper Kupp. That is the "
             "zero-history entitlement defect, which the audit requires be kept "
             "a distinct cause. It is recorded here only as an observation."),
-        "not_established": [
-            "whether any TE/RB coverage or pressure gate fired",
-            "shared pass_eff_mult movement",
-            "how often any gate fires league-wide",
-            "whether consuming the stranded ypt_allowed_* family would improve "
-            "any projection",
-        ],
+        # Audit 6445801491 found this list contradicting gate_decode. It is
+        # now derived from the decode so the sidecar cannot disagree with
+        # itself, and a test asserts the agreement.
+        "not_established": _not_established(decoded),
+        "sidecar_self_consistency": _self_consistency(decoded),
     }
     return out, status
 
@@ -510,9 +636,12 @@ def main() -> int:
           "on the ranking key and is")
     print("therefore ineligible for EVERY opponent-coverage target gate, while")
     print("SEA's third-string tight end is eligible by position.\n")
-    print(f"man-coverage gate fired for KC: "
-          f"{status['gate_firing']['man_coverage_gate_fired_for_KC']}")
-    print(f"TE/RB gates: {status['gate_firing']['te_and_rb_gates_fired']}")
+    print("DECODED KC gate state (source-conditioned inverse reconstruction,")
+    print("not a reading of preserved coverage_*_rate values):")
+    for g, v in sorted(status["gate_decode"]["gate_state"].items()):
+        print(f"   {g:34s} {'FIRED' if v is True else v}")
+    print(f"   cross-group consistent: "
+          f"{status['gate_decode']['cross_group_consistent']}")
     print("\nNo coefficient, threshold or sign is selected here.")
     return 0
 

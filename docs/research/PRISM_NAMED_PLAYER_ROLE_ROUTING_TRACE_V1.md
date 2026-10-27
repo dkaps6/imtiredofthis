@@ -1,7 +1,9 @@
 # PRISM — Named-Player Role-Routing Trace V1 (JSN / Kupp / Barner)
 
 **Status:** read-only role-routing trace. **No fitting, no scoring, no promotion.**
-**Revised per:** GPT audit `6445134492`
+**Revised per:** GPT audits `6445134492` and `6445801491`
+(`NAMED_PLAYER_ROLE_ROUTING_MECHANISM_AND_ALLOCATOR_SUPPORTED__V2_FINAL_WORDING_AND_SIDECAR_CONSISTENCY_FIX_REQUIRED`).
+**Earlier revision per:** GPT audit `6445134492`
 (`NAMED_PLAYER_ROLE_ROUTING_CORE_SUPPORTED__FULL_OPPONENT_ATTRIBUTION_TRACE_REVISION_REQUIRED`)
 — core role-routing finding SUPPORTED, three blockers fixed below.
 **Authorized by:** GPT audit `6441088661`
@@ -133,7 +135,8 @@ the gate state recoverable:
 | `wr1_5_target_mult` | **1.000**, 1.150 | **1.000** | man did **not** fire |
 
 Every role's products are distinct, so an exact match identifies the state
-uniquely. The shared booleans are decoded **independently by separate position
+uniquely. **This is a source-conditioned inverse reconstruction, not a reading
+of preserved `coverage_*_rate` values** — those were not preserved. The shared booleans are decoded **independently by separate position
 groups** — `coverage_zone_rate` by both TE and RB, `coverage_man_rate` by both
 WR1 and WR1_5 — and they agree, which is corroboration rather than a
 single-group inference.
@@ -168,8 +171,17 @@ of them reads `coverage_zone_rate`. Only `te_target_mult` and
 In Week 7 Kansas City's zone gate **fired**. So zone coverage — the most common
 coverage family in the league — moved every Seattle tight end by **×1.265** and
 every running back and the fullback by **×1.200**, and could not move a single
-wide receiver. V1 reported the WR zero without noting that the defense was in a
-configuration which paid out to every position-routed player on the roster.
+wide receiver. That is an **architectural** asymmetry between the WR route and
+the TE/RB routes.
+
+**It is not a Kupp-specific penalty, and an earlier version of this document
+wrongly implied it was.** Both labeled WR multipliers were **1.000** because the
+man gate did not fire. Had Kupp been labeled WR1 or WR1_5 in this same frozen
+gate state, his direct coverage-target multiplier would **also** have been
+1.000. His unlabeled status is therefore **structural eligibility exposure with
+zero realized direct coverage effect in this matchup** — a missing potential
+channel, not an additional numeric penalty. The claim that his exclusion was
+"not academic this week" is withdrawn.
 
 ## Fields 7 and 10 — the real allocator chain
 
@@ -187,8 +199,17 @@ Not inferred from a ratio. The preserved chain is
 
 **The WR hierarchy stage touches only WRs** — every TE and RB value is identical
 pre- and post-M38 — and it moves share away from the non-top receivers toward
-JSN. So Cooper Kupp is reduced twice over: he collects no coverage multiplier at
-the rule layer, and the sharpening stage then takes 28.0% of his share.
+JSN.
+
+**This is NOT an opponent effect and must not be attributed to the zone gate.**
+The sharpening stage is keyed on WR rank, not on the defense. Kupp's **−28.0% is
+the only realized reduction** in this matchup; his coverage-route exclusion
+produced nothing numerically here, because the labeled WRs also received 1.000.
+
+Both consequences do follow from his rank — rank decides coverage eligibility
+*and* sharpening position — but only one of them is an opponent channel, and
+that one was inert this week. An earlier version said "reduced twice over",
+which conflated a missing potential channel with an actual adjustment.
 
 Team mass is conserved exactly: `rules` and `post_m38` both sum to
 **1.601148605998**, and the entitlement room closes at **0.950000** with a
@@ -205,6 +226,9 @@ Team mass is conserved exactly: `rules` and `post_m38` both sum to
   target-share path; YPT, game script and downstream mean construction are not
   accounted for here.
 - **How often any gate fires league-wide.**
+- **CI verification.** The quoted test count is a local run; no check-run is
+  recorded for this exact SHA, so it is a stated local result rather than
+  independently CI-verified.
 - **Whether consuming the stranded `ypt_allowed_*` family would improve any
   projection.** Untested; must not be scored on Week 7.
 
@@ -216,6 +240,23 @@ defect**, which the audit requires be kept a distinct cause. It is recorded here
 as an observation only and is not merged into the routing finding.
 
 ## Method validity
+
+`assert_gate_specs_match_source()` **derives** the gate table by parsing
+`rules_v2.matchup_multipliers` — the `_num(defense.attr)` bindings, each
+`if var OP threshold:` block and the `values["mult"] *= factor` lines inside it
+— and raises if the hand-authored `GATE_SPECS` mirror disagrees semantically
+(thresholds compared as numbers, so `0.60` and `0.6` are the same gate). Audit
+`6445801491` correctly objected that the zone-route test checked the mirror
+rather than production; it now checks a mirror that is itself verified against
+production. The derivation independently recovers all ten multipliers, including
+`rb_rush_eff_mult`'s light/heavy-box gates.
+
+The status sidecar's `not_established` list is **generated from** the gate
+decode rather than written beside it, and `_self_consistency()` raises before
+the file is written if the two disagree. Audit `6445801491` found the committed
+V2 sidecar calling the TE/RB gates unknown and `pass_eff_mult` unbounded while
+`gate_decode` had already resolved both — that contradiction can no longer be
+committed.
 
 `assert_routing_matches_source()` **raises** if the WR branches stop keying on
 the role label, if the TE/RB branches stop keying on position, if any multiplier

@@ -1,4 +1,6 @@
 {
+  "KUPP_EXCLUSION_HAD_NO_REALIZED_COVERAGE_EFFECT_THIS_WEEK": "audit 6445801491 correction. Both labelled WR multipliers were 1.000 because the man gate did not fire, and no WR role reads zone. So had Kupp been labelled WR1 or WR1_5 in this same frozen gate state, his direct coverage-target multiplier would ALSO have been 1.000. His unlabelled status is therefore STRUCTURAL ELIGIBILITY EXPOSURE WITH ZERO REALIZED DIRECT COVERAGE EFFECT in this matchup -- a missing potential channel, not an additional numeric penalty. An earlier version said 'reduced twice over' and called the exclusion 'not academic this week'; both overstated it.",
+  "M38_REDUCTION_IS_NOT_AN_OPPONENT_EFFECT": "Kupp's -28.0% is observed and real, but the WR hierarchy sharpening stage is keyed on WR rank, NOT on the defense. It must not be attributed to the KC zone gate or to any opponent context. Both consequences follow from his rank; only one is an opponent channel, and that one had no realized effect this week.",
   "RANKING_KEY_MISMATCH": "_wr_role_labels sorts perimeter WRs by the RAW tgt_share with a 0.0 default, while the quantity production actually scales is bayes_tgt_share. The two disagree. Montorie Foster is the clean case: his raw tgt_share is NaN -> 0.0, so he sorts last and gets no label, yet his bayes posterior (0.165842) is the second largest in the SEA receiving room -- larger than both the labelled WR1_5 and Cooper Kupp. So the role ranking and the allocated share are keyed on different quantities.",
   "THE_ROUTING_ASYMMETRY": "in simulation_rules.py the WR branches key on the COMPUTED role label while the TE and RB branches key on POSITION. So every TE and every RB receives an opponent-coverage target channel by position, but a WR receives one only if _wr_role_labels assigned him SLOT, WR1 or WR1_5 -- that is, slot plus the top two perimeter WRs by target share. Any other WR falls through the whole chain to tgt_mult = 1.0, and no diagnostic records it.",
   "allocator_chain_fields_7_and_10": {
@@ -276,6 +278,21 @@
       "pressure_mismatch > 0.075": false
     }
   },
+  "gate_spec_source_contract": {
+    "gate_specs_verified_against_source": true,
+    "source_derived_multipliers": [
+      "int_mult",
+      "pass_eff_mult",
+      "rb_rec_target_mult",
+      "rb_rush_eff_mult",
+      "sack_mult",
+      "slot_target_mult",
+      "te_target_mult",
+      "volatility_mult",
+      "wr1_5_target_mult",
+      "wr1_target_mult"
+    ]
+  },
   "kupp_exclusion_is_structural_not_circumstantial": true,
   "kupp_exclusion_margin_on_bayes_posterior_for_reference": 0.006077780735336685,
   "kupp_exclusion_margin_on_ranking_key_raw_tgt_share": 0.008205440309804912,
@@ -286,8 +303,9 @@
     "Jaxon Smith-Njigba": "labelled WR1 -> eligible for wr1_target_mult"
   },
   "not_established": [
-    "whether any TE/RB coverage or pressure gate fired",
-    "shared pass_eff_mult movement",
+    "the gate decode's residual premise -- that no traced row carried injury redistribution or limitation. Evidenced by the uniform exact ratios, not proven. The decode is a source-conditioned inverse reconstruction, NOT a reading of preserved coverage_*_rate values.",
+    "shared pass_eff_mult EXACTLY -- bounded to ['1.00', '1.01'], not observed; rules_pass_eff_mult is emitted by production but was not preserved",
+    "total opponent attribution to the final receiving mean -- the traced chain is the target-share path only; YPT, game script and mean construction are not accounted for",
     "how often any gate fires league-wide",
     "whether consuming the stranded ypt_allowed_* family would improve any projection"
   ],
@@ -332,6 +350,16 @@
   },
   "scientific_boundary": "READ_ONLY_ROLE_ROUTING_TRACE_NO_FITTING_NO_SCORING",
   "separate_defect_not_merged": "Montorie Foster is position_prior_only (zero history) and carries a larger rules_tgt_share than Cooper Kupp. That is the zero-history entitlement defect, which the audit requires be kept a distinct cause. It is recorded here only as an observation.",
+  "sidecar_self_consistency": {
+    "checked": true,
+    "contradictions": [],
+    "decoded_gates": [
+      "coverage_man_rate >= 0.50",
+      "coverage_zone_rate >= 0.60",
+      "middle_open_rate >= 0.50",
+      "pressure_mismatch > 0.075"
+    ]
+  },
   "sportsbook_inputs_used": 0,
   "version": "NAMED_PLAYER_ROLE_ROUTING_TRACE_V1",
   "walker_redone": false,

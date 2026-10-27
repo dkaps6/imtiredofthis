@@ -10,8 +10,12 @@ import pytest
 from scripts.research.trace_named_player_role_routing_v1 import (
     GATE_SPECS,
     ROUTING,
+    _not_established,
+    _self_consistency,
     allocator_chain,
+    assert_gate_specs_match_source,
     decode_gates,
+    derive_gate_specs_from_source,
     assert_routing_matches_source,
     build,
     eligible_gates,
@@ -77,8 +81,62 @@ def test_a_contradictory_decode_is_reported_not_hidden():
     assert d["cross_group_consistent"] is False
 
 
+def test_gate_specs_are_verified_against_production_source():
+    """The mirror must be a contract, not an assertion (audit 6445801491)."""
+    c = assert_gate_specs_match_source()
+    assert c["gate_specs_verified_against_source"] is True
+    derived = derive_gate_specs_from_source()
+    # the derivation must recover production's whole multiplier set
+    assert {"te_target_mult", "rb_rec_target_mult", "wr1_target_mult",
+            "wr1_5_target_mult", "slot_target_mult", "pass_eff_mult",
+            "volatility_mult", "rb_rush_eff_mult"} <= set(derived)
+
+
+def test_source_contract_raises_when_a_threshold_moves(tmp_path, monkeypatch):
+    src = Path("scripts/modeling/rules_v2.py").read_text(encoding="utf-8")
+    broken = src.replace("if zone >= 0.60:", "if zone >= 0.45:", 1)
+    assert broken != src
+    d = tmp_path / "scripts" / "modeling"
+    d.mkdir(parents=True)
+    (d / "rules_v2.py").write_text(broken, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(RuntimeError, match="no longer matches"):
+        assert_gate_specs_match_source()
+
+
+def test_not_established_cannot_contradict_the_decode():
+    """Audit 6445801491: the committed sidecar contradicted itself."""
+    decoded = decode_gates({"te_target_mult": 1.265,
+                            "rb_rec_target_mult": 1.200,
+                            "wr1_target_mult": 1.0, "wr1_5_target_mult": 1.0})
+    ne = " ".join(_not_established(decoded))
+    assert "whether any TE/RB coverage or pressure gate fired" not in ne
+    assert "bounded to ['1.00', '1.01']" in ne or "bounded to" in ne
+    assert "residual premise" in ne
+    assert _self_consistency(decoded)["contradictions"] == []
+
+
+@pytest.mark.skipif(not UNIV.exists(), reason="week7 universe not present")
+def test_kupp_exclusion_is_not_claimed_as_a_realized_penalty():
+    """Audit 6445801491 correction 1, pinned so it cannot regress."""
+    _, status = build(pd.read_csv(UNIV, low_memory=False))
+    assert "ZERO REALIZED DIRECT COVERAGE EFFECT" in status[
+        "KUPP_EXCLUSION_HAD_NO_REALIZED_COVERAGE_EFFECT_THIS_WEEK"]
+    assert "not an additional" in status[
+        "KUPP_EXCLUSION_HAD_NO_REALIZED_COVERAGE_EFFECT_THIS_WEEK"]
+    # M38 must not be attributed to the opponent
+    assert "NOT on the defense" in status[
+        "M38_REDUCTION_IS_NOT_AN_OPPONENT_EFFECT"]
+    doc = Path("docs/research/"
+               "PRISM_NAMED_PLAYER_ROLE_ROUTING_TRACE_V1.md").read_text(
+                   encoding="utf-8")
+    assert "reduced twice over: he collects" not in doc
+    assert 'not academic this week" is withdrawn' in doc
+
+
 def test_no_wr_role_reads_zone_coverage():
-    """The finding V1 obscured, pinned against the gate spec."""
+    """The finding V1 obscured, pinned against the SOURCE-VERIFIED spec."""
+    assert_gate_specs_match_source()
     for mult in ("wr1_target_mult", "wr1_5_target_mult", "slot_target_mult"):
         gates = [g for g, _ in GATE_SPECS[mult]]
         assert not any("zone" in g for g in gates), (
