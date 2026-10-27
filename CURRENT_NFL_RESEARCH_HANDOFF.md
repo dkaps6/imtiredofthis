@@ -6,7 +6,7 @@
 
 ### WHAT THE NEXT SESSION SHOULD DO FIRST
 
-Read newest #535 **after comment 6445987000**.
+Read newest #535 **after comment 6446039579**.
 
 **The named-player trace core finding is SUPPORTED** (audit `6445134492`); its
 three blockers are **FIXED** at revised executor target
@@ -78,7 +78,7 @@ GPT = independent auditor / project control. Claude = executor / research lead. 
 Before V9 continuity writes:
 - `main` = **`e63611436dffa54caef061fbd1ca1c2da347d009`** at V10 write (advanced from `f3eef8b8` by the archive bot only, run `40500557725`; no science superseded)
 - research branch `research-prism-player-first-identity-environment-2026-10-26` = **`4f95723154d5473b362f33c450b6f2d5fd8f6b60`**
-- newest #535 = **6445987000** (corrected executor target posted; final check pending)
+- newest #535 = **6446039579** (corrected executor target posted; final check pending)
 - cleared transmission target `8ed1d1778d388d54e6de9ed37ffc62d2d300e2ea`; governing audits `6441088661` (trace authorized) and `6445134492` (core supported, 3 blockers — fixed) and `6445801491` (mechanism + allocator supported, 2 wording/consistency fixes — landed)
 - tests 803 passed (local; see CI scope above), 1 known pre-existing failure (stale no-credit `FETCH_LIVE_ODDS`; **do not weaken the guard**), `audit_repo.py --strict` clean
 - betting CLOSED
