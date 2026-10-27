@@ -1,15 +1,18 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-27 — V7 — WALKER TRANSMISSION TRACED / OPPONENT RUN DEFENSE CANNOT REACH AN RB RUSHING MEAN / ARCHIVE CONTRACT ON MAIN / NO PREDICTIVE CLEARANCE
+## TOP CHECKPOINT — 2026-10-27 — V8 — WALKER W7 EXACT CASE CLEARED / GENERALIZATION CORRECTED ON SIX POINTS / ARCHIVE CONTRACT ON MAIN / NO PREDICTIVE CLEARANCE
 
 **Model:** PRISM — Player Role & Individual Situation Model
 
 ### WHAT THE NEXT SESSION SHOULD DO FIRST
 
-Read newest #535 (**6432197295**, my transmission report) and await / act on its audit. Walker transmission is **UNBLOCKED and the read-only trace is DONE**. **Do not restate the retracted DEFAULTS figures** (30.4% allocation-moving, 1,730 zero-prior, SEA 1.42) — see RETRACTIONS.
+Read newest #535 (**6432895399**). Walker's W7 exact case is **CLEARED by both re-audits**; the source generalization was **corrected on six points** and the corrections are landed at `8ed1d177`. **Do not restate the retracted DEFAULTS figures** (30.4% allocation-moving, 1,730 zero-prior, SEA 1.42) **or the six withdrawn transmission overclaims** — see RETRACTIONS.
+
+**Open question for the auditor, not for you to decide alone:** the two GPT chats disagree on named-player work (`6432370310` wants a compact JSN/Kupp/Barner trace; `6432388032` thinks it is reconfirmation). My reading, posted for their ruling: role-label assignment is itself an untraced transmission step, so it is a new mechanism question and the two positions reconcile.
 
 Displaced checkpoints, archived verbatim, **not** for resuming:
-`docs/handoffs/NFL_HANDOFF_2026-10-27_V7_ARCHIVED_TOP_FIVE_PART_REPORT_REPRODUCED.md` (V6),
+`docs/handoffs/NFL_HANDOFF_2026-10-27_V8_ARCHIVED_TOP_WALKER_TRACED_PRE_CORRECTION.md` (V7, **contains the six withdrawn overclaims**),
+`..._2026-10-27_V7_ARCHIVED_TOP_FIVE_PART_REPORT_REPRODUCED.md` (V6),
 `..._2026-10-26_V6_ARCHIVED_TOP_MATERIALITY_DECOMPOSED.md` (V5, contains retracted claims),
 `..._V5_ARCHIVED_TOP_IDENTITY_BLOCKERS_REQUIRED.md` (V4),
 `..._V4_ARCHIVED_TOP_AUDIT_PRIORITIES_DONE_REAUDIT_PENDING.md` (V3),
@@ -38,40 +41,39 @@ Before substantive work: read `AGENTS.md`; read only this TOP checkpoint; read t
 
 `main` at checkpoint: **`00a9ae21`** (plus this handoff commit).
 
-Research branch (user-authorized): `research-prism-player-first-identity-environment-2026-10-26` @ **`abebd72b`**
+Research branch (user-authorized): `research-prism-player-first-identity-environment-2026-10-26` @ **`8ed1d177`**
 
-Tests: **773 passed**, 1 known pre-existing failure, 1 skipped (pandas 1.5.3 / numpy 1.26.4). `audit_repo.py --strict` passes.
+Tests: **779 passed**, 1 known pre-existing failure, 1 skipped (pandas 1.5.3 / numpy 1.26.4). `audit_repo.py --strict` passes.
 
-Newest #535: **6432197295**
+Newest #535: **6432895399**
 
-Audit trail: `6425282770` substrate ACCEPTED → `6426366490` BLOCKED on A+B+materiality → `6427513335` A+B fixed → `6427742545` **A+B CLEARED** → `6427971422` DEFAULTS withdrawn → `6428042413` provenance + priced-board objection → `6430580774` five-part report → **`6431984732` WALKER UNBLOCKED, read-only mechanism-first** → `6432197295` trace delivered.
+Audit trail: `6425282770` substrate ACCEPTED → `6426366490` BLOCKED on A+B+materiality → `6427513335` A+B fixed → `6427742545` **A+B CLEARED** → `6427971422` DEFAULTS withdrawn → `6428042413` provenance + priced-board objection → `6430580774` five-part report → **`6431984732` WALKER UNBLOCKED** → `6432197295` trace + `6432265555` addendum → `6432370310` / `6432388032` **W7 CLEARED, generalization needs correction** → `6432895399` all six corrections landed.
 
 **No paid OddsAPI is authorized. Betting remains CLOSED.**
 
-### WALKER OPPONENT/ENVIRONMENT TRANSMISSION — TRACED (NEW IN V7)
+### WALKER OPPONENT/ENVIRONMENT TRANSMISSION — W7 CLEARED, GENERALIZATION CORRECTED
 
-Authorized by `6431984732`. Doc `docs/research/PRISM_OPPONENT_ENVIRONMENT_TRANSMISSION_TRACE_V1.md`; script `scripts/research/trace_opponent_environment_transmission_v1.py`; artifacts `data/research/opponent_transmission/`. Consumes, does not redo, the accepted decomposition @ `cca416bd`.
+Doc `docs/research/PRISM_OPPONENT_ENVIRONMENT_TRANSMISSION_TRACE_V1.md`; script `scripts/research/trace_opponent_environment_transmission_v1.py`; artifacts `data/research/opponent_transmission/`. Consumes, does not redo, the decomposition @ `cca416bd`. **Do not redo Walker.**
 
-**The finding is NOT a Walker finding.** It is established from production source, needs no Week-7 data, and holds for **every RB in every week**: opponent run defense cannot reach an RB's rushing mean on the canonical path. Four independent reasons:
+**CLEARED by both re-audits — the W7 exact case.** For the frozen W7 generic rushing path: Seattle's rush-defense context existed; `def_rush_epa` did not reach Walker's rushing mean; explosive suppression carried but unconsumed; RB YPT/YBC/stuff not wired into the generic player projection; **neither 0.60 box gate fired**; so opponent-caused opportunity, efficiency, mean and sigma movement were exactly **0**; receiving **did** move through the zone-coverage target-share rule.
 
-1. **`ml_v2` and `state_v2` take no opponent input at all.** `ml_v2.FEATURE_COLUMNS` = `hist_games` + `prev_/mean3_/mean5_` of the player's own 13 box stats + 5 position dummies; both read only `player`/`team`/`position` from context and `team` is an identity key. **2 of 4 ensemble components are structurally incapable of expressing an opponent effect** — architectural absence, not weak signal.
-2. **Carried then ignored.** `context_bridge_v3` populates 17 `TeamContext` fields; rules read 13. `def_rush_epa`, `def_pass_epa`, `explosive_play_rate_allowed`, `proe` sit on the very object `matchup_multipliers()` receives and no rule reads them.
-3. **Never referenced anywhere in production:** `rush_stuff_rate`, `yards_before_contact_per_rb_rush`, `ypt_allowed_rb`/`_slot`/`_te`/`_wr`/`_outside`. Built by Sharp Football, stored, never consumed.
-4. **The one live channel is a near-binary gate.** `rules_v2.matchup_multipliers → rb_rush_eff_mult`, applied `simulation_rules.py:231`. `light_box_rate >= 0.60 → ×1.07`; `heavy_box_rate >= 0.60 → ×0.94`. Neither fires → `1.0`.
+**Also CLEARED:** the generic RB rushing path has a very thin opponent interface, and major run-defense families are stranded from it; `ml_v2`/`state_v2` are opponent-blind; the orphaned `pricing_v2` rush-EPA mechanism is not canonical and is not endorsed; `ypt_allowed_*` are not consumed by the production player path.
 
-**Why receiving moved and rushing did not:** gate reachability, not football. The receiving gate (`coverage_zone_rate >= 0.60` → `rb_rec_target_mult ×1.20`) sits inside the league distribution and fired; the box gates sit at its edge. A zone rate ≥60% is an ordinary NFL profile; a *box* rate ≥60% is not.
+**THE CERTIFIED DATAFLOW FINDING** (exact, not inventory): `context_bridge_v3` populates **17** `TeamContext` fields; rules read **13**. `def_rush_epa` and `explosive_play_rate_allowed` are **TRANSPORTED-BUT-STRANDED** — carried onto the very object `matchup_multipliers()` receives, read by no rule. `def_pass_epa` is consumed by `qb_pass_synthesis_v1` (promoted); `proe` by `simulation_v2`.
 
-**QB/RB asymmetry:** `def_pass_epa` IS consumed by `qb_pass_synthesis_v1` (promoted M89/M90), so the QB has an opponent-aware mean. `def_rush_epa`'s only consumer is `pricing_v2._projection` — **orphaned**.
+**What is established about RB rushing, stated at correct strength:**
 
-**Orphaned mechanism, not absent.** `scripts/pricing_v2.py:125-131` already contains `def_rush_epa → rush_yards/rush_att/rush_rec_yards` efficiency multiplier (clip ±0.30, scale 0.25), applied by `_projection`. `run_pricing_v2.py` imports **only** `_fair_market_prob` and `_fair_odds`; `full-slate.yml` never references `pricing_v2`. Written and signed but **unwired** — an integration question, not a modeling one. **NOT endorsed**: that coefficient was never validated on the promoted stack and must not be scored on Week 7.
+> The box gate IS a live opponent → RB rushing mean channel (`rules_ypc = base_ypc * rb_rush_eff_mult`, `simulation_rules.py:231`). **Outside** that gate, the generic RB rushing mean has no opponent run-defense transmission.
 
-**Families kept distinct because they are different channels.** 108 opponent columns reach the player row; 88 football signal; **61 stranded**. A single defense scalar would be wrong on football grounds: explosive suppression is **sigma/right tail** (plausibly connected to the documented P3 high-end ceiling-compression limitation), run-stop is the **mean**, expected game state is **opportunity**. One scalar cannot be right for three channels.
+**`rush_stuff_rate`, `yards_before_contact_per_rb_rush`, `ypt_allowed_*` are referenced by NO production module at all** — built, stored, never consumed.
 
-**Method validity is enforced, not assumed.** Literal-reference tracing is valid only while the learned components declare features statically; the script re-checks and **fails closed** if `ml_v2` stops declaring `FEATURE_COLUMNS` as an explicit tuple, if dynamic selection appears, or if any module builds an `_opp` name at runtime. 15 tests pin it.
+**Ensemble contract:** `COMPONENTS = ("mc_proj", "ml_proj", "state_proj")`. Bayesian v2 is **not** a fourth component (it is inside the MC baseline). So **2 of 3** independent generic components are opponent-blind; **MC can** express opponent effects where a rule exists and fires.
 
-**Two defects in my own first pass, found and fixed before publication:** opponent columns also arrive as `_opp_x`/`_opp_y` merge-collision variants, so matching only `_opp` dropped `coverage_zone_rate` and misreported receiving coverage as fully stranded; and omitting the promoted QB modules made the QB family read as stranded.
+**Role generalization, corrected:** receiving **opportunity** has role-specific gates for every role *represented by the canonical multipliers* — but `_wr_role_labels()` labels slots plus only the top two perimeter WRs by `tgt_share`, so **WR3 and below get no target multiplier at all**. Receiving **efficiency** is NOT opponent-blind: pressure sets `pass_eff_mult` and `simulation_rules.py:230` applies `rules_ypt = base_ypt * pass_eff_mult`; what is absent is any **role-specific** conversion channel from `ypt_allowed_*`. **Sigma**: only the **direct explicit** volatility multiplier is pressure-driven; sigma also moves indirectly (`rec_sd` scales with `rules_ypt` and multinomial target counts), and **promoted QB C2 is a separate opponent-aware distribution route** (selector contract `[pass_opportunity_spot, pass_efficiency_spot, rush_opportunity_spot, rush_efficiency_spot, pred_qb_attempts, week]` from opponent `def_prior_*`). A generic-skill trace must not overwrite promoted QB architecture.
 
-**NOT ESTABLISHED — gate firing frequency.** How often `light/heavy_box_rate >= 0.60` holds is not measured. Production **does** persist the multiplier (`artifact_contracts.py:38` `rush_eff_mult`; `simulation_rules.py:236` `rules_rush_eff_mult`) — checked before blaming production — but **my own** Week-7 preservation filter kept only the column inventory and dropped every opponent value and the multiplier. Answerable from the next live run or a `team_form` rebuild, **not** from the durable archive. **This is a new §5a gap in my preservation script, not in production**; the next preservation run must retain opponent values and `rules_*_mult`.
+**Counts are INVENTORY, not causal:** 108 opponent columns on the player row, 88 football signal, **63 not referenced by any consumer**. These are literal-reference counts; a base-name hit does not prove the opponent-suffixed value is consumed (`proe` is the clearest counterexample). Use the `TeamContext` 17-vs-13 comparison for certified claims.
+
+**NOT ESTABLISHED:** gate firing frequency for ANY gate; whether any threshold is "reachable" or "ordinary" in the league distribution; predictive value of consuming any stranded family. Production **does** persist the multiplier (`artifact_contracts.py:38`; `simulation_rules.py:236`) but **my own** Week-7 preservation filter kept column names and dropped every opponent value — a new §5a gap in my script, not in production. Fix the filter before the next live slate.
 
 ### RETRACTIONS — DO NOT RESTATE THESE AS FINDINGS
 
@@ -82,6 +84,19 @@ Two of my own published claims are withdrawn. Both were caught by audit, not by 
 **2. Using the priced board to bound a football population.** "At most 13 could have entered any allocator" is invalid — a player can move the finite room and never receive a prop. This is the §3 violation. Also retracted: the "36× larger" framing, which compared 464 **card** rows to 13 priced players. The correct football-universe comparison is **34 vs 13 = 2.62x**.
 
 Coincidence to avoid: the audit's 13 rush-top-five admitted rows and the 13 priced fallback players are the same number and different populations.
+
+**3. Six transmission overclaims (V7), withdrawn after re-audit `6432370310`/`6432388032`.** All six were verified against source before acceptance; all six were correct.
+
+| # | withdrawn | correct statement |
+|---|---|---|
+| 1 | `def_rush_epa` "consumed in the player path" | **transported-but-stranded**; transport ≠ consumption |
+| 2 | "2 of 4 ensemble components" | **2 of 3**; Bayesian v2 is inside MC |
+| 3 | "opponent run defense cannot reach an RB rushing mean, every RB every week"; "dead" gate | the box gate **is** live; claim holds only **outside** the gate; no frequency/severity wording |
+| 4 | "opponent reaches per-role efficiency for essentially no one" | receiving YPT moves via shared `pass_eff_mult`; only the **role-specific** channel is absent |
+| 5 | "opponent reaches sigma only through pressure" | only the **direct explicit** multiplier; sigma moves indirectly, and QB C2 is a separate opponent-aware route |
+| 6 | "0.50–0.60 thresholds sit inside ordinary NFL profiles" | **removed**; frequency never measured |
+
+Lesson to carry: I wrote a population-frequency claim two sections after writing NOT ESTABLISHED for the same quantity. **Source code cannot support a frequency statement.**
 
 ### WEEK-7 TRACE SECURED (§5a window used)
 
@@ -169,11 +184,10 @@ QB M89/M90 + C2 active; WR-R15 active; TE-R5P active; RB P3/R22 Week-1-only and 
 
 ### EXACT CURRENT NEXT ACTIONS
 
-1. await / act on the audit of the transmission trace (`6432197295`);
+1. get the auditor's ruling on the named-player disagreement, then run the compact JSN/Kupp/Barner transmission table scoped to: role label assigned, opponent fields present, which gates fire, finite-room effect, teammate-vs-same-defense difference (read-only, no scoring window);
 2. **no predictive or scoring use of the Identity Card or any transmission candidate until cleared**;
-3. representative WR/TE identities (JSN / Kupp / Barner) — test whether the information-loss pattern generalizes by role, read-only;
-4. fix the preservation filter to retain opponent values + `rules_*_mult`, so box-gate reachability becomes measurable on the next live run;
-5. trace the remaining untraced items: hardcoded `pass_share = 0.57`, lead/trail game script;
+3. fix the preservation filter to retain opponent values + `rules_*_mult`, so box-gate reachability becomes measurable on the next live run;
+4. trace the remaining untraced items: hardcoded `pass_share = 0.57`, lead/trail game script;
 6. betting-layer construction V2 spec (direction conflict → PASS, clearance probability, price/EV, exposure caps, probability-aware tier labels);
 7. port the orphan `claude/nice-cori-4qkwqs` tooling file-by-file;
 8. grade Week 7 once the graders are ported.
