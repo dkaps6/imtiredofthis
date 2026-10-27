@@ -54,10 +54,16 @@ man/zone > 1. Those teams are not current opponents, so nothing is wrong today;
 it is a live source-contract defect waiting for a different bye week.
 
 **Also found, not flagged upstream:** `middle_closed_rate` has the identical
-scale problem (W7 min 27.6, med 47.8, max 73.0, 32/32 > 1). No gate reads it
-today, so it is latent — but it shows the bug is **family-level**, not a
-one-field slip. Box rates, by contrast, arrive correctly as fractions
-(`light_box_rate` 0.253–0.606).
+scale problem in `team_form` (W7 min 27.6, med 47.8, max 73.0, 32/32 > 1). It
+shows the bug is **family-level**, not a one-field slip. Box rates, by contrast,
+arrive correctly as fractions (`light_box_rate` 0.253–0.606).
+
+**Scope correction (GPT `6455253348` follow-up 3):** `middle_closed_rate` is in
+`_RATE_FIELDS` but **not** in `LEGACY_CONTEXT_FIELDS`, and Team Context v3 has
+no such column. So this patch would normalize it **if it were ever passed**, but
+it does **not** materialize or repair it in the canonical artifact. It is a
+**latent upstream field with no live consumer**, not a field this patch fixes.
+The guard entry is forward protection only.
 
 ## The proposed change
 
