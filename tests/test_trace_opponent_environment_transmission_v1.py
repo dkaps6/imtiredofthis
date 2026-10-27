@@ -117,3 +117,30 @@ def test_explosive_suppression_is_not_routed_to_the_mean():
     b = FAMILIES["B_RUN_STOP_AT_THE_LINE"]["channel"]
     assert "central tendency" in b
     assert FAMILIES["F_EXPECTED_GAME_STATE_VOLUME"]["channel"] == "opportunity only"
+
+
+def test_no_per_role_receiving_efficiency_multiplier_exists():
+    """Pin the role-generalization finding against source.
+
+    The documented shape of the gap is that production models conceded
+    opportunity but not conversion. If a per-receiver efficiency multiplier is
+    ever added, that published claim becomes stale and must be revised.
+    """
+    src = Path("scripts/modeling/rules_v2.py").read_text(encoding="utf-8")
+    block = src.split("values: Dict[str, float] = {", 1)[1].split("}", 1)[0]
+    keys = set(re.findall(r'"(\w+)":', block))
+    eff = {k for k in keys if "eff_mult" in k}
+    assert eff == {"rb_rush_eff_mult", "pass_eff_mult"}, (
+        f"efficiency multipliers changed to {sorted(eff)}; the published "
+        "role-generalization finding must be revised")
+    for role in ("wr1", "wr1_5", "slot", "te", "rb_rec"):
+        assert f"{role}_target_mult" in keys
+        assert f"{role}_eff_mult" not in keys
+
+
+def test_volatility_is_the_only_sigma_channel():
+    src = Path("scripts/modeling/rules_v2.py").read_text(encoding="utf-8")
+    block = src.split("values: Dict[str, float] = {", 1)[1].split("}", 1)[0]
+    keys = set(re.findall(r'"(\w+)":', block))
+    assert "volatility_mult" in keys
+    assert not {k for k in keys if "sigma" in k or "tail" in k}

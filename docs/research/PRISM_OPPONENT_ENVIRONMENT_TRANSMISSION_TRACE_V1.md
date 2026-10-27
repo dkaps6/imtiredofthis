@@ -175,3 +175,56 @@ with its own trace and disposition, per the authorizing audit. It is not folded
 into this trace. Inside-5 TD opportunity quality likewise remains design-only
 and unscored; its negative evidence stands (correlation with red-zone 0.890,
 the clip is not the main compression problem).
+
+---
+
+## Does the pattern generalize by role? Yes — in a specific shape
+
+Same read-only method, same source. `rules_v2.matchup_multipliers` declares
+exactly ten multipliers. Classified by what they move:
+
+| multiplier | role | channel | opponent input | threshold |
+|---|---|---|---|---|
+| `wr1_target_mult` | WR1 | opportunity | `coverage_man_rate` | `>= 0.50` |
+| `wr1_5_target_mult` | WR1.5 | opportunity | `coverage_man_rate` | `>= 0.50` |
+| `slot_target_mult` | slot | opportunity | `coverage_man_rate`, `middle_open_rate` | `>= 0.50` |
+| `te_target_mult` | TE | opportunity | `coverage_zone_rate`, `middle_open_rate` | `>= 0.60`, `>= 0.50` |
+| `rb_rec_target_mult` | RB rec | opportunity | `coverage_zone_rate`, pressure | `>= 0.60`, `> 0.075` |
+| `rb_rush_eff_mult` | RB rush | **efficiency** | `light/heavy_box_rate` | `>= 0.60` |
+| `pass_eff_mult` | team pass | efficiency | pressure mismatch | `> 0.075` |
+| `sack_mult`, `int_mult` | QB | event rates | pressure mismatch | `> 0.075` |
+| `volatility_mult` | **sigma** | distribution | pressure mismatch | `> 0.075` |
+
+Three things follow, and they are the generalization:
+
+**1. Opponent reaches receiving OPPORTUNITY for every receiving role.** Each of
+WR1, WR1.5, slot, TE and RB-receiving has at least one coverage-structure gate,
+at thresholds of 0.50–0.60 that sit inside ordinary NFL defensive profiles. This
+channel works.
+
+**2. Opponent reaches per-role EFFICIENCY for essentially no one.** There is no
+`wr_eff_mult`, no `te_eff_mult`, no yards-per-target multiplier for any
+receiver. The only role-specific efficiency multiplier in the file is
+`rb_rush_eff_mult` — the dead box gate. And the signals that would drive the
+missing ones, `ypt_allowed_wr` / `_slot` / `_te` / `_outside`, are referenced by
+**no production module at all**. The efficiency inputs exist for all four
+receiving roles and not one is consumed.
+
+**3. Opponent reaches SIGMA only through pressure.** `volatility_mult` is the
+single distribution-shape channel and it is gated solely on pressure mismatch.
+`explosive_play_rate_allowed` — the natural tail input — is carried onto
+`TeamContext` and read by no rule.
+
+So the shape of the gap is consistent across positions:
+
+> **Production models how much opportunity the opponent concedes. It almost
+> never models how well that opportunity converts, and it shapes the tail from
+> pressure alone.**
+
+Walker is not a special case. He is the clearest case, because rushing yards is
+the one market whose *opportunity* channel is finite-allocated upstream and
+whose *efficiency* channel is the one dead gate — so for him both halves fail at
+once.
+
+This remains read-only. No candidate here is scored, ranked or promoted, and
+nothing in this section proposes a threshold or coefficient.
