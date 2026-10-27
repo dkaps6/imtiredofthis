@@ -1,0 +1,13 @@
+Continue my NFL PRISM project seamlessly from newest canonical GitHub V13 checkpoint. Do NOT ask me to re-explain anything. Repo: dkaps6/imtiredofthis. PRISM = Player Role & Individual Situation Model.
+
+READ IN THIS EXACT ORDER:
+1. AGENTS.md.
+2. ONLY the newest single TOP V13 checkpoint at CURRENT_NFL_RESEARCH_HANDOFF.md.
+3. docs/handoffs/NFL_HANDOFF_2026-10-27_V13_RATE_GUARD_PLAYER_ALLOCATION_CONTINUITY.md IN FULL.
+4. GitHub Issue #535 comments newer than 6456181944, then the latest exact SHA of research-prism-player-first-identity-environment-2026-10-26.
+
+Your first task is to continue GPT's INDEPENDENT AUDIT of Claude Code's current research. Claude was preparing an isolated read-only Week7 preserved-source football context -> rules -> M38 -> target entitlement -> TE-R5P shadow replay to validate the rate-scale proposal. If a new target SHA appears on #535, audit source, inputs, exact baseline parity, named-player impacts, team-room mass conservation, tests and CI scope. Then post your own precise audit ruling directly on #535. If none, don't invent progress; continue narrowly authorized research only.
+
+The player should have the rules, the position should not have the player. ANOMALIES ARE QUESTIONS, NOT TRENDS. Individual named-player projections first, positional MAE/RMSE downstream QA. Preserve all promoted PRISM football science, never rewrite the model wholesale. No production merge or code promotion without express user authorization; betting CLOSED, no paid OddsAPI or sportsbook upstream, no Week7 outcome fitting/grading, no Walker redo, no unsolicited threshold tuning. Distinguish saved artifacts, code wiring, actual live multipliers, team share redistribution, and FINAL player means.
+
+Keep tool calls small to avoid timeouts and give the user concise durable progress. GitHub is canonical; do not make me reteach everything.
