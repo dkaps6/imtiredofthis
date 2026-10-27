@@ -1,0 +1,67 @@
+{
+  "RANKING_KEY_MISMATCH": "_wr_role_labels sorts perimeter WRs by the RAW tgt_share with a 0.0 default, while the quantity production actually scales is bayes_tgt_share. The two disagree. Montorie Foster is the clean case: his raw tgt_share is NaN -> 0.0, so he sorts last and gets no label, yet his bayes posterior (0.165842) is the second largest in the SEA receiving room -- larger than both the labelled WR1_5 and Cooper Kupp. So the role ranking and the allocated share are keyed on different quantities.",
+  "THE_ROUTING_ASYMMETRY": "in simulation_rules.py the WR branches key on the COMPUTED role label while the TE and RB branches key on POSITION. So every TE and every RB receives an opponent-coverage target channel by position, but a WR receives one only if _wr_role_labels assigned him SLOT, WR1 or WR1_5 -- that is, slot plus the top two perimeter WRs by target share. Any other WR falls through the whole chain to tgt_mult = 1.0, and no diagnostic records it.",
+  "authorized_by": "GPT_AUDIT_6441088661",
+  "basis": "data/research/week7_opportunity_trace/week7_trace__data__football_simulation_universe.csv",
+  "final_opponent_attributable_movement": {
+    "all_SEA_WRs_week7": 0.0,
+    "distinction": "Kupp's zero is STRUCTURAL -- he is ineligible whatever the defense does. JSN's zero is CIRCUMSTANTIAL -- he was eligible and the gate did not fire. These are different failures and must not be pooled."
+  },
+  "finite_room": {
+    "interpretation": "the ratio is uniform WITHIN each position group, so the group scale and any fired within-group multiplier are not separable for TE/RB",
+    "per_position_group_scale": {
+      "FB": [
+        1.2
+      ],
+      "RB": [
+        1.2
+      ],
+      "TE": [
+        1.265
+      ],
+      "WR": [
+        1.0
+      ]
+    },
+    "team_post_gate_rules_tgt_share_sum": 1.6003790285869761,
+    "team_pre_gate_bayes_tgt_share_sum": 1.4678644159659346
+  },
+  "gate_firing": {
+    "man_coverage_gate_fired_for_KC": false,
+    "man_gate_argument": "WR1 takes x0.95 and WR1_5 x1.15, so a fired gate would split their rules/bayes ratios. observed WR ratios: [1.0]. identical => not fired.",
+    "pass_eff_blocker": "rules_ypt was not preserved",
+    "shared_pass_eff_mult_movement": "NOT_ESTABLISHED",
+    "te_and_rb_gates_fired": "NOT_ESTABLISHED",
+    "te_rb_blocker": "a uniform within-group multiplier is indistinguishable from the group normalization scale in the preserved artifact; rules_*_mult was not preserved"
+  },
+  "kupp_exclusion_is_structural_not_circumstantial": true,
+  "kupp_exclusion_margin_on_bayes_posterior_for_reference": 0.006077780735336685,
+  "kupp_exclusion_margin_on_ranking_key_raw_tgt_share": 0.008205440309804912,
+  "mechanism_question": "how does canonical role assignment determine which opponent-transmission path a named player is eligible to receive?",
+  "named_player_finding": {
+    "AJ Barner": "no label, but eligible via the TE position branch -> te_target_mult",
+    "Cooper Kupp": "NO label -> structurally ineligible for every opponent-coverage target gate, while SEA's third tight end is eligible by position",
+    "Jaxon Smith-Njigba": "labelled WR1 -> eligible for wr1_target_mult"
+  },
+  "not_established": [
+    "whether any TE/RB coverage or pressure gate fired",
+    "shared pass_eff_mult movement",
+    "how often any gate fires league-wide",
+    "whether consuming the stranded ypt_allowed_* family would improve any projection"
+  ],
+  "outcomes_inspected": false,
+  "population": "2026 week 7, SEA offense vs KC -- same offense, same opponent, roles vary. Walker is the KC back facing SEA in the same game and is not re-examined.",
+  "reconfirmed_by": "GPT_CONTROL_6443421541",
+  "routing_source_checks": {
+    "only_two_perimeter_wrs_labelled": true,
+    "te_rb_keyed_on_position": true,
+    "unlabelled_wr_falls_through_to_1.0": true,
+    "wr_keyed_on_role_label": true
+  },
+  "scientific_boundary": "READ_ONLY_ROLE_ROUTING_TRACE_NO_FITTING_NO_SCORING",
+  "separate_defect_not_merged": "Montorie Foster is position_prior_only (zero history) and carries a larger rules_tgt_share than Cooper Kupp. That is the zero-history entitlement defect, which the audit requires be kept a distinct cause. It is recorded here only as an observation.",
+  "sportsbook_inputs_used": 0,
+  "version": "NAMED_PLAYER_ROLE_ROUTING_TRACE_V1",
+  "walker_redone": false,
+  "week7_used_to_score_anything": false
+}
