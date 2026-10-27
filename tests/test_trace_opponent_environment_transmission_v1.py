@@ -15,7 +15,9 @@ import pytest
 
 from scripts.research.trace_opponent_environment_transmission_v1 import (
     BOOKKEEPING,
+    CONSUMERS,
     FAMILIES,
+    TRANSPORT,
     _family,
     assert_no_dynamic_selection,
     orphaned_mechanisms,
@@ -119,12 +121,14 @@ def test_explosive_suppression_is_not_routed_to_the_mean():
     assert FAMILIES["F_EXPECTED_GAME_STATE_VOLUME"]["channel"] == "opportunity only"
 
 
-def test_no_per_role_receiving_efficiency_multiplier_exists():
-    """Pin the role-generalization finding against source.
+def test_no_ROLE_SPECIFIC_receiving_efficiency_multiplier_exists():
+    """Pin the CORRECTED role-generalization finding against source.
 
-    The documented shape of the gap is that production models conceded
-    opportunity but not conversion. If a per-receiver efficiency multiplier is
-    ever added, that published claim becomes stale and must be revised.
+    Re-audit 6432388032 established that receiving efficiency is not
+    opponent-blind: the shared pressure-driven `pass_eff_mult` reaches
+    `rules_ypt`. What production lacks is a ROLE-SPECIFIC conversion channel.
+    This test pins that narrower claim, so the absence of `wr_eff_mult` and the
+    presence of the shared channel are both asserted.
     """
     src = Path("scripts/modeling/rules_v2.py").read_text(encoding="utf-8")
     block = src.split("values: Dict[str, float] = {", 1)[1].split("}", 1)[0]
@@ -133,14 +137,68 @@ def test_no_per_role_receiving_efficiency_multiplier_exists():
     assert eff == {"rb_rush_eff_mult", "pass_eff_mult"}, (
         f"efficiency multipliers changed to {sorted(eff)}; the published "
         "role-generalization finding must be revised")
+    # The shared channel must remain asserted, not merely the absence.
+    sr = Path("scripts/modeling/simulation_rules.py").read_text(encoding="utf-8")
+    assert "rules_ypt" in sr and "pass_eff_mult" in sr
+    assert re.search(r'rules_ypt"\]\s*=\s*base_ypt \* mods\.pass_eff_mult', sr), (
+        "the shared pressure receiving-efficiency channel is gone; the "
+        "corrected finding must be revised")
     for role in ("wr1", "wr1_5", "slot", "te", "rb_rec"):
         assert f"{role}_target_mult" in keys
         assert f"{role}_eff_mult" not in keys
 
 
-def test_volatility_is_the_only_sigma_channel():
+def test_volatility_is_the_only_DIRECT_EXPLICIT_sigma_multiplier():
+    """Corrected scope: direct explicit control only.
+
+    Re-audit established that sigma also moves INDIRECTLY (target counts and
+    rules_ypt both scale rec_sd), and that promoted QB C2 is a separate
+    opponent-aware distribution route. This test asserts only the narrow claim.
+    """
     src = Path("scripts/modeling/rules_v2.py").read_text(encoding="utf-8")
     block = src.split("values: Dict[str, float] = {", 1)[1].split("}", 1)[0]
     keys = set(re.findall(r'"(\w+)":', block))
     assert "volatility_mult" in keys
     assert not {k for k in keys if "sigma" in k or "tail" in k}
+    # Indirect route must remain visible, so the narrow wording stays honest.
+    sim = Path("scripts/simulation_v2.py").read_text(encoding="utf-8")
+    assert "rec_sd" in sim and "rules_ypt" in sim
+
+
+def test_ensemble_has_three_components_not_four():
+    """The 2-of-4 claim was wrong; pin the real contract."""
+    src = Path("scripts/modeling/ensemble_v2.py").read_text(encoding="utf-8")
+    m = re.search(r'COMPONENTS = \(([^)]*)\)', src)
+    assert m is not None
+    comps = set(re.findall(r'"(\w+)"', m.group(1)))
+    assert comps == {"mc_proj", "ml_proj", "state_proj"}, (
+        f"ensemble components changed to {sorted(comps)}; the published "
+        "2-of-3 figure must be revised")
+
+
+def test_transport_and_consumers_are_disjoint():
+    """The reporting bug was transport counted as consumption."""
+    assert set(TRANSPORT).isdisjoint(set(CONSUMERS))
+    assert any("context_bridge_v3" in f for f in TRANSPORT)
+    assert not any("context_bridge" in f for f in CONSUMERS)
+
+
+def test_lower_perimeter_wrs_get_no_target_multiplier():
+    """`every receiving role` was too broad: WR3+ are unlabeled."""
+    src = Path("scripts/modeling/simulation_rules.py").read_text(encoding="utf-8")
+    body = src.split("def _wr_role_labels(", 1)[1].split("\ndef ", 1)[0]
+    assert "perim[0]" in body and "WR1" in body
+    assert "perim[1]" in body and "WR1_5" in body
+    assert "perim[2]" not in body, (
+        "a third perimeter WR role now exists; the published "
+        "WR3-unlabeled finding must be revised")
+
+
+def test_rush_epa_is_reported_as_transported_but_stranded():
+    """The corrected classification, asserted end to end."""
+    t = teamcontext_transmission()
+    ignored = set(t["carried_onto_teamcontext_then_ignored_by_every_rule"])
+    assert {"def_rush_epa", "explosive_play_rate_allowed"} <= ignored
+    refs = t["ignored_field_consumers_on_other_routes"]
+    assert all("pricing_v2" in f or "rules" not in f
+               for f in refs.get("def_rush_epa", []))

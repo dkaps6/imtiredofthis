@@ -1,14 +1,26 @@
 {
+  "COUNT_SEMANTICS": "these are LITERAL-REFERENCE INVENTORY counts, not certified causal transmission counts. A base-name hit does not prove the opponent-suffixed value is the value consumed (audit 6432388032). The certified dataflow findings are in teamcontext_transmission, which compares populated against rule-read fields exactly.",
   "authorized_by": "GPT_AUDIT_6431984732_READ_ONLY_MECHANISM_FIRST",
   "consumes_accepted_decomposition": "cca416bd2cdad8f142a5a063923149344c7e5c5d",
+  "ensemble_component_contract": {
+    "bayesian_v2_is_a_fourth_component": false,
+    "components": [
+      "mc_proj",
+      "ml_proj",
+      "state_proj"
+    ],
+    "note": "ensemble_v2 states Bayesian v2 is intentionally NOT a fourth independent projection because it is already inside the MC baseline. An earlier version of this trace said 2 of 4; the correct figure is 2 of 3.",
+    "source": "scripts/modeling/ensemble_v2.COMPONENTS"
+  },
   "football_signal_columns": 88,
-  "football_signal_consumed": 27,
-  "football_signal_stranded": 61,
+  "football_signal_literally_referenced_by_a_consumer": 25,
+  "football_signal_stranded": 63,
   "mechanism_families": {
     "A_RUN_FIT_BOX_STRUCTURE": {
       "columns_available": 12,
-      "columns_consumed": 3,
+      "columns_literally_referenced_by_a_consumer": 3,
       "columns_stranded": 9,
+      "columns_transported_but_stranded": 0,
       "distribution_channel": "opportunity + efficiency",
       "football_question": "Is there room at the first level?",
       "fully_stranded": false,
@@ -26,12 +38,14 @@
     },
     "B_RUN_STOP_AT_THE_LINE": {
       "columns_available": 6,
-      "columns_consumed": 1,
-      "columns_stranded": 5,
+      "columns_literally_referenced_by_a_consumer": 0,
+      "columns_stranded": 6,
+      "columns_transported_but_stranded": 1,
       "distribution_channel": "efficiency / central tendency",
       "football_question": "Does this defense kill runs before they start?",
-      "fully_stranded": false,
+      "fully_stranded": true,
       "stranded_columns": [
+        "def_rush_epa",
         "def_rush_epa_z",
         "rush_stuff_rate_x",
         "rush_stuff_rate_y",
@@ -41,19 +55,22 @@
     },
     "C_EXPLOSIVE_RUN_SUPPRESSION": {
       "columns_available": 2,
-      "columns_consumed": 1,
-      "columns_stranded": 1,
+      "columns_literally_referenced_by_a_consumer": 0,
+      "columns_stranded": 2,
+      "columns_transported_but_stranded": 1,
       "distribution_channel": "sigma / right tail -- NOT the mean",
       "football_question": "Does this defense surrender the long one?",
-      "fully_stranded": false,
+      "fully_stranded": true,
       "stranded_columns": [
+        "explosive_play_rate_allowed",
         "explosive_play_rate_allowed_z"
       ]
     },
     "D_RB_RECEIVING_COVERAGE": {
       "columns_available": 8,
-      "columns_consumed": 2,
+      "columns_literally_referenced_by_a_consumer": 2,
       "columns_stranded": 6,
+      "columns_transported_but_stranded": 0,
       "distribution_channel": "receiving opportunity + efficiency",
       "football_question": "Does this defense concede the back out of the backfield?",
       "fully_stranded": false,
@@ -68,8 +85,9 @@
     },
     "E_PASS_RUSH_BLITZ": {
       "columns_available": 10,
-      "columns_consumed": 3,
+      "columns_literally_referenced_by_a_consumer": 3,
       "columns_stranded": 7,
+      "columns_transported_but_stranded": 0,
       "distribution_channel": "receiving opportunity + pass efficiency",
       "football_question": "Does pressure force check-downs and change run numbers?",
       "fully_stranded": false,
@@ -85,8 +103,9 @@
     },
     "F_EXPECTED_GAME_STATE_VOLUME": {
       "columns_available": 39,
-      "columns_consumed": 13,
+      "columns_literally_referenced_by_a_consumer": 13,
       "columns_stranded": 26,
+      "columns_transported_but_stranded": 0,
       "distribution_channel": "opportunity only",
       "football_question": "How many snaps, and how pass-leaning?",
       "fully_stranded": false,
@@ -121,8 +140,9 @@
     },
     "G_QB_FACING_PASS_DEFENSE": {
       "columns_available": 11,
-      "columns_consumed": 4,
+      "columns_literally_referenced_by_a_consumer": 4,
       "columns_stranded": 7,
+      "columns_transported_but_stranded": 0,
       "distribution_channel": "QB mean/efficiency (promoted M89/M90 path)",
       "football_question": "How well does this defense defend the pass?",
       "fully_stranded": false,
@@ -161,6 +181,8 @@
   },
   "outcomes_inspected": false,
   "player_path_files": [
+    "scripts/modeling/context_bridge_v3.py",
+    "scripts/modeling/context_bridge.py",
     "scripts/simulation_v2.py",
     "scripts/run_pricing_v2.py",
     "scripts/modeling/rules_v2.py",
@@ -172,8 +194,7 @@
     "scripts/player_form_v2.py",
     "scripts/modeling/qb_pass_synthesis_v1.py",
     "scripts/modeling/qb_c2_production_adapter_v1.py",
-    "scripts/modeling/rb_pricing_adapter_v1.py",
-    "scripts/modeling/context_bridge_v3.py"
+    "scripts/modeling/rb_pricing_adapter_v1.py"
   ],
   "rb_rush_efficiency_single_channel": {
     "applied_at": "scripts/modeling/simulation_rules.py:231 rules_ypc = base_ypc * rb_rush_eff_mult",
@@ -183,17 +204,19 @@
       "light_box_rate >= 0.60 -> *1.07",
       "heavy_box_rate >= 0.60 -> *0.94"
     ],
+    "is_a_live_mean_channel": true,
     "path": "scripts/modeling/rules_v2.py::matchup_multipliers -> rb_rush_eff_mult",
     "reachable_receiving_counterpart": [
       "coverage_zone_rate >= 0.60 -> rb_rec_target_mult *1.20",
       "pressure mismatch > 0.075 -> rb_rec_target_mult *1.10"
-    ]
+    ],
+    "scope_correction": "this IS a live opponent -> RB rushing mean channel when a gate fires. The established claim is narrower: OUTSIDE the box gate the generic RB rushing mean has no opponent run-defense transmission. The gate is not called dead, and no every-RB/every-week claim is made, because firing frequency is NOT ESTABLISHED (audit 6432370310/6432388032)."
   },
   "scientific_boundary": "READ_ONLY_MECHANISM_TRACE_NO_FITTING_NO_SCORING",
   "separate_defect_do_not_merge": "the zero-history / position-prior entitlement defect is a distinct cause with a distinct trace and disposition, per the authorizing audit. It is not folded into this trace.",
   "sportsbook_inputs_used": 0,
   "structural_zeros": {
-    "consequence": "2 of the 4 ensemble components cannot express any opponent effect for any player in any market. This is architectural absence, not weak signal.",
+    "consequence": "2 of the 3 independent generic ensemble components (ml_v2, state_v2) cannot express any opponent effect for any player in any market. Architectural absence, not weak signal. The MC component CAN express an opponent effect where a canonical rule exists and fires.",
     "ml_v2": "FEATURE_COLUMNS is hist_games + prev/mean3/mean5 of the player's own box stats + position dummies; reads only player/team/position from context and uses team as an identity key. No opponent input exists.",
     "state_v2": "required set is {player, team, position}; features are built from the player's own prior game logs. No opponent input exists."
   },

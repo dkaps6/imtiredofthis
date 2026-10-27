@@ -41,9 +41,21 @@ import re
 import subprocess
 from pathlib import Path
 
-# The player path: modules that can turn an opponent column into a player
-# projection. Ordered engine-first.
-PLAYER_PATH = (
+# TRANSPORT modules move a column onto the player row or the rule object.
+# A reference here proves the value was CARRIED, not that any projection used
+# it. Conflating the two was a real reporting bug in V1 of this script, caught
+# by audit 6432370310 / 6432388032: def_rush_epa and
+# explosive_play_rate_allowed were reported "consumed" on the strength of a
+# context_bridge_v3 reference, while this script's own
+# teamcontext_transmission() correctly showed both are carried then ignored.
+TRANSPORT = (
+    "scripts/modeling/context_bridge_v3.py",
+    "scripts/modeling/context_bridge.py",
+)
+
+# CONSUMER modules can turn an opponent column into a projection: a rule, a
+# learned component, a simulator or a promoted adapter.
+CONSUMERS = (
     "scripts/simulation_v2.py",
     "scripts/run_pricing_v2.py",
     "scripts/modeling/rules_v2.py",
@@ -59,8 +71,9 @@ PLAYER_PATH = (
     "scripts/modeling/qb_pass_synthesis_v1.py",
     "scripts/modeling/qb_c2_production_adapter_v1.py",
     "scripts/modeling/rb_pricing_adapter_v1.py",
-    "scripts/modeling/context_bridge_v3.py",
 )
+
+PLAYER_PATH = TRANSPORT + CONSUMERS
 
 # Columns that carry provenance/bookkeeping rather than football signal. A
 # stranded provenance column is not a missing football mechanism, and counting
@@ -233,13 +246,23 @@ def orphaned_mechanisms() -> dict:
     }
 
 
-def consumption(cols: list[str]) -> dict[str, dict[str, int]]:
-    """Map base column name -> {player-path file: reference count}."""
+def consumption(cols: list[str], files: tuple[str, ...]
+                ) -> dict[str, dict[str, int]]:
+    """Map base column name -> {file: literal reference count}.
+
+    LITERAL REFERENCE ONLY. A hit proves the base name appears in that file;
+    it does NOT prove the opponent-suffixed value is the one used, since a
+    same-named offensive or player-side field produces an identical hit. `proe`
+    is the clearest example: a literal `proe` reference in simulation_v2 is not
+    evidence that `proe_opp` moved a player projection. Per audit 6432388032
+    these are reported as literal-reference inventory counts and carry no
+    causal-transmission claim.
+    """
     out: dict[str, dict[str, int]] = {}
-    files = [f for f in PLAYER_PATH if Path(f).exists()]
+    present = [f for f in files if Path(f).exists()]
     for c in cols:
         hits = {}
-        for f in files:
+        for f in present:
             r = subprocess.run(["grep", "-c", "-F", c, f],
                                capture_output=True, text=True)
             n = int((r.stdout or "0").strip() or 0)
@@ -280,25 +303,38 @@ def main() -> int:
     opp_suffixed = sorted(opp_suffixed)
     bases = sorted(bases)
 
-    consumed = consumption(bases)
+    transported = consumption(bases, TRANSPORT)
+    referenced = consumption(bases, CONSUMERS)
+    tc = teamcontext_transmission()
+    ignored_at_rule = set(
+        tc["carried_onto_teamcontext_then_ignored_by_every_rule"])
     rows = []
     for c in bases:
-        hits = consumed.get(c, {})
+        t_hits, r_hits = transported.get(c, {}), referenced.get(c, {})
         is_book = bool(BOOKKEEPING.match(c))
         rows.append({
             "column_base": c,
-            "opp_suffixed_present_on_player_row": any(
+            # stage 1
+            "stage1_present_on_player_row": any(
                 s2 in set(opp_suffixed)
                 for s2 in (f"{c}_opp", f"{c}_opp_x", f"{c}_opp_y")),
+            # stage 2 -- carried only; NOT a consumption claim
+            "stage2_bridged_by_transport": bool(t_hits),
+            # stage 3 -- literal reference in a consumer module
+            "stage3_referenced_by_a_consumer": bool(r_hits),
+            # stage 4 -- for TeamContext fields, whether any rule reads it
+            "stage4_read_by_a_rule": (
+                "" if c not in set(tc["teamcontext_fields_populated"])
+                else str(c not in ignored_at_rule)),
+            "transported_but_stranded": bool(t_hits) and not bool(r_hits),
             "football_signal": not is_book,
             "mechanism_family": "BOOKKEEPING" if is_book else _family(c),
-            "consumed_in_player_path": bool(hits),
-            "consuming_files": ";".join(sorted(hits)),
-            "reference_count": sum(hits.values()),
+            "consumer_files": ";".join(sorted(r_hits)),
+            "literal_reference_count_in_consumers": sum(r_hits.values()),
         })
 
     foot = [r for r in rows if r["football_signal"]]
-    stranded = [r for r in foot if not r["consumed_in_player_path"]]
+    stranded = [r for r in foot if not r["stage3_referenced_by_a_consumer"]]
 
     fam_summary = {}
     for name in list(FAMILIES) + ["UNCLASSIFIED"]:
@@ -310,12 +346,17 @@ def main() -> int:
             "football_question": spec.get("question", ""),
             "distribution_channel": spec.get("channel", ""),
             "columns_available": len(f),
-            "columns_consumed": sum(1 for r in f if r["consumed_in_player_path"]),
-            "columns_stranded": sum(1 for r in f
-                                    if not r["consumed_in_player_path"]),
-            "fully_stranded": all(not r["consumed_in_player_path"] for r in f),
-            "stranded_columns": sorted(r["column_base"] for r in f
-                                       if not r["consumed_in_player_path"]),
+            "columns_literally_referenced_by_a_consumer": sum(
+                1 for r in f if r["stage3_referenced_by_a_consumer"]),
+            "columns_stranded": sum(
+                1 for r in f if not r["stage3_referenced_by_a_consumer"]),
+            "columns_transported_but_stranded": sum(
+                1 for r in f if r["transported_but_stranded"]),
+            "fully_stranded": all(
+                not r["stage3_referenced_by_a_consumer"] for r in f),
+            "stranded_columns": sorted(
+                r["column_base"] for r in f
+                if not r["stage3_referenced_by_a_consumer"]),
         }
 
     status = {
@@ -328,13 +369,29 @@ def main() -> int:
         "sportsbook_inputs_used": 0,
         "week7_used_to_choose_coefficient_threshold_or_sign": False,
         "method_validity_checks": dyn,
-        "teamcontext_transmission": teamcontext_transmission(),
+        "teamcontext_transmission": tc,
         "orphaned_mechanisms": orphaned_mechanisms(),
         "player_path_files": [f for f in PLAYER_PATH if Path(f).exists()],
+        "COUNT_SEMANTICS": (
+            "these are LITERAL-REFERENCE INVENTORY counts, not certified "
+            "causal transmission counts. A base-name hit does not prove the "
+            "opponent-suffixed value is the value consumed (audit 6432388032). "
+            "The certified dataflow findings are in teamcontext_transmission, "
+            "which compares populated against rule-read fields exactly."),
         "opponent_columns_on_player_row": len(opp_suffixed),
         "football_signal_columns": len(foot),
-        "football_signal_consumed": len(foot) - len(stranded),
+        "football_signal_literally_referenced_by_a_consumer": (
+            len(foot) - len(stranded)),
         "football_signal_stranded": len(stranded),
+        "ensemble_component_contract": {
+            "components": ["mc_proj", "ml_proj", "state_proj"],
+            "source": "scripts/modeling/ensemble_v2.COMPONENTS",
+            "bayesian_v2_is_a_fourth_component": False,
+            "note": ("ensemble_v2 states Bayesian v2 is intentionally NOT a "
+                     "fourth independent projection because it is already "
+                     "inside the MC baseline. An earlier version of this "
+                     "trace said 2 of 4; the correct figure is 2 of 3."),
+        },
         "structural_zeros": {
             "ml_v2": ("FEATURE_COLUMNS is hist_games + prev/mean3/mean5 of the "
                       "player's own box stats + position dummies; reads only "
@@ -343,15 +400,26 @@ def main() -> int:
             "state_v2": ("required set is {player, team, position}; features "
                          "are built from the player's own prior game logs. No "
                          "opponent input exists."),
-            "consequence": ("2 of the 4 ensemble components cannot express any "
+            "consequence": ("2 of the 3 independent generic ensemble "
+                            "components (ml_v2, state_v2) cannot express any "
                             "opponent effect for any player in any market. "
-                            "This is architectural absence, not weak signal."),
+                            "Architectural absence, not weak signal. The MC "
+                            "component CAN express an opponent effect where a "
+                            "canonical rule exists and fires."),
         },
         "rb_rush_efficiency_single_channel": {
             "path": "scripts/modeling/rules_v2.py::matchup_multipliers -> rb_rush_eff_mult",
             "gates": ["light_box_rate >= 0.60 -> *1.07",
                       "heavy_box_rate >= 0.60 -> *0.94"],
             "default_when_neither_fires": 1.0,
+            "is_a_live_mean_channel": True,
+            "scope_correction": (
+                "this IS a live opponent -> RB rushing mean channel when a "
+                "gate fires. The established claim is narrower: OUTSIDE the "
+                "box gate the generic RB rushing mean has no opponent "
+                "run-defense transmission. The gate is not called dead, and "
+                "no every-RB/every-week claim is made, because firing "
+                "frequency is NOT ESTABLISHED (audit 6432370310/6432388032)."),
             "applied_at": "scripts/modeling/simulation_rules.py:231 rules_ypc = base_ypc * rb_rush_eff_mult",
             "reachable_receiving_counterpart": [
                 "coverage_zone_rate >= 0.60 -> rb_rec_target_mult *1.20",
@@ -393,18 +461,27 @@ def main() -> int:
         json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     print("=== OPPONENT / ENVIRONMENT TRANSMISSION TRACE V1 ===")
-    print(f"opponent columns on the player row : {len(opp_suffixed)}")
-    print(f"football-signal columns           : {len(foot)}")
-    print(f"  consumed in the player path     : {len(foot) - len(stranded)}")
-    print(f"  STRANDED                        : {len(stranded)}")
+    print("counts below are LITERAL-REFERENCE INVENTORY, not certified")
+    print("causal transmission; see teamcontext_transmission for exact dataflow.\n")
+    print(f"opponent columns on the player row   : {len(opp_suffixed)}")
+    print(f"football-signal columns              : {len(foot)}")
+    print(f"  literally referenced by a consumer : {len(foot) - len(stranded)}")
+    print(f"  STRANDED                           : {len(stranded)}")
+    tbs = [r["column_base"] for r in foot if r["transported_but_stranded"]]
+    print(f"  of which TRANSPORTED-BUT-STRANDED  : {len(tbs)}"
+          + (f"  {sorted(tbs)}" if tbs else ""))
     print("\nstructural zeros: ml_v2 and state_v2 take NO opponent input at all")
-    print("  -> 2 of 4 ensemble components cannot express an opponent effect\n")
-    print(f"{'family':32s} {'avail':>5s} {'cons':>5s} {'strand':>6s}  channel")
-    for name, s in fam_summary.items():
-        flag = "  <-- FULLY STRANDED" if s["fully_stranded"] else ""
-        print(f"{name:32s} {s['columns_available']:5d} "
-              f"{s['columns_consumed']:5d} {s['columns_stranded']:6d}  "
-              f"{s['distribution_channel']}{flag}")
+    print("  -> 2 of 3 independent generic ensemble components "
+          "(mc/ml/state) cannot")
+    print("     express an opponent effect; MC can, where a rule exists "
+          "and fires.\n")
+    print(f"{'family':32s} {'avail':>5s} {'ref':>4s} {'strand':>6s}  channel")
+    for name, fs in fam_summary.items():
+        flag = "  <-- FULLY STRANDED" if fs["fully_stranded"] else ""
+        print(f"{name:32s} {fs['columns_available']:5d} "
+              f"{fs['columns_literally_referenced_by_a_consumer']:4d} "
+              f"{fs['columns_stranded']:6d}  "
+              f"{fs['distribution_channel']}{flag}")
     print("\nNo coefficient, threshold, sign or winning candidate is produced "
           "here. Week 7 identified the mechanism; it cannot score the fix.")
     return 0
