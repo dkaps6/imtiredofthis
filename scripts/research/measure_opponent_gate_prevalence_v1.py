@@ -101,15 +101,31 @@ def load_plays() -> pd.DataFrame:
 
 
 def weekly_rates(m: pd.DataFrame, team_col: str, scrimmage_only: bool,
-                 cov_classified_only: bool) -> pd.DataFrame:
+                 cov_classified_only: bool,
+                 literal_production_nulls: bool = False) -> pd.DataFrame:
     d = m.loc[m["scrimmage"]] if scrimmage_only else m
     d = d.loc[d[team_col].ne("")]
-    box = d.loc[d["box"].notna()]
+    # Audit 6448026674 finding 3. compute_personnel_rates() evaluates
+    # `(to_numeric(box) <= 6).astype(float)` over EVERY participation row, and
+    # NaN <= 6 is False, so a missing box counts in the denominator as
+    # "not light". V1 of this script dropped missing-box rows from numerator
+    # AND denominator, so the arm was not literally source-faithful. The
+    # literal treatment is implemented here rather than argued immaterial.
+    if literal_production_nulls:
+        box = d
+        light = box["box"].le(LIGHT_MAX)          # NaN -> False, kept in denom
+        heavy = box["box"].ge(HEAVY_MIN)
+    else:
+        box = d.loc[d["box"].notna()]
+        light = box["box"].le(LIGHT_MAX)
+        heavy = box["box"].ge(HEAVY_MIN)
+    box = box.assign(_light=light.astype(float), _heavy=heavy.astype(float))
     g = box.groupby([team_col, "week"], dropna=False)
     out = pd.DataFrame({
-        "light_box_rate": g["box"].apply(lambda s: (s <= LIGHT_MAX).mean()),
-        "heavy_box_rate": g["box"].apply(lambda s: (s >= HEAVY_MIN).mean()),
-        "box_plays": g["box"].size(),
+        "light_box_rate": g["_light"].mean(),
+        "heavy_box_rate": g["_heavy"].mean(),
+        "box_plays": g["_light"].size(),
+        "box_null_rows": g["box"].apply(lambda s: int(s.isna().sum())),
     })
     c = d.loc[d["cov_classified"]] if cov_classified_only else d
     gc = c.groupby([team_col, "week"], dropna=False)
@@ -157,7 +173,11 @@ def as_of_pregame(weekly: pd.DataFrame) -> pd.DataFrame:
 def gate_summary(df: pd.DataFrame) -> dict:
     out = {}
     for field, (op, thr) in GATES.items():
-        v = pd.to_numeric(df.get(field), errors="coerce").dropna()
+        # A missing column must not crash: df.get() returns None and
+        # pd.to_numeric(None) yields a scalar nan, which has no .dropna().
+        col = df[field] if field in getattr(df, "columns", []) else None
+        v = (pd.to_numeric(col, errors="coerce").dropna()
+             if col is not None else pd.Series(dtype="float64"))
         if v.empty:
             out[field] = {"team_weeks": 0, "label": "NO_DATA"}
             continue
@@ -192,13 +212,29 @@ def main() -> int:
             for covcls in (False, True):
                 arm = (f"{'SCRIMMAGE_ONLY' if scrim else 'PRODUCTION_FAITHFUL_UNFILTERED'}"
                        f"__{orient}__{'COVERAGE_CLASSIFIED' if covcls else 'ALL_ROWS'}")
-                wk = weekly_rates(m, team_col, scrim, covcls)
+                wk = weekly_rates(m, team_col, scrim, covcls,
+                                  literal_production_nulls=not scrim)
                 ao = as_of_pregame(wk)
                 wk["arm"], ao["arm"] = arm, arm
                 wk["basis"], ao["basis"] = "SINGLE_WEEK", "AS_OF_PREGAME"
                 frames += [wk, ao]
                 arms[arm] = {"SINGLE_WEEK": gate_summary(wk),
                              "AS_OF_PREGAME": gate_summary(ao)}
+
+    # Audit 6448026674 finding 1: the time basis is a NINTH dimension that the
+    # preregistration left open. Report the label across every arm x basis so a
+    # claim of robustness cannot quietly mean "within one basis".
+    cross = {}
+    for field in GATES:
+        labs: dict[str, int] = {}
+        for arm, bases in arms.items():
+            for basis, summ in bases.items():
+                labs[summ[field]["label"]] = labs.get(summ[field]["label"], 0) + 1
+        cross[field] = {
+            "labels_across_arm_x_basis": labs,
+            "unconditional": len(labs) == 1,
+            "n_combinations": sum(labs.values()),
+        }
 
     detail = pd.concat(frames, ignore_index=True)
     a.out_dir.mkdir(parents=True, exist_ok=True)
@@ -227,6 +263,15 @@ def main() -> int:
             "production PREFERS Sharp Football over the participation path for "
             "box rates, so these are the participation-derived values, not "
             "necessarily what production used in a given week"),
+        "WITHDRAWN_SHARP_DENOMINATOR_INFERENCE": (
+            "V1 concluded from the single source-conditioned 2026 W7 KC zone "
+            "decode that production's Sharp-fed coverage fields behave like the "
+            "COVERAGE_CLASSIFIED arm. Withdrawn per audit 6448026674 finding 4: "
+            "the ALL_ROWS arm does fire rarely but nonzero (2/512 on "
+            "scrimmage/defense-deployed), Sharp is a different provider whose "
+            "denominator is unknown, and one inferred gate cannot identify a "
+            "provider convention. Sharp's denominator and provenance are "
+            "UNESTABLISHED."),
         "caveat_orientation": (
             "participation has NO defensive team column; production groups by "
             "possession_team, so its value is the box an OFFENSE faced while "
@@ -237,6 +282,27 @@ def main() -> int:
             "team-week rate is a single week or the season-to-date value a "
             "pregame run would hold. Both are reported; AS_OF_PREGAME is the "
             "production-faithful basis."),
+        "cross_basis_label_agreement": cross,
+        "unconditional_gates": sorted(
+            f for f, v in cross.items() if v["unconditional"]),
+        "basis_dependent_gates": sorted(
+            f for f, v in cross.items() if not v["unconditional"]),
+        "HEADLINE_SCOPE": (
+            "a gate is reported non-informative UNCONDITIONALLY only if its "
+            "label is identical across all arm x basis combinations. Any other "
+            "gate's label is conditional on the analysis choices named in the "
+            "arm, and the time basis is one of those choices, not a universal "
+            "result. AS_OF_PREGAME is preferred as the production-faithful "
+            "planning basis -- a pregame value for week N is built from weeks "
+            "1..N-1 -- and single-week rates additionally carry sampling noise "
+            "from far fewer plays, which mechanically pushes a rate across a "
+            "threshold. That is a reason to prefer it, not a reason to call "
+            "its result basis-independent."),
+        "gates_NOT_measured_here": [
+            "middle_open_rate >= 0.50 (te_target_mult, slot_target_mult)",
+            "pressure mismatch > 0.075 (rb_rec_target_mult, pass_eff_mult, "
+            "sack_mult, int_mult, volatility_mult)",
+        ],
         "arms": arms,
     }
     (a.out_dir / f"{stem}_status.json").write_text(

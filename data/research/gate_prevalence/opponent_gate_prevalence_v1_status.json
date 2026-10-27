@@ -1,4 +1,6 @@
 {
+  "HEADLINE_SCOPE": "a gate is reported non-informative UNCONDITIONALLY only if its label is identical across all arm x basis combinations. Any other gate's label is conditional on the analysis choices named in the arm, and the time basis is one of those choices, not a universal result. AS_OF_PREGAME is preferred as the production-faithful planning basis -- a pregame value for week N is built from weeks 1..N-1 -- and single-week rates additionally carry sampling noise from far fewer plays, which mechanically pushes a rate across a threshold. That is a reason to prefer it, not a reason to call its result basis-independent.",
+  "WITHDRAWN_SHARP_DENOMINATOR_INFERENCE": "V1 concluded from the single source-conditioned 2026 W7 KC zone decode that production's Sharp-fed coverage fields behave like the COVERAGE_CLASSIFIED arm. Withdrawn per audit 6448026674 finding 4: the ALL_ROWS arm does fire rarely but nonzero (2/512 on scrimmage/defense-deployed), Sharp is a different provider whose denominator is unknown, and one inferred gate cannot identify a provider convention. Sharp's denominator and provenance are UNESTABLISHED.",
   "arms": {
     "PRODUCTION_FAITHFUL_UNFILTERED__DEFENSE_DEPLOYED__ALL_ROWS": {
       "AS_OF_PREGAME": {
@@ -36,7 +38,7 @@
           "condition": "light_box_rate >= 0.6",
           "fraction_firing": 0.9922,
           "label": "NEAR_CONSTANT",
-          "median_value": 0.7619,
+          "median_value": 0.7614,
           "p10": 0.6836,
           "p90": 0.8571,
           "team_weeks": 512,
@@ -78,7 +80,7 @@
           "condition": "light_box_rate >= 0.6",
           "fraction_firing": 0.8603,
           "label": "DISCRIMINATING",
-          "median_value": 0.7558,
+          "median_value": 0.7541,
           "p10": 0.5604,
           "p90": 0.8988,
           "team_weeks": 544,
@@ -122,7 +124,7 @@
           "condition": "light_box_rate >= 0.6",
           "fraction_firing": 0.9922,
           "label": "NEAR_CONSTANT",
-          "median_value": 0.7619,
+          "median_value": 0.7614,
           "p10": 0.6836,
           "p90": 0.8571,
           "team_weeks": 512,
@@ -164,7 +166,7 @@
           "condition": "light_box_rate >= 0.6",
           "fraction_firing": 0.8603,
           "label": "DISCRIMINATING",
-          "median_value": 0.7558,
+          "median_value": 0.7541,
           "p10": 0.5604,
           "p90": 0.8988,
           "team_weeks": 544,
@@ -250,7 +252,7 @@
           "condition": "light_box_rate >= 0.6",
           "fraction_firing": 0.8603,
           "label": "DISCRIMINATING",
-          "median_value": 0.7558,
+          "median_value": 0.7541,
           "p10": 0.5604,
           "p90": 0.8988,
           "team_weeks": 544,
@@ -336,7 +338,7 @@
           "condition": "light_box_rate >= 0.6",
           "fraction_firing": 0.8603,
           "label": "DISCRIMINATING",
-          "median_value": 0.7558,
+          "median_value": 0.7541,
           "p10": 0.5604,
           "p90": 0.8988,
           "team_weeks": 544,
@@ -690,9 +692,51 @@
     }
   },
   "authorized_by": "USER_2026_10_27; frontier named by GPT_6446595260",
+  "basis_dependent_gates": [
+    "coverage_man_rate",
+    "coverage_zone_rate",
+    "light_box_rate"
+  ],
   "caveat_orientation": "participation has NO defensive team column; production groups by possession_team, so its value is the box an OFFENSE faced while rules_v2 reads it as a defensive tendency. Both orientations are reported; which is correct is a semantic question for audit.",
   "caveat_sharp_preferred": "production PREFERS Sharp Football over the participation path for box rates, so these are the participation-derived values, not necessarily what production used in a given week",
+  "cross_basis_label_agreement": {
+    "coverage_man_rate": {
+      "labels_across_arm_x_basis": {
+        "DISCRIMINATING": 2,
+        "NEAR_DEAD": 14
+      },
+      "n_combinations": 16,
+      "unconditional": false
+    },
+    "coverage_zone_rate": {
+      "labels_across_arm_x_basis": {
+        "DISCRIMINATING": 8,
+        "NEAR_DEAD": 8
+      },
+      "n_combinations": 16,
+      "unconditional": false
+    },
+    "heavy_box_rate": {
+      "labels_across_arm_x_basis": {
+        "NEAR_DEAD": 16
+      },
+      "n_combinations": 16,
+      "unconditional": true
+    },
+    "light_box_rate": {
+      "labels_across_arm_x_basis": {
+        "DISCRIMINATING": 8,
+        "NEAR_CONSTANT": 8
+      },
+      "n_combinations": 16,
+      "unconditional": false
+    }
+  },
   "disclosed_prereg_underspecification": "the frozen design said 'per team-week' without fixing whether a team-week rate is a single week or the season-to-date value a pregame run would hold. Both are reported; AS_OF_PREGAME is the production-faithful basis.",
+  "gates_NOT_measured_here": [
+    "middle_open_rate >= 0.50 (te_target_mult, slot_target_mult)",
+    "pressure mismatch > 0.075 (rb_rec_target_mult, pass_eff_mult, sack_mult, int_mult, volatility_mult)"
+  ],
   "is_a_2026_claim": false,
   "outcomes_inspected": false,
   "plays_joined": 43049,
@@ -709,6 +753,9 @@
   "scientific_boundary": "DESCRIPTIVE_REACHABILITY_ONLY_NO_FITTING_NO_SCORING",
   "season_measured": 2025,
   "sportsbook_inputs_used": 0,
+  "unconditional_gates": [
+    "heavy_box_rate"
+  ],
   "version": "OPPONENT_GATE_PREVALENCE_V1",
   "weeks": [
     1,
