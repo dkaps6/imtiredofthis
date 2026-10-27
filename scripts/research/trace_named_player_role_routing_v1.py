@@ -95,14 +95,170 @@ def assert_routing_matches_source() -> dict:
         raise RuntimeError("RB branch is no longer keyed on position")
     checks["wr_keyed_on_role_label"] = True
     checks["te_rb_keyed_on_position"] = True
-    # An unlabelled WR must still fall through to 1.0.
-    checks["unlabelled_wr_falls_through_to_1.0"] = (
-        'else' not in block.split('elif pos in {"RB", "FB"}')[-1])
+    # An unlabelled WR must still fall through to 1.0. Audit 6445134492
+    # correctly objected that recording this as a boolean without raising is
+    # not a guard at all.
+    tail = block.split('elif pos in {"RB", "FB"}')[-1]
+    if re.search(r"^\s*else\s*:", tail, re.M):
+        raise RuntimeError(
+            "an else branch now follows the RB/FB arm, so an unlabelled WR no "
+            "longer falls through to 1.0; the published finding is stale")
+    checks["unlabelled_wr_falls_through_to_1.0"] = True
+    # Prove only two perimeter labels are assigned by parsing the assignment
+    # statements, not by the absence of a `perim[2]` string, which a rewrite
+    # could trivially evade.
     lab = src.split("def _wr_role_labels(", 1)[1].split("\ndef ", 1)[0]
-    if "perim[2]" in lab:
-        raise RuntimeError("a third perimeter WR label now exists")
+    assigned = set(re.findall(r'out\[\(team, _key\([^)]*\)\)\] = "(\w+)"', lab))
+    if assigned != {"SLOT", "WR1", "WR1_5"}:
+        raise RuntimeError(
+            f"_wr_role_labels now assigns {sorted(assigned)}; the published "
+            "slot-plus-top-two finding must be revised")
+    idx = set(re.findall(r"perim\[(\d+)\]", lab))
+    if idx - {"0", "1"}:
+        raise RuntimeError(
+            f"_wr_role_labels now indexes perim{sorted(idx)}; more than two "
+            "perimeter WRs are labelled")
     checks["only_two_perimeter_wrs_labelled"] = True
+    checks["labels_assigned_exactly"] = sorted(assigned)
     return checks
+
+
+# Every gate multiplier, so the observed rule-layer ratio can be DECODED
+# rather than guessed. Audit 6445134492 noticed that 1.265 is exactly
+# 1.15 * 1.10 and 1.200 is exactly the RB zone multiplier; because
+# apply_rules_to_metrics() performs no normalization, the ratio IS the
+# multiplier, so the gate state is recoverable.
+GATE_SPECS = {
+    "te_target_mult":     (("coverage_zone_rate >= 0.60", 1.15),
+                           ("middle_open_rate >= 0.50", 1.10)),
+    "rb_rec_target_mult": (("coverage_zone_rate >= 0.60", 1.20),
+                           ("pressure_mismatch > 0.075", 1.10)),
+    "wr1_target_mult":    (("coverage_man_rate >= 0.50", 0.95),),
+    "wr1_5_target_mult":  (("coverage_man_rate >= 0.50", 1.15),),
+    "slot_target_mult":   (("coverage_man_rate >= 0.50", 1.05),
+                           ("middle_open_rate >= 0.50", 1.10)),
+}
+
+
+def decode_gates(observed: dict[str, float], tol: float = 1e-9) -> dict:
+    """Recover the gate state from observed rule-layer multipliers.
+
+    Sound only because the rules layer applies no normalization, so a row's
+    rules/bayes ratio is the multiplier itself. Each role's achievable products
+    are enumerated and checked for distinctness; a decode is reported only when
+    the observed value matches exactly one product. Shared booleans are then
+    cross-checked across position groups, which is independent corroboration
+    rather than a single-group inference.
+
+    RESIDUAL CONDITION, stated rather than assumed away: injury redistribution
+    replaces `base_tgt` outright and injury limitation halves it, so either
+    would break the exact match. The decode therefore holds for rows carrying
+    neither, which the uniform exact ratios within each group evidence but do
+    not prove.
+    """
+    from itertools import product as _p
+    per_role, booleans = {}, {}
+    for mult, gates in GATE_SPECS.items():
+        rows = []
+        for combo in _p([False, True], repeat=len(gates)):
+            v, fired = 1.0, []
+            for (g, m), on in zip(gates, combo):
+                if on:
+                    v *= m
+                    fired.append(g)
+            rows.append((round(v, 9), fired, dict(zip([g for g, _ in gates],
+                                                      combo))))
+        vals = [r[0] for r in rows]
+        entry = {"achievable_products": sorted(set(vals)),
+                 "products_all_distinct": len(set(vals)) == len(vals)}
+        if mult in observed and entry["products_all_distinct"]:
+            hit = [r for r in rows if abs(r[0] - observed[mult]) <= tol]
+            if len(hit) == 1:
+                entry["observed"] = observed[mult]
+                entry["decoded_fired"] = hit[0][1]
+                entry["decoded_state"] = hit[0][2]
+                for g, on in hit[0][2].items():
+                    booleans.setdefault(g, set()).add(bool(on))
+        per_role[mult] = entry
+    consistent = {g: (list(v)[0] if len(v) == 1 else "CONTRADICTION")
+                  for g, v in booleans.items()}
+    return {
+        "per_role": per_role,
+        "gate_state": consistent,
+        "cross_group_consistent": all(v != "CONTRADICTION"
+                                      for v in consistent.values()),
+        "corroboration": ("coverage_zone_rate is decoded independently by the "
+                          "TE and RB groups and coverage_man_rate independently "
+                          "by WR1 and WR1_5; agreement is corroboration, not a "
+                          "single-group inference"),
+        "derived_consequences": {
+            "volatility_mult": (
+                1.0 if consistent.get("pressure_mismatch > 0.075") is False
+                else "NOT_ESTABLISHED"),
+            "pass_eff_mult_bound": (
+                ["1.00", "1.01"]
+                if consistent.get("pressure_mismatch > 0.075") is False
+                else "NOT_ESTABLISHED"),
+            "pass_eff_note": (
+                "pressure is not > 0.075, so pass_eff_mult is not 0.98. It is "
+                "1.00, or 1.01 if pressure < -0.075, which the preserved "
+                "artifact cannot separate because rules_pass_eff_mult -- which "
+                "apply_rules_to_metrics DOES emit -- was not preserved. Field 8 "
+                "is therefore BOUNDED, not resolved."),
+        },
+    }
+
+
+def allocator_chain(team: str = "SEA") -> dict:
+    """Field 7 / 10 from the REAL allocator, not inferred from a ratio.
+
+    Audit 6445134492 blocker 1: apply_rules_to_metrics() performs no team-room
+    normalization, so calling the rule-layer ratio "normalization" was wrong,
+    and summing selected rows was not a finite-room measurement. The actual
+    chain is rules_tgt_share -> post_m38_tgt_share -> entitlement_tgt_share
+    with a residual, and it is preserved.
+    """
+    path = TRACE / "week7_trace__data__target_entitlement_v1_trace.csv"
+    audit = TRACE / "week7_trace__data__team_target_pool_audit.csv"
+    if not path.exists():
+        return {"available": False,
+                "blocker": f"{path} not preserved; fields 7/10 NOT ESTABLISHED"}
+    e = pd.read_csv(path, low_memory=False)
+    t = e.loc[e["team"].eq(team)].copy()
+    for c in ("rules_tgt_share", "post_m38_tgt_share",
+              "entitlement_tgt_share"):
+        t[c] = pd.to_numeric(t[c], errors="coerce")
+    t["m38_delta_pct"] = ((t["post_m38_tgt_share"] / t["rules_tgt_share"]) - 1.0)
+    t["net_rules_to_entitlement"] = (t["entitlement_tgt_share"]
+                                     / t["rules_tgt_share"])
+    room = {}
+    if audit.exists():
+        a = pd.read_csv(audit, low_memory=False)
+        r = a.loc[a["team"].eq(team)]
+        if len(r):
+            room = {k: (float(r.iloc[0][k])
+                        if pd.api.types.is_number(r.iloc[0][k]) else
+                        r.iloc[0][k])
+                    for k in ("entitlement_sum", "residual_share",
+                              "entitlement_players", "entitlement_gap")
+                    if k in a.columns}
+    return {
+        "available": True,
+        "stages": ["rules_tgt_share", "post_m38_tgt_share",
+                   "entitlement_tgt_share"],
+        "team_sums": {c: float(t[c].sum()) for c in
+                      ("rules_tgt_share", "post_m38_tgt_share",
+                       "entitlement_tgt_share")},
+        "m38_conserves_team_mass": bool(
+            abs(t["rules_tgt_share"].sum()
+                - t["post_m38_tgt_share"].sum()) < 1e-9),
+        "team_room_audit": room,
+        "rows": t[["player", "position", "rules_tgt_share",
+                   "post_m38_tgt_share", "entitlement_tgt_share",
+                   "m38_delta_pct", "net_rules_to_entitlement"]]
+        .sort_values("entitlement_tgt_share", ascending=False)
+        .to_dict("records"),
+    }
 
 
 def eligible_gates(role: str, position: str) -> tuple[str, tuple[str, ...]]:
@@ -169,18 +325,35 @@ def build(u: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     # 7 finite-room / team normalization
     grp = (out.groupby("position")["ratio_rules_over_bayes"]
            .agg(lambda s: sorted(set(s.round(9).dropna()))).to_dict())
-    room = {
-        "team_pre_gate_bayes_tgt_share_sum": float(
-            pd.to_numeric(out["pre_gate_bayes_tgt_share"],
-                          errors="coerce").sum()),
-        "team_post_gate_rules_tgt_share_sum": float(
-            pd.to_numeric(out["post_gate_rules_tgt_share"],
-                          errors="coerce").sum()),
-        "per_position_group_scale": {k: v for k, v in grp.items()},
-        "interpretation": ("the ratio is uniform WITHIN each position group, "
-                           "so the group scale and any fired within-group "
-                           "multiplier are not separable for TE/RB"),
+    # NOT normalization. apply_rules_to_metrics() performs no team-room
+    # normalization, so this ratio is the rule-layer matchup multiplier itself
+    # (audit 6445134492 blocker 1). Calling it a group scale was wrong, and it
+    # is what made the gate state look unrecoverable.
+    rule_layer = {
+        "quantity": "rules_tgt_share / bayes_tgt_share",
+        "what_it_is": ("the rule-layer matchup multiplier, applied to the "
+                       "posterior inside apply_rules_to_metrics, which performs "
+                       "NO team-room normalization"),
+        "what_it_is_not": ("a per-position-group room normalization, and not a "
+                           "final allocated share"),
+        "per_position_group_observed_multiplier": {k: v for k, v in grp.items()},
     }
+    observed_mult = {}
+    for pos, vals in grp.items():
+        if len(vals) == 1:
+            key = {"TE": "te_target_mult", "RB": "rb_rec_target_mult",
+                   "FB": "rb_rec_target_mult"}.get(str(pos))
+            if key:
+                observed_mult[key] = float(vals[0])
+    for role_name, mult_name in (("WR1", "wr1_target_mult"),
+                                 ("WR1_5", "wr1_5_target_mult"),
+                                 ("SLOT", "slot_target_mult")):
+        r = out.loc[out["canonical_role_label"].eq(role_name),
+                    "ratio_rules_over_bayes"].dropna()
+        if len(r) == 1:
+            observed_mult[mult_name] = float(round(r.iloc[0], 9))
+    decoded = decode_gates(observed_mult)
+    chain = allocator_chain("SEA")
 
     kupp = out.loc[out["player"].eq("Cooper Kupp")]
     sha = out.loc[out["player"].eq("Rashid Shaheed")]
@@ -248,22 +421,43 @@ def build(u: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
                                   "gate would split their rules/bayes ratios. "
                                   f"observed WR ratios: {wr_ratios}. identical "
                                   "=> not fired."),
-            "te_and_rb_gates_fired": "NOT_ESTABLISHED",
-            "te_rb_blocker": ("a uniform within-group multiplier is "
-                              "indistinguishable from the group normalization "
-                              "scale in the preserved artifact; rules_*_mult "
-                              "was not preserved"),
-            "shared_pass_eff_mult_movement": "NOT_ESTABLISHED",
-            "pass_eff_blocker": "rules_ypt was not preserved",
+            "te_and_rb_gates_DECODED": decoded["gate_state"],
+            "decode_basis": ("the rules layer applies no normalization, so the "
+                             "rules/bayes ratio IS the multiplier. Each role's "
+                             "achievable products are distinct, so an exact "
+                             "match identifies the gate state uniquely."),
+            "decode_cross_group_consistent": decoded["cross_group_consistent"],
+            "decode_residual_condition": (
+                "holds for rows with no injury redistribution and no injury "
+                "limitation, either of which would break the exact match"),
+            "shared_pass_eff_mult_movement": "BOUNDED_NOT_RESOLVED",
+            "pass_eff_bound": decoded["derived_consequences"],
         },
-        "finite_room": room,
-        "final_opponent_attributable_movement": {
+        "rule_layer_multiplier": rule_layer,
+        "observed_multipliers": observed_mult,
+        "gate_decode": decoded,
+        "allocator_chain_fields_7_and_10": chain,
+        "direct_wr_coverage_target_rule_layer_delta": {
             "all_SEA_WRs_week7": 0.0,
-            "distinction": ("Kupp's zero is STRUCTURAL -- he is ineligible "
-                            "whatever the defense does. JSN's zero is "
-                            "CIRCUMSTANTIAL -- he was eligible and the gate "
-                            "did not fire. These are different failures and "
-                            "must not be pooled."),
+            "SCOPE": ("this is ONLY the direct WR coverage-target rule-layer "
+                      "delta. It is NOT total opponent attribution and does "
+                      "NOT make any WR globally opponent-insensitive (audit "
+                      "6445134492 blocker 3). Shared pass_eff_mult can still "
+                      "move YPT, and the M38/entitlement stages move a WR's "
+                      "share for teammate-structural reasons, which is "
+                      "indirect opponent exposure."),
+            "distinction": ("Kupp's zero is STRUCTURAL -- as an unlabelled WR "
+                            "he is ineligible whatever the defense does. "
+                            "JSN's zero is CIRCUMSTANTIAL -- he was eligible "
+                            "and the man gate did not fire."),
+            "WHY_THIS_MATTERS_MORE_THAN_V1_SAID": (
+                "the zone gate DID fire for KC. No WR role has a zone route "
+                "at all -- wr1 and wr1_5 key only on coverage_man_rate -- so "
+                "zone coverage, the most common NFL coverage family, moved "
+                "every TE (x1.265) and every RB/FB (x1.200) and could not move "
+                "any WR. V1 reported the WR zero without noting that the "
+                "defense was in a configuration which paid out to every "
+                "position-routed player."),
         },
         "separate_defect_not_merged": (
             "Montorie Foster is position_prior_only (zero history) and carries "

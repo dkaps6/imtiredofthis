@@ -1,6 +1,9 @@
 # PRISM — Named-Player Role-Routing Trace V1 (JSN / Kupp / Barner)
 
 **Status:** read-only role-routing trace. **No fitting, no scoring, no promotion.**
+**Revised per:** GPT audit `6445134492`
+(`NAMED_PLAYER_ROLE_ROUTING_CORE_SUPPORTED__FULL_OPPONENT_ATTRIBUTION_TRACE_REVISION_REQUIRED`)
+— core role-routing finding SUPPORTED, three blockers fixed below.
 **Authorized by:** GPT audit `6441088661`
 (`OPPONENT_TRANSMISSION_GENERALIZATION_V2_CLEARED__COMPACT_NAMED_PLAYER_ROLE_ROUTING_TRACE_AUTHORIZED`),
 reconfirmed `6443421541`.
@@ -88,8 +91,13 @@ share are keyed on different quantities.
 
 ## Structural zero vs circumstantial zero
 
-Opponent-attributable movement for every Seattle WR in Week 7 was **0.0**, but
-for two different reasons that must not be pooled:
+The **direct WR coverage-target rule-layer delta** for every Seattle WR in Week 7
+was **0.0**. That is a statement about one channel only: it is **not** total
+opponent attribution, and it does **not** make any WR globally
+opponent-insensitive. Shared `pass_eff_mult` can still move YPT, and the
+M38/entitlement stages move a WR's share for teammate-structural reasons, which
+is indirect opponent exposure. Within that scope there are two different causes
+which must not be pooled:
 
 - **Kupp's zero is STRUCTURAL.** He is ineligible whatever the defense does.
 - **JSN's zero is CIRCUMSTANTIAL.** He was eligible and the gate did not fire.
@@ -97,6 +105,7 @@ for two different reasons that must not be pooled:
 The man-coverage gate is **certified not fired** for Kansas City by an exact
 argument: WR1 takes ×0.95 and WR1_5 takes ×1.15, so a fired gate would split
 their `rules`/`bayes` ratios. Both are exactly **1.000**, so it did not fire.
+But the **zone** gate did fire, and no WR role reads zone at all — see above.
 
 ## Role-specific efficiency signals, present and stranded
 
@@ -106,18 +115,95 @@ referenced by **no production module at all**: `ypt_allowed_wr`,
 So even a labeled WR has no role-specific conversion channel — only the shared
 pressure-driven `pass_eff_mult`.
 
-## Finite room / normalization
+## The rule-layer ratio is the multiplier, not a normalization
 
-The `rules`/`bayes` ratio is uniform **within** each position group: WR 1.000,
-RB/FB 1.200, TE 1.265. This is the per-group room normalization.
+`apply_rules_to_metrics()` sets `base_tgt` from the posterior, applies the
+matchup multiplier and any injury limitation, and emits `rules_tgt_share`. It
+performs **no team-room normalization** — V1 of this document called the
+observed ratios a "per-position-group room normalization," which was wrong.
+
+Because no normalization intervenes, **the ratio IS the multiplier.** That makes
+the gate state recoverable:
+
+| role multiplier | achievable products | observed | decoded |
+|---|---|---|---|
+| `te_target_mult` | 1.000, 1.100, 1.150, **1.265** | **1.265** | zone **and** middle-open fired |
+| `rb_rec_target_mult` | 1.000, 1.100, **1.200**, 1.320 | **1.200** | zone fired, pressure did **not** |
+| `wr1_target_mult` | 0.950, **1.000** | **1.000** | man did **not** fire |
+| `wr1_5_target_mult` | **1.000**, 1.150 | **1.000** | man did **not** fire |
+
+Every role's products are distinct, so an exact match identifies the state
+uniquely. The shared booleans are decoded **independently by separate position
+groups** — `coverage_zone_rate` by both TE and RB, `coverage_man_rate` by both
+WR1 and WR1_5 — and they agree, which is corroboration rather than a
+single-group inference.
+
+**Decoded gate state for the Kansas City defense, 2026 Week 7:**
+
+| gate | state |
+|---|---|
+| `coverage_zone_rate >= 0.60` | **FIRED** |
+| `middle_open_rate >= 0.50` | **FIRED** |
+| `coverage_man_rate >= 0.50` | not fired |
+| `pressure_mismatch > 0.075` | not fired |
+
+**Residual condition, stated rather than assumed away:** injury redistribution
+replaces `base_tgt` outright and injury limitation halves it, so either would
+break the exact match. The decode holds for rows carrying neither, which the
+uniform exact ratios within each group evidence but do not prove.
+
+**Derived consequences.** Pressure did not fire, so `volatility_mult = 1.0` —
+the explicit sigma channel did not move. And `pass_eff_mult` is **not** 0.98; it
+is 1.00, or 1.01 if pressure `< -0.075`. Field 8 is therefore **bounded to
+{1.00, 1.01}, not resolved**: `apply_rules_to_metrics` does emit
+`rules_pass_eff_mult`, but it was not preserved.
+
+## No WR role has a zone route at all
+
+This is the finding V1 obscured. `wr1_target_mult` and `wr1_5_target_mult` key
+**only** on `coverage_man_rate`; `slot_target_mult` adds `middle_open_rate`. None
+of them reads `coverage_zone_rate`. Only `te_target_mult` and
+`rb_rec_target_mult` do.
+
+In Week 7 Kansas City's zone gate **fired**. So zone coverage — the most common
+coverage family in the league — moved every Seattle tight end by **×1.265** and
+every running back and the fullback by **×1.200**, and could not move a single
+wide receiver. V1 reported the WR zero without noting that the defense was in a
+configuration which paid out to every position-routed player on the roster.
+
+## Fields 7 and 10 — the real allocator chain
+
+Not inferred from a ratio. The preserved chain is
+`rules_tgt_share → post_m38_tgt_share → entitlement_tgt_share` plus a residual.
+
+| player | role | `rules` | `post_m38` | M38 Δ | `entitlement` | net `rules`→`entitlement` |
+|---|---|---|---|---|---|---|
+| Jaxon Smith-Njigba | WR1 | 0.316891 | **0.409603** | **+29.3%** | 0.243027 | ×0.767 |
+| AJ Barner | TE (position) | 0.172954 | 0.172954 | **0.0%** | 0.135849 | ×0.785 |
+| **Cooper Kupp** | **unlabeled** | 0.151325 | **0.108976** | **−28.0%** | 0.106951 | **×0.707** |
+| Rashid Shaheed | WR1_5 | 0.157403 | 0.132245 | −16.0% | 0.079959 | ×0.508 |
+| Tory Horton | unlabeled | 0.121190 | 0.087275 | −28.0% | 0.059026 | ×0.487 |
+| Montorie Foster | unlabeled | 0.165842 | 0.174552 | +5.3% | 0.052536 | ×0.317 |
+
+**The WR hierarchy stage touches only WRs** — every TE and RB value is identical
+pre- and post-M38 — and it moves share away from the non-top receivers toward
+JSN. So Cooper Kupp is reduced twice over: he collects no coverage multiplier at
+the rule layer, and the sharpening stage then takes 28.0% of his share.
+
+Team mass is conserved exactly: `rules` and `post_m38` both sum to
+**1.601148605998**, and the entitlement room closes at **0.950000** with a
+**0.05** residual and an `entitlement_gap` of **5.55e-16** across 15 players.
 
 ## Not established
 
-- **Whether the TE and RB coverage/pressure gates fired.** A uniform
-  within-group multiplier is indistinguishable from that group's normalization
-  scale in the preserved artifact, and `rules_*_mult` was not preserved.
-  Reported unresolved rather than guessed.
-- **Shared `pass_eff_mult` movement** — `rules_ypt` was not preserved.
+- **`pass_eff_mult` exactly** — bounded to {1.00, 1.01}; `rules_pass_eff_mult`
+  is emitted by production but was not preserved.
+- **The decode's residual condition** — that no traced row carried injury
+  redistribution or limitation is evidenced by the exact uniform ratios, not
+  proven.
+- **Total opponent attribution to the final mean.** The chain above is the
+  target-share path; YPT, game script and downstream mean construction are not
+  accounted for here.
 - **How often any gate fires league-wide.**
 - **Whether consuming the stranded `ypt_allowed_*` family would improve any
   projection.** Untested; must not be scored on Week 7.
@@ -131,7 +217,13 @@ as an observation only and is not merged into the routing finding.
 
 ## Method validity
 
-`assert_routing_matches_source()` fails closed if the WR branches stop keying on
+`assert_routing_matches_source()` **raises** if the WR branches stop keying on
 the role label, if the TE/RB branches stop keying on position, if any multiplier
-leaves the chain, or if a third perimeter WR label appears — so this document
-cannot go stale silently.
+leaves the chain, if an `else` arm appears after the RB/FB branch (which would
+end the unlabeled-WR fall-through), or if `_wr_role_labels` assigns anything
+other than exactly `{SLOT, WR1, WR1_5}` or indexes beyond `perim[0..1]`.
+
+V1 recorded the fall-through check as a boolean **without raising**, and proved
+the two-label claim only by the absence of a `perim[2]` string — both of which
+audit `6445134492` correctly rejected as non-guards. The check now parses the
+assignment statements themselves.

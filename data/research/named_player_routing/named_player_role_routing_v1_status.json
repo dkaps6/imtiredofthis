@@ -1,38 +1,280 @@
 {
   "RANKING_KEY_MISMATCH": "_wr_role_labels sorts perimeter WRs by the RAW tgt_share with a 0.0 default, while the quantity production actually scales is bayes_tgt_share. The two disagree. Montorie Foster is the clean case: his raw tgt_share is NaN -> 0.0, so he sorts last and gets no label, yet his bayes posterior (0.165842) is the second largest in the SEA receiving room -- larger than both the labelled WR1_5 and Cooper Kupp. So the role ranking and the allocated share are keyed on different quantities.",
   "THE_ROUTING_ASYMMETRY": "in simulation_rules.py the WR branches key on the COMPUTED role label while the TE and RB branches key on POSITION. So every TE and every RB receives an opponent-coverage target channel by position, but a WR receives one only if _wr_role_labels assigned him SLOT, WR1 or WR1_5 -- that is, slot plus the top two perimeter WRs by target share. Any other WR falls through the whole chain to tgt_mult = 1.0, and no diagnostic records it.",
+  "allocator_chain_fields_7_and_10": {
+    "available": true,
+    "m38_conserves_team_mass": true,
+    "rows": [
+      {
+        "entitlement_tgt_share": 0.2430273472522565,
+        "m38_delta_pct": 0.292568828400799,
+        "net_rules_to_entitlement": 0.7669121918980992,
+        "player": "Jaxon Smith-Njigba",
+        "position": "WR",
+        "post_m38_tgt_share": 0.4096030508130743,
+        "rules_tgt_share": 0.3168907077233529
+      },
+      {
+        "entitlement_tgt_share": 0.1358489261933187,
+        "m38_delta_pct": 0.0,
+        "net_rules_to_entitlement": 0.7854646702088475,
+        "player": "AJ Barner",
+        "position": "TE",
+        "post_m38_tgt_share": 0.1729535793853055,
+        "rules_tgt_share": 0.1729535793853055
+      },
+      {
+        "entitlement_tgt_share": 0.1069506773127122,
+        "m38_delta_pct": -0.2798545098909837,
+        "net_rules_to_entitlement": 0.7067607128676079,
+        "player": "Cooper Kupp",
+        "position": "WR",
+        "post_m38_tgt_share": 0.1089761308581423,
+        "rules_tgt_share": 0.1513251590892354
+      },
+      {
+        "entitlement_tgt_share": 0.0799588422697611,
+        "m38_delta_pct": -0.15983026153948066,
+        "net_rules_to_entitlement": 0.5079882393484926,
+        "player": "Rashid Shaheed",
+        "position": "WR",
+        "post_m38_tgt_share": 0.1322451867853276,
+        "rules_tgt_share": 0.1574029398245721
+      },
+      {
+        "entitlement_tgt_share": 0.0661964870506427,
+        "m38_delta_pct": 0.0,
+        "net_rules_to_entitlement": 0.44393317629158124,
+        "player": "Nick Kallerup",
+        "position": "TE",
+        "post_m38_tgt_share": 0.1491136292259535,
+        "rules_tgt_share": 0.1491136292259535
+      },
+      {
+        "entitlement_tgt_share": 0.059025555200053,
+        "m38_delta_pct": -0.27985450989098337,
+        "net_rules_to_entitlement": 0.4870484294465538,
+        "player": "Tory Horton",
+        "position": "WR",
+        "post_m38_tgt_share": 0.0872746626589081,
+        "rules_tgt_share": 0.1211903203694247
+      },
+      {
+        "entitlement_tgt_share": 0.0525356699218396,
+        "m38_delta_pct": 0.052520331697793576,
+        "net_rules_to_entitlement": 0.31678076162970215,
+        "player": "Montorie Foster",
+        "position": "WR",
+        "post_m38_tgt_share": 0.1745524584499131,
+        "rules_tgt_share": 0.1658423625587802
+      },
+      {
+        "entitlement_tgt_share": 0.0458920674860119,
+        "m38_delta_pct": 0.0,
+        "net_rules_to_entitlement": 0.4789829857990148,
+        "player": "Eric Saubert",
+        "position": "TE",
+        "post_m38_tgt_share": 0.0958114773314069,
+        "rules_tgt_share": 0.0958114773314069
+      },
+      {
+        "entitlement_tgt_share": 0.0449784547791662,
+        "m38_delta_pct": 0.0,
+        "net_rules_to_entitlement": 0.5933240652623072,
+        "player": "Zach Charbonnet",
+        "position": "RB",
+        "post_m38_tgt_share": 0.0758075685996005,
+        "rules_tgt_share": 0.0758075685996005
+      },
+      {
+        "entitlement_tgt_share": 0.0421001199799777,
+        "m38_delta_pct": 0.0,
+        "net_rules_to_entitlement": 0.5933240652623072,
+        "player": "Brady Russell",
+        "position": "FB",
+        "post_m38_tgt_share": 0.0709563667561088,
+        "rules_tgt_share": 0.0709563667561088
+      },
+      {
+        "entitlement_tgt_share": 0.0384547196716625,
+        "m38_delta_pct": 0.0,
+        "net_rules_to_entitlement": 0.5933240652623066,
+        "player": "George Holani",
+        "position": "RB",
+        "post_m38_tgt_share": 0.0648123376803565,
+        "rules_tgt_share": 0.0648123376803565
+      },
+      {
+        "entitlement_tgt_share": 0.034574524084364,
+        "m38_delta_pct": 0.0,
+        "net_rules_to_entitlement": 0.5933240652623064,
+        "player": "Emanuel Wilson",
+        "position": "RB",
+        "post_m38_tgt_share": 0.0582725800428788,
+        "rules_tgt_share": 0.0582725800428788
+      },
+      {
+        "entitlement_tgt_share": 0.0002095909237792,
+        "m38_delta_pct": 0.0,
+        "net_rules_to_entitlement": 0.5933240652622921,
+        "player": "Jalen Milroe",
+        "position": "QB",
+        "post_m38_tgt_share": 0.0003532486478305,
+        "rules_tgt_share": 0.0003532486478305
+      },
+      {
+        "entitlement_tgt_share": 0.0001571931928344,
+        "m38_delta_pct": 0.0,
+        "net_rules_to_entitlement": 0.5933240652622361,
+        "player": "Drew Lock",
+        "position": "QB",
+        "post_m38_tgt_share": 0.0002649364858729,
+        "rules_tgt_share": 0.0002649364858729
+      },
+      {
+        "entitlement_tgt_share": 8.982468161967422e-05,
+        "m38_delta_pct": 0.0,
+        "net_rules_to_entitlement": 0.5933240652625728,
+        "player": "Sam Darnold",
+        "position": "QB",
+        "post_m38_tgt_share": 0.0001513922776416,
+        "rules_tgt_share": 0.0001513922776416
+      }
+    ],
+    "stages": [
+      "rules_tgt_share",
+      "post_m38_tgt_share",
+      "entitlement_tgt_share"
+    ],
+    "team_room_audit": {
+      "entitlement_gap": 5.551115123125785e-16,
+      "entitlement_players": 15.0,
+      "entitlement_sum": 0.9499999999999994,
+      "residual_share": 0.05
+    },
+    "team_sums": {
+      "entitlement_tgt_share": 0.9499999999999994,
+      "post_m38_tgt_share": 1.6011486059983207,
+      "rules_tgt_share": 1.6011486059983209
+    }
+  },
   "authorized_by": "GPT_AUDIT_6441088661",
   "basis": "data/research/week7_opportunity_trace/week7_trace__data__football_simulation_universe.csv",
-  "final_opponent_attributable_movement": {
+  "direct_wr_coverage_target_rule_layer_delta": {
+    "SCOPE": "this is ONLY the direct WR coverage-target rule-layer delta. It is NOT total opponent attribution and does NOT make any WR globally opponent-insensitive (audit 6445134492 blocker 3). Shared pass_eff_mult can still move YPT, and the M38/entitlement stages move a WR's share for teammate-structural reasons, which is indirect opponent exposure.",
+    "WHY_THIS_MATTERS_MORE_THAN_V1_SAID": "the zone gate DID fire for KC. No WR role has a zone route at all -- wr1 and wr1_5 key only on coverage_man_rate -- so zone coverage, the most common NFL coverage family, moved every TE (x1.265) and every RB/FB (x1.200) and could not move any WR. V1 reported the WR zero without noting that the defense was in a configuration which paid out to every position-routed player.",
     "all_SEA_WRs_week7": 0.0,
-    "distinction": "Kupp's zero is STRUCTURAL -- he is ineligible whatever the defense does. JSN's zero is CIRCUMSTANTIAL -- he was eligible and the gate did not fire. These are different failures and must not be pooled."
+    "distinction": "Kupp's zero is STRUCTURAL -- as an unlabelled WR he is ineligible whatever the defense does. JSN's zero is CIRCUMSTANTIAL -- he was eligible and the man gate did not fire."
   },
-  "finite_room": {
-    "interpretation": "the ratio is uniform WITHIN each position group, so the group scale and any fired within-group multiplier are not separable for TE/RB",
-    "per_position_group_scale": {
-      "FB": [
-        1.2
+  "gate_decode": {
+    "corroboration": "coverage_zone_rate is decoded independently by the TE and RB groups and coverage_man_rate independently by WR1 and WR1_5; agreement is corroboration, not a single-group inference",
+    "cross_group_consistent": true,
+    "derived_consequences": {
+      "pass_eff_mult_bound": [
+        "1.00",
+        "1.01"
       ],
-      "RB": [
-        1.2
-      ],
-      "TE": [
-        1.265
-      ],
-      "WR": [
-        1.0
-      ]
+      "pass_eff_note": "pressure is not > 0.075, so pass_eff_mult is not 0.98. It is 1.00, or 1.01 if pressure < -0.075, which the preserved artifact cannot separate because rules_pass_eff_mult -- which apply_rules_to_metrics DOES emit -- was not preserved. Field 8 is therefore BOUNDED, not resolved.",
+      "volatility_mult": 1.0
     },
-    "team_post_gate_rules_tgt_share_sum": 1.6003790285869761,
-    "team_pre_gate_bayes_tgt_share_sum": 1.4678644159659346
+    "gate_state": {
+      "coverage_man_rate >= 0.50": false,
+      "coverage_zone_rate >= 0.60": true,
+      "middle_open_rate >= 0.50": true,
+      "pressure_mismatch > 0.075": false
+    },
+    "per_role": {
+      "rb_rec_target_mult": {
+        "achievable_products": [
+          1.0,
+          1.1,
+          1.2,
+          1.32
+        ],
+        "decoded_fired": [
+          "coverage_zone_rate >= 0.60"
+        ],
+        "decoded_state": {
+          "coverage_zone_rate >= 0.60": true,
+          "pressure_mismatch > 0.075": false
+        },
+        "observed": 1.2,
+        "products_all_distinct": true
+      },
+      "slot_target_mult": {
+        "achievable_products": [
+          1.0,
+          1.05,
+          1.1,
+          1.155
+        ],
+        "products_all_distinct": true
+      },
+      "te_target_mult": {
+        "achievable_products": [
+          1.0,
+          1.1,
+          1.15,
+          1.265
+        ],
+        "decoded_fired": [
+          "coverage_zone_rate >= 0.60",
+          "middle_open_rate >= 0.50"
+        ],
+        "decoded_state": {
+          "coverage_zone_rate >= 0.60": true,
+          "middle_open_rate >= 0.50": true
+        },
+        "observed": 1.265,
+        "products_all_distinct": true
+      },
+      "wr1_5_target_mult": {
+        "achievable_products": [
+          1.0,
+          1.15
+        ],
+        "decoded_fired": [],
+        "decoded_state": {
+          "coverage_man_rate >= 0.50": false
+        },
+        "observed": 1.0,
+        "products_all_distinct": true
+      },
+      "wr1_target_mult": {
+        "achievable_products": [
+          0.95,
+          1.0
+        ],
+        "decoded_fired": [],
+        "decoded_state": {
+          "coverage_man_rate >= 0.50": false
+        },
+        "observed": 1.0,
+        "products_all_distinct": true
+      }
+    }
   },
   "gate_firing": {
+    "decode_basis": "the rules layer applies no normalization, so the rules/bayes ratio IS the multiplier. Each role's achievable products are distinct, so an exact match identifies the gate state uniquely.",
+    "decode_cross_group_consistent": true,
+    "decode_residual_condition": "holds for rows with no injury redistribution and no injury limitation, either of which would break the exact match",
     "man_coverage_gate_fired_for_KC": false,
     "man_gate_argument": "WR1 takes x0.95 and WR1_5 x1.15, so a fired gate would split their rules/bayes ratios. observed WR ratios: [1.0]. identical => not fired.",
-    "pass_eff_blocker": "rules_ypt was not preserved",
-    "shared_pass_eff_mult_movement": "NOT_ESTABLISHED",
-    "te_and_rb_gates_fired": "NOT_ESTABLISHED",
-    "te_rb_blocker": "a uniform within-group multiplier is indistinguishable from the group normalization scale in the preserved artifact; rules_*_mult was not preserved"
+    "pass_eff_bound": {
+      "pass_eff_mult_bound": [
+        "1.00",
+        "1.01"
+      ],
+      "pass_eff_note": "pressure is not > 0.075, so pass_eff_mult is not 0.98. It is 1.00, or 1.01 if pressure < -0.075, which the preserved artifact cannot separate because rules_pass_eff_mult -- which apply_rules_to_metrics DOES emit -- was not preserved. Field 8 is therefore BOUNDED, not resolved.",
+      "volatility_mult": 1.0
+    },
+    "shared_pass_eff_mult_movement": "BOUNDED_NOT_RESOLVED",
+    "te_and_rb_gates_DECODED": {
+      "coverage_man_rate >= 0.50": false,
+      "coverage_zone_rate >= 0.60": true,
+      "middle_open_rate >= 0.50": true,
+      "pressure_mismatch > 0.075": false
+    }
   },
   "kupp_exclusion_is_structural_not_circumstantial": true,
   "kupp_exclusion_margin_on_bayes_posterior_for_reference": 0.006077780735336685,
@@ -49,14 +291,44 @@
     "how often any gate fires league-wide",
     "whether consuming the stranded ypt_allowed_* family would improve any projection"
   ],
+  "observed_multipliers": {
+    "rb_rec_target_mult": 1.2,
+    "te_target_mult": 1.265,
+    "wr1_5_target_mult": 1.0,
+    "wr1_target_mult": 1.0
+  },
   "outcomes_inspected": false,
   "population": "2026 week 7, SEA offense vs KC -- same offense, same opponent, roles vary. Walker is the KC back facing SEA in the same game and is not re-examined.",
   "reconfirmed_by": "GPT_CONTROL_6443421541",
   "routing_source_checks": {
+    "labels_assigned_exactly": [
+      "SLOT",
+      "WR1",
+      "WR1_5"
+    ],
     "only_two_perimeter_wrs_labelled": true,
     "te_rb_keyed_on_position": true,
     "unlabelled_wr_falls_through_to_1.0": true,
     "wr_keyed_on_role_label": true
+  },
+  "rule_layer_multiplier": {
+    "per_position_group_observed_multiplier": {
+      "FB": [
+        1.2
+      ],
+      "RB": [
+        1.2
+      ],
+      "TE": [
+        1.265
+      ],
+      "WR": [
+        1.0
+      ]
+    },
+    "quantity": "rules_tgt_share / bayes_tgt_share",
+    "what_it_is": "the rule-layer matchup multiplier, applied to the posterior inside apply_rules_to_metrics, which performs NO team-room normalization",
+    "what_it_is_not": "a per-position-group room normalization, and not a final allocated share"
   },
   "scientific_boundary": "READ_ONLY_ROLE_ROUTING_TRACE_NO_FITTING_NO_SCORING",
   "separate_defect_not_merged": "Montorie Foster is position_prior_only (zero history) and carries a larger rules_tgt_share than Cooper Kupp. That is the zero-history entitlement defect, which the audit requires be kept a distinct cause. It is recorded here only as an observation.",
