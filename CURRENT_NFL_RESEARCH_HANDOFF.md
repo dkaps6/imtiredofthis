@@ -6,7 +6,7 @@
 
 ### WHAT THE NEXT SESSION SHOULD DO FIRST
 
-Read newest #535 **after comment 6446595260**.
+Read newest #535 **after comment 6448026674**.
 
 **The named-player trace core finding is SUPPORTED** (audit `6445134492`); its
 three blockers are **FIXED** at revised executor target
