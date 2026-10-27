@@ -1,0 +1,481 @@
+{
+  "authorized_by": "USER_2026_10_27",
+  "cannot_establish": [
+    "that consuming any stranded signal would improve accuracy",
+    "anything about the box/coverage gates on 2026 (participation-locked)",
+    "that production's def_rush_epa is constructed like this one"
+  ],
+  "chronology": "every aggregate for week N uses weeks 1..N-1 only; asserted",
+  "cross_sectional_dispersion": {
+    "def_pass_epa": {
+      "consecutive_week_rank_corr": [
+        0.5286,
+        0.7643,
+        0.8849,
+        0.7295,
+        0.8537
+      ],
+      "label": "MATERIAL_DISPERSION",
+      "median_iqr": 0.188727,
+      "median_rank_corr": 0.7643,
+      "per_target_week": [
+        {
+          "defenses": 32,
+          "iqr": 0.459992,
+          "max": 0.792561,
+          "min": -0.606329,
+          "range": 1.39889,
+          "sd": 0.337791,
+          "target_week": 2
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.348952,
+          "max": 0.456223,
+          "min": -0.412643,
+          "range": 0.868867,
+          "sd": 0.216801,
+          "target_week": 3
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.230699,
+          "max": 0.482204,
+          "min": -0.166488,
+          "range": 0.648691,
+          "sd": 0.169547,
+          "target_week": 4
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.092263,
+          "max": 0.427394,
+          "min": -0.206441,
+          "range": 0.633835,
+          "sd": 0.141082,
+          "target_week": 5
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.125445,
+          "max": 0.39075,
+          "min": -0.244581,
+          "range": 0.63533,
+          "sd": 0.139611,
+          "target_week": 6
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.146755,
+          "max": 0.331304,
+          "min": -0.244581,
+          "range": 0.575885,
+          "sd": 0.129451,
+          "target_week": 7
+        }
+      ],
+      "trivial_iqr_threshold": 0.05
+    },
+    "def_rush_epa": {
+      "consecutive_week_rank_corr": [
+        0.592,
+        0.8105,
+        0.8658,
+        0.7621,
+        0.8842
+      ],
+      "label": "MATERIAL_DISPERSION",
+      "median_iqr": 0.136874,
+      "median_rank_corr": 0.8105,
+      "per_target_week": [
+        {
+          "defenses": 32,
+          "iqr": 0.184422,
+          "max": 0.37773,
+          "min": -0.429032,
+          "range": 0.806762,
+          "sd": 0.173824,
+          "target_week": 2
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.229289,
+          "max": 0.242782,
+          "min": -0.363766,
+          "range": 0.606548,
+          "sd": 0.153011,
+          "target_week": 3
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.145268,
+          "max": 0.202256,
+          "min": -0.251669,
+          "range": 0.453925,
+          "sd": 0.107031,
+          "target_week": 4
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.12848,
+          "max": 0.138445,
+          "min": -0.233567,
+          "range": 0.372013,
+          "sd": 0.088588,
+          "target_week": 5
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.123607,
+          "max": 0.118524,
+          "min": -0.163944,
+          "range": 0.282468,
+          "sd": 0.078055,
+          "target_week": 6
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.11844,
+          "max": 0.081099,
+          "min": -0.154231,
+          "range": 0.23533,
+          "sd": 0.070031,
+          "target_week": 7
+        }
+      ],
+      "trivial_iqr_threshold": 0.05
+    },
+    "explosive_pass_rate_allowed": {
+      "consecutive_week_rank_corr": [
+        0.6687,
+        0.8301,
+        0.8492,
+        0.8866,
+        0.9216
+      ],
+      "label": "MATERIAL_DISPERSION",
+      "median_iqr": 0.041256,
+      "median_rank_corr": 0.8492,
+      "per_target_week": [
+        {
+          "defenses": 32,
+          "iqr": 0.083032,
+          "max": 0.166667,
+          "min": 0.0,
+          "range": 0.166667,
+          "sd": 0.053476,
+          "target_week": 2
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.049363,
+          "max": 0.137931,
+          "min": 0.0,
+          "range": 0.137931,
+          "sd": 0.036356,
+          "target_week": 3
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.048248,
+          "max": 0.141304,
+          "min": 0.020202,
+          "range": 0.121102,
+          "sd": 0.02966,
+          "target_week": 4
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.034263,
+          "max": 0.128205,
+          "min": 0.036765,
+          "range": 0.09144,
+          "sd": 0.024228,
+          "target_week": 5
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.0192,
+          "max": 0.119205,
+          "min": 0.046512,
+          "range": 0.072694,
+          "sd": 0.018899,
+          "target_week": 6
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.029049,
+          "max": 0.117647,
+          "min": 0.039474,
+          "range": 0.078173,
+          "sd": 0.01966,
+          "target_week": 7
+        }
+      ],
+      "trivial_iqr_threshold": 0.02
+    },
+    "explosive_rush_rate_allowed": {
+      "consecutive_week_rank_corr": [
+        0.3809,
+        0.708,
+        0.8493,
+        0.8597,
+        0.8932
+      ],
+      "label": "MATERIAL_DISPERSION",
+      "median_iqr": 0.034596,
+      "median_rank_corr": 0.8493,
+      "per_target_week": [
+        {
+          "defenses": 32,
+          "iqr": 0.060357,
+          "max": 0.25,
+          "min": 0.032258,
+          "range": 0.217742,
+          "sd": 0.048834,
+          "target_week": 2
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.027099,
+          "max": 0.172414,
+          "min": 0.044118,
+          "range": 0.128296,
+          "sd": 0.035076,
+          "target_week": 3
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.048251,
+          "max": 0.166667,
+          "min": 0.035714,
+          "range": 0.130952,
+          "sd": 0.031723,
+          "target_week": 4
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.036431,
+          "max": 0.15534,
+          "min": 0.028037,
+          "range": 0.127302,
+          "sd": 0.029554,
+          "target_week": 5
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.03276,
+          "max": 0.179487,
+          "min": 0.030075,
+          "range": 0.149412,
+          "sd": 0.030109,
+          "target_week": 6
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.029344,
+          "max": 0.179487,
+          "min": 0.026846,
+          "range": 0.152642,
+          "sd": 0.030549,
+          "target_week": 7
+        }
+      ],
+      "trivial_iqr_threshold": 0.02
+    },
+    "rush_stuff_rate": {
+      "consecutive_week_rank_corr": [
+        0.7238,
+        0.8886,
+        0.8597,
+        0.8827,
+        0.9007
+      ],
+      "label": "MATERIAL_DISPERSION",
+      "median_iqr": 0.059545,
+      "median_rank_corr": 0.8827,
+      "per_target_week": [
+        {
+          "defenses": 32,
+          "iqr": 0.094178,
+          "max": 0.277778,
+          "min": 0.0,
+          "range": 0.277778,
+          "sd": 0.069584,
+          "target_week": 2
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.106125,
+          "max": 0.326923,
+          "min": 0.069767,
+          "range": 0.257156,
+          "sd": 0.062503,
+          "target_week": 3
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.062873,
+          "max": 0.258065,
+          "min": 0.067568,
+          "range": 0.190497,
+          "sd": 0.048839,
+          "target_week": 4
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.056216,
+          "max": 0.228916,
+          "min": 0.095745,
+          "range": 0.133171,
+          "sd": 0.036701,
+          "target_week": 5
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.041873,
+          "max": 0.239316,
+          "min": 0.105263,
+          "range": 0.134053,
+          "sd": 0.032751,
+          "target_week": 6
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.051871,
+          "max": 0.239316,
+          "min": 0.112676,
+          "range": 0.12664,
+          "sd": 0.030847,
+          "target_week": 7
+        }
+      ],
+      "trivial_iqr_threshold": 0.02
+    },
+    "success_rate_def": {
+      "consecutive_week_rank_corr": [
+        0.5805,
+        0.6745,
+        0.8702,
+        0.8383,
+        0.7812
+      ],
+      "label": "MATERIAL_DISPERSION",
+      "median_iqr": 0.043943,
+      "median_rank_corr": 0.7812,
+      "per_target_week": [
+        {
+          "defenses": 32,
+          "iqr": 0.057749,
+          "max": 0.60274,
+          "min": 0.364865,
+          "range": 0.237875,
+          "sd": 0.059125,
+          "target_week": 2
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.077635,
+          "max": 0.538012,
+          "min": 0.376404,
+          "range": 0.161607,
+          "sd": 0.047851,
+          "target_week": 3
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.051031,
+          "max": 0.526066,
+          "min": 0.363296,
+          "range": 0.16277,
+          "sd": 0.038286,
+          "target_week": 4
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.036856,
+          "max": 0.533742,
+          "min": 0.364486,
+          "range": 0.169256,
+          "sd": 0.033779,
+          "target_week": 5
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.023793,
+          "max": 0.517073,
+          "min": 0.361257,
+          "range": 0.155817,
+          "sd": 0.029235,
+          "target_week": 6
+        },
+        {
+          "defenses": 32,
+          "iqr": 0.02401,
+          "max": 0.51004,
+          "min": 0.361257,
+          "range": 0.148784,
+          "sd": 0.028857,
+          "target_week": 7
+        }
+      ],
+      "trivial_iqr_threshold": 0.02
+    }
+  },
+  "definitions": {
+    "explosive_pass": "yards_gained >= 20",
+    "explosive_rush": "yards_gained >= 10",
+    "note": "conventional nflverse definitions, fixed not tuned",
+    "stuff": "yards_gained <= 0"
+  },
+  "faced_dispersion": {
+    "def_pass_epa": {
+      "max_faced_range": 0.899363,
+      "median_faced_range": 0.458841,
+      "offenses": 32
+    },
+    "def_rush_epa": {
+      "max_faced_range": 0.610778,
+      "median_faced_range": 0.307275,
+      "offenses": 32
+    },
+    "explosive_pass_rate_allowed": {
+      "max_faced_range": 0.136048,
+      "median_faced_range": 0.07545,
+      "offenses": 32
+    },
+    "explosive_rush_rate_allowed": {
+      "max_faced_range": 0.208333,
+      "median_faced_range": 0.081332,
+      "offenses": 32
+    },
+    "rush_stuff_rate": {
+      "max_faced_range": 0.230769,
+      "median_faced_range": 0.124682,
+      "offenses": 32
+    },
+    "success_rate_def": {
+      "max_faced_range": 0.226335,
+      "median_faced_range": 0.092876,
+      "offenses": 32
+    }
+  },
+  "labels_are_dispersion_only": "MATERIAL_DISPERSION / UNSTABLE / NARROW describe spread and rank stability. They are NOT evidence of predictive value and no threshold, coefficient or sign is proposed.",
+  "outcomes_inspected": false,
+  "player_level_columns_read": false,
+  "plays": 17713,
+  "preregistration": "docs/research/PRISM_STRANDED_SIGNAL_DISPERSION_PREREGISTRATION_V1.md",
+  "scientific_boundary": "DISPERSION_AND_STABILITY_ONLY_NO_FITTING_NO_SCORING",
+  "season": 2026,
+  "sportsbook_inputs_used": 0,
+  "target_weeks": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "version": "STRANDED_SIGNAL_DISPERSION_V1",
+  "week1_excluded_no_prior_evidence": true
+}
