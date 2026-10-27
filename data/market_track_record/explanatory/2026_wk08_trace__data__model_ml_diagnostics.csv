@@ -1,6 +1,8 @@
 player,player_clean_key,team,season,week,position
 Jacoby Brissett,jacobybrissett,ARI,2026,8,QB
 Gardner Minshew,gardnerminshew,ARI,2026,8,QB
+Carson Beck,carsonbeck,ARI,2026,8,QB
+Jeremiyah Love,jeremiyahlove,ARI,2026,8,RB
 Tyler Allgeier,tylerallgeier,ARI,2026,8,RB
 Bam Knight,bamknight,ARI,2026,8,RB
 Trey McBride,treymcbride,ARI,2026,8,TE
@@ -15,13 +17,16 @@ Michael Penix Jr.,michaelpenixjr,ATL,2026,8,QB
 Tua Tagovailoa,tuatagovailoa,ATL,2026,8,QB
 Jack Strand,jackstrand,ATL,2026,8,QB
 Bijan Robinson,bijanrobinson,ATL,2026,8,RB
+Brian Robinson,brianrobinson,ATL,2026,8,RB
 Kyle Pitts,kylepitts,ATL,2026,8,TE
 Charlie Woerner,charliewoerner,ATL,2026,8,TE
 Austin Hooper,austinhooper,ATL,2026,8,TE
 Drake London,drakelondon,ATL,2026,8,WR
 Jahan Dotson,jahandotson,ATL,2026,8,WR
+Olamide Zaccheaus,olamidezaccheaus,ATL,2026,8,WR
 Chris Blair,chrisblair,ATL,2026,8,WR
 Zachariah Branch,zachariahbranch,ATL,2026,8,WR
+Lamar Jackson,lamarjackson,BAL,2026,8,QB
 Tyler Huntley,tylerhuntley,BAL,2026,8,QB
 Joe Fagnano,joefagnano,BAL,2026,8,QB
 Derrick Henry,derrickhenry,BAL,2026,8,RB
@@ -68,6 +73,7 @@ Caleb Williams,calebwilliams,CHI,2026,8,QB
 Tyson Bagent,tysonbagent,CHI,2026,8,QB
 Case Keenum,casekeenum,CHI,2026,8,QB
 D'Andre Swift,dandreswift,CHI,2026,8,RB
+Kyle Monangai,kylemonangai,CHI,2026,8,RB
 Roschon Johnson,roschonjohnson,CHI,2026,8,RB
 Colston Loveland,colstonloveland,CHI,2026,8,TE
 Sam Roush,samroush,CHI,2026,8,TE
@@ -109,6 +115,7 @@ DAK Prescott,dakprescott,DAL,2026,8,QB
 Sam Howell,samhowell,DAL,2026,8,QB
 Javonte Williams,javontewilliams,DAL,2026,8,RB
 Tyler Goodson,tylergoodson,DAL,2026,8,RB
+Emari Demercado,emaridemercado,DAL,2026,8,RB
 Jake Ferguson,jakeferguson,DAL,2026,8,TE
 Brevyn Spann-Ford,brevynspannford,DAL,2026,8,TE
 Luke Schoonmaker,lukeschoonmaker,DAL,2026,8,TE
@@ -117,6 +124,7 @@ George Pickens,georgepickens,DAL,2026,8,WR
 Ryan Flournoy,ryanflournoy,DAL,2026,8,WR
 Camden Brown,camdenbrown,DAL,2026,8,WR
 Jonathan Mingo,jonathanmingo,DAL,2026,8,WR
+Kavontae Turpin,kavontaeturpin,DAL,2026,8,WR
 Adam Prentice,adamprentice,DEN,2026,8,FB
 Bo Nix,bonix,DEN,2026,8,QB
 Jarrett Stidham,jarrettstidham,DEN,2026,8,QB
@@ -165,11 +173,13 @@ Riley Leonard,rileyleonard,IND,2026,8,QB
 Jonathan Taylor,jonathantaylor,IND,2026,8,RB
 Seth McGowan,sethmcgowan,IND,2026,8,RB
 DJ Giddens,djgiddens,IND,2026,8,RB
+Tyler Warren,tylerwarren,IND,2026,8,TE
 MO Alie-Cox,moaliecox,IND,2026,8,TE
 Drew Ogletree,drewogletree,IND,2026,8,TE
 Josh Downs,joshdowns,IND,2026,8,WR
 Keenan Allen,keenanallen,IND,2026,8,WR
 Laquon Treadwell,laquontreadwell,IND,2026,8,WR
+Anthony Gould,anthonygould,IND,2026,8,WR
 Ashton Dulin,ashtondulin,IND,2026,8,WR
 Deion Burks,deionburks,IND,2026,8,WR
 Trevor Lawrence,trevorlawrence,JAX,2026,8,QB
@@ -197,6 +207,7 @@ Travis Kelce,traviskelce,KC,2026,8,TE
 Noah Gray,noahgray,KC,2026,8,TE
 Jake Briningstool,jakebriningstool,KC,2026,8,TE
 Jalen Royals,jalenroyals,KC,2026,8,WR
+Rashee Rice,rasheerice,KC,2026,8,WR
 Xavier Worthy,xavierworthy,KC,2026,8,WR
 Andrew Armstrong,andrewarmstrong,KC,2026,8,WR
 Cyrus Allen,cyrusallen,KC,2026,8,WR
@@ -293,6 +304,7 @@ Kyle Williams,kylewilliams,NE,2026,8,WR
 Andrew Beck,andrewbeck,NYJ,2026,8,FB
 Geno Smith,genosmith,NYJ,2026,8,QB
 Cade Klubnik,cadeklubnik,NYJ,2026,8,QB
+Breece Hall,breecehall,NYJ,2026,8,RB
 Braelon Allen,braelonallen,NYJ,2026,8,RB
 Isaiah Davis,isaiahdavis,NYJ,2026,8,RB
 Mason Taylor,masontaylor,NYJ,2026,8,TE
@@ -306,16 +318,20 @@ Malik McClain,malikmcclain,NYJ,2026,8,WR
 TIM Patrick,timpatrick,NYJ,2026,8,WR
 Tanner McKee,tannermckee,PHI,2026,8,QB
 Joe Milton,joemilton,PHI,2026,8,QB
+Cole Payton,colepayton,PHI,2026,8,QB
 Saquon Barkley,saquonbarkley,PHI,2026,8,RB
 Dameon Pierce,dameonpierce,PHI,2026,8,RB
 Elijah Mitchell,elijahmitchell,PHI,2026,8,RB
 Dallas Goedert,dallasgoedert,PHI,2026,8,TE
 Johnny Mundt,johnnymundt,PHI,2026,8,TE
 Grant Calcaterra,grantcalcaterra,PHI,2026,8,TE
+Devonta Smith,devontasmith,PHI,2026,8,WR
+Dontayvion Wicks,dontayvionwicks,PHI,2026,8,WR
 Makai Lemon,makailemon,PHI,2026,8,WR
 Darius Cooper,dariuscooper,PHI,2026,8,WR
 Elijah Moore,elijahmoore,PHI,2026,8,WR
 Hollywood Brown,hollywoodbrown,PHI,2026,8,WR
+Britain Covey,britaincovey,PHI,2026,8,WR
 Riley Nowakowski,rileynowakowski,PIT,2026,8,FB
 Aaron Rodgers,aaronrodgers,PIT,2026,8,QB
 Mason Rudolph,masonrudolph,PIT,2026,8,QB
@@ -326,12 +342,15 @@ Lew Nichols,lewnichols,PIT,2026,8,RB
 Pat Freiermuth,patfreiermuth,PIT,2026,8,TE
 Darnell Washington,darnellwashington,PIT,2026,8,TE
 Robert Tonyan,roberttonyan,PIT,2026,8,TE
+Ben Skowronek,benskowronek,PIT,2026,8,WR
 DK Metcalf,dkmetcalf,PIT,2026,8,WR
 Germie Bernard,germiebernard,PIT,2026,8,WR
 Kaden Wetjen,kadenwetjen,PIT,2026,8,WR
 Brady Russell,bradyrussell,SEA,2026,8,FB
 Sam Darnold,samdarnold,SEA,2026,8,QB
+Drew Lock,drewlock,SEA,2026,8,QB
 Jalen Milroe,jalenmilroe,SEA,2026,8,QB
+Zach Charbonnet,zachcharbonnet,SEA,2026,8,RB
 Emanuel Wilson,emanuelwilson,SEA,2026,8,RB
 George Holani,georgeholani,SEA,2026,8,RB
 AJ Barner,ajbarner,SEA,2026,8,TE
@@ -351,6 +370,7 @@ Cade Otton,cadeotton,TB,2026,8,TE
 Payne Durham,paynedurham,TB,2026,8,TE
 Bauer Sharp,bauersharp,TB,2026,8,TE
 Chris Godwin Jr.,chrisgodwinjr,TB,2026,8,WR
+Emeka Egbuka,emekaegbuka,TB,2026,8,WR
 Ted Hurst,tedhurst,TB,2026,8,WR
 David Sills,davidsills,TB,2026,8,WR
 Kameron Johnson,kameronjohnson,TB,2026,8,WR
@@ -358,6 +378,7 @@ Tez Johnson,tezjohnson,TB,2026,8,WR
 Cam Ward,camward,TEN,2026,8,QB
 Mitchell Trubisky,mitchelltrubisky,TEN,2026,8,QB
 Tony Pollard,tonypollard,TEN,2026,8,RB
+Tyjae Spears,tyjaespears,TEN,2026,8,RB
 Nicholas Singleton,nicholassingleton,TEN,2026,8,RB
 Gunnar Helm,gunnarhelm,TEN,2026,8,TE
 Daniel Bellinger,danielbellinger,TEN,2026,8,TE
@@ -365,6 +386,7 @@ David Martin-Robinson,davidmartinrobinson,TEN,2026,8,TE
 Carnell Tate,carnelltate,TEN,2026,8,WR
 Elic Ayomanor,elicayomanor,TEN,2026,8,WR
 Wan'Dale Robinson,wandalerobinson,TEN,2026,8,WR
+Calvin Ridley,calvinridley,TEN,2026,8,WR
 Chimere Dike,chimeredike,TEN,2026,8,WR
 Jayden Daniels,jaydendaniels,WAS,2026,8,QB
 Marcus Mariota,marcusmariota,WAS,2026,8,QB

@@ -1,6 +1,8 @@
 player,player_clean_key,team,opponent
 Jacoby Brissett,jacobybrissett,ARI,DAL
 Gardner Minshew,gardnerminshew,ARI,DAL
+Carson Beck,carsonbeck,ARI,DAL
+Jeremiyah Love,jeremiyahlove,ARI,DAL
 Tyler Allgeier,tylerallgeier,ARI,DAL
 Bam Knight,bamknight,ARI,DAL
 Trey McBride,treymcbride,ARI,DAL
@@ -15,13 +17,16 @@ Michael Penix Jr.,michaelpenixjr,ATL,TB
 Tua Tagovailoa,tuatagovailoa,ATL,TB
 Jack Strand,jackstrand,ATL,TB
 Bijan Robinson,bijanrobinson,ATL,TB
+Brian Robinson,brianrobinson,ATL,TB
 Kyle Pitts,kylepitts,ATL,TB
 Charlie Woerner,charliewoerner,ATL,TB
 Austin Hooper,austinhooper,ATL,TB
 Drake London,drakelondon,ATL,TB
 Jahan Dotson,jahandotson,ATL,TB
+Olamide Zaccheaus,olamidezaccheaus,ATL,TB
 Chris Blair,chrisblair,ATL,TB
 Zachariah Branch,zachariahbranch,ATL,TB
+Lamar Jackson,lamarjackson,BAL,BUF
 Tyler Huntley,tylerhuntley,BAL,BUF
 Joe Fagnano,joefagnano,BAL,BUF
 Derrick Henry,derrickhenry,BAL,BUF
@@ -68,6 +73,7 @@ Caleb Williams,calebwilliams,CHI,SEA
 Tyson Bagent,tysonbagent,CHI,SEA
 Case Keenum,casekeenum,CHI,SEA
 D'Andre Swift,dandreswift,CHI,SEA
+Kyle Monangai,kylemonangai,CHI,SEA
 Roschon Johnson,roschonjohnson,CHI,SEA
 Colston Loveland,colstonloveland,CHI,SEA
 Sam Roush,samroush,CHI,SEA
@@ -109,6 +115,7 @@ DAK Prescott,dakprescott,DAL,ARI
 Sam Howell,samhowell,DAL,ARI
 Javonte Williams,javontewilliams,DAL,ARI
 Tyler Goodson,tylergoodson,DAL,ARI
+Emari Demercado,emaridemercado,DAL,ARI
 Jake Ferguson,jakeferguson,DAL,ARI
 Brevyn Spann-Ford,brevynspannford,DAL,ARI
 Luke Schoonmaker,lukeschoonmaker,DAL,ARI
@@ -117,6 +124,7 @@ George Pickens,georgepickens,DAL,ARI
 Ryan Flournoy,ryanflournoy,DAL,ARI
 Camden Brown,camdenbrown,DAL,ARI
 Jonathan Mingo,jonathanmingo,DAL,ARI
+Kavontae Turpin,kavontaeturpin,DAL,ARI
 Adam Prentice,adamprentice,DEN,KC
 Bo Nix,bonix,DEN,KC
 Jarrett Stidham,jarrettstidham,DEN,KC
@@ -165,11 +173,13 @@ Riley Leonard,rileyleonard,IND,JAX
 Jonathan Taylor,jonathantaylor,IND,JAX
 Seth McGowan,sethmcgowan,IND,JAX
 DJ Giddens,djgiddens,IND,JAX
+Tyler Warren,tylerwarren,IND,JAX
 MO Alie-Cox,moaliecox,IND,JAX
 Drew Ogletree,drewogletree,IND,JAX
 Josh Downs,joshdowns,IND,JAX
 Keenan Allen,keenanallen,IND,JAX
 Laquon Treadwell,laquontreadwell,IND,JAX
+Anthony Gould,anthonygould,IND,JAX
 Ashton Dulin,ashtondulin,IND,JAX
 Deion Burks,deionburks,IND,JAX
 Trevor Lawrence,trevorlawrence,JAX,IND
@@ -197,6 +207,7 @@ Travis Kelce,traviskelce,KC,DEN
 Noah Gray,noahgray,KC,DEN
 Jake Briningstool,jakebriningstool,KC,DEN
 Jalen Royals,jalenroyals,KC,DEN
+Rashee Rice,rasheerice,KC,DEN
 Xavier Worthy,xavierworthy,KC,DEN
 Andrew Armstrong,andrewarmstrong,KC,DEN
 Cyrus Allen,cyrusallen,KC,DEN
@@ -293,6 +304,7 @@ Kyle Williams,kylewilliams,NE,MIA
 Andrew Beck,andrewbeck,NYJ,LV
 Geno Smith,genosmith,NYJ,LV
 Cade Klubnik,cadeklubnik,NYJ,LV
+Breece Hall,breecehall,NYJ,LV
 Braelon Allen,braelonallen,NYJ,LV
 Isaiah Davis,isaiahdavis,NYJ,LV
 Mason Taylor,masontaylor,NYJ,LV
@@ -306,16 +318,20 @@ Malik McClain,malikmcclain,NYJ,LV
 TIM Patrick,timpatrick,NYJ,LV
 Tanner McKee,tannermckee,PHI,WAS
 Joe Milton,joemilton,PHI,WAS
+Cole Payton,colepayton,PHI,WAS
 Saquon Barkley,saquonbarkley,PHI,WAS
 Dameon Pierce,dameonpierce,PHI,WAS
 Elijah Mitchell,elijahmitchell,PHI,WAS
 Dallas Goedert,dallasgoedert,PHI,WAS
 Johnny Mundt,johnnymundt,PHI,WAS
 Grant Calcaterra,grantcalcaterra,PHI,WAS
+Devonta Smith,devontasmith,PHI,WAS
+Dontayvion Wicks,dontayvionwicks,PHI,WAS
 Makai Lemon,makailemon,PHI,WAS
 Darius Cooper,dariuscooper,PHI,WAS
 Elijah Moore,elijahmoore,PHI,WAS
 Hollywood Brown,hollywoodbrown,PHI,WAS
+Britain Covey,britaincovey,PHI,WAS
 Riley Nowakowski,rileynowakowski,PIT,CLE
 Aaron Rodgers,aaronrodgers,PIT,CLE
 Mason Rudolph,masonrudolph,PIT,CLE
@@ -326,12 +342,15 @@ Lew Nichols,lewnichols,PIT,CLE
 Pat Freiermuth,patfreiermuth,PIT,CLE
 Darnell Washington,darnellwashington,PIT,CLE
 Robert Tonyan,roberttonyan,PIT,CLE
+Ben Skowronek,benskowronek,PIT,CLE
 DK Metcalf,dkmetcalf,PIT,CLE
 Germie Bernard,germiebernard,PIT,CLE
 Kaden Wetjen,kadenwetjen,PIT,CLE
 Brady Russell,bradyrussell,SEA,CHI
 Sam Darnold,samdarnold,SEA,CHI
+Drew Lock,drewlock,SEA,CHI
 Jalen Milroe,jalenmilroe,SEA,CHI
+Zach Charbonnet,zachcharbonnet,SEA,CHI
 Emanuel Wilson,emanuelwilson,SEA,CHI
 George Holani,georgeholani,SEA,CHI
 AJ Barner,ajbarner,SEA,CHI
@@ -351,6 +370,7 @@ Cade Otton,cadeotton,TB,ATL
 Payne Durham,paynedurham,TB,ATL
 Bauer Sharp,bauersharp,TB,ATL
 Chris Godwin Jr.,chrisgodwinjr,TB,ATL
+Emeka Egbuka,emekaegbuka,TB,ATL
 Ted Hurst,tedhurst,TB,ATL
 David Sills,davidsills,TB,ATL
 Kameron Johnson,kameronjohnson,TB,ATL
@@ -358,6 +378,7 @@ Tez Johnson,tezjohnson,TB,ATL
 Cam Ward,camward,TEN,CIN
 Mitchell Trubisky,mitchelltrubisky,TEN,CIN
 Tony Pollard,tonypollard,TEN,CIN
+Tyjae Spears,tyjaespears,TEN,CIN
 Nicholas Singleton,nicholassingleton,TEN,CIN
 Gunnar Helm,gunnarhelm,TEN,CIN
 Daniel Bellinger,danielbellinger,TEN,CIN
@@ -365,6 +386,7 @@ David Martin-Robinson,davidmartinrobinson,TEN,CIN
 Carnell Tate,carnelltate,TEN,CIN
 Elic Ayomanor,elicayomanor,TEN,CIN
 Wan'Dale Robinson,wandalerobinson,TEN,CIN
+Calvin Ridley,calvinridley,TEN,CIN
 Chimere Dike,chimeredike,TEN,CIN
 Jayden Daniels,jaydendaniels,WAS,PHI
 Marcus Mariota,marcusmariota,WAS,PHI
