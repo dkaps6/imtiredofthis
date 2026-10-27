@@ -6,7 +6,7 @@
 
 ### WHAT THE NEXT SESSION SHOULD DO FIRST
 
-Read newest #535 **after comment 6451033568**.
+Read newest #535 **after comment 6451271575**.
 
 **Two studies have landed since the role-routing clearance.** Both are
 read-only, outcome-blind and awaiting audit; neither licenses a production
@@ -195,8 +195,16 @@ Forward explanatory-state archive is on `main` since `00a9ae21`.
 Week 7 explanatory state recovered to git.
 
 Residual gap:
-- Weeks 1–6 explanatory state unavailable;
-- Week-7 opponent/environment **values** were destroyed by my own filter and are **unrecoverable**.
+- Weeks 1–6 explanatory state unavailable.
+
+**WITHDRAWN: "Week-7 opponent values are unrecoverable".** That was wrong. The
+source artifact `run_39849371821` does not expire until **2027-01-20**, so once
+the filter was widened the preservation workflow re-ran and **recovered them**.
+Nothing was ever lost but my filtered copy. Now committed **with values**:
+`cb_coverage_team.csv` (`man_rate`, `zone_rate`, `coverage_available`,
+`coverage_source`), `team_form.csv` box + defensive EPA + `proe`, the raw
+`sharp_def_tend_2026.csv`, and the **realized** multipliers in
+`model_rule_diagnostics.csv` / `model_rule_simulation_inputs.csv`.
 
 **PRESERVATION FIX — CLOSED FORWARD (`e7264023`).** It was worse than recorded
 here: the filter reduced `cb_coverage_team.csv` — the **canonical** coverage
@@ -379,6 +387,82 @@ Future construction rules remain:
 - surface repeated-player/same-game concentration
 - no arbitrary exposure cap invented from W7
 - ATD separate/uncertified
+
+### REAL WEEK-7 GATE STATE — SUPERSEDES THE PROXY (`1499ea22`)
+
+`docs/research/PRISM_REAL_GATE_STATE_WEEK7_V1.md`. Direct observation of
+committed production artifacts — no proxy, no decoding, no inference.
+
+**Sharp's coverage denominator: RESOLVED** after three audits marked it
+unestablished. `man_rate + zone_rate` across 28 teams: min 0.8970, **median
+0.9365**, max 0.9680 → **coverage-classified plays**, not all plays (which would
+sum ≈0.50). `coverage_available = 1`, `coverage_source = sharp_team_form` for
+**28/28**.
+
+**Real team-level gate state — and it REVERSES my 2025 proxy on light box:**
+
+| gate | real W7 | 2025 proxy said |
+|---|---|---|
+| `coverage_zone_rate >= 0.60` | **27/28 = 96.4%** | 71–84% |
+| `coverage_man_rate >= 0.50` | **0/28** (max 0.4170) | NEAR_DEAD ✓ |
+| `light_box_rate >= 0.60` | **1/32 = 3.1%** (med 0.4525) | **NEAR_CONSTANT ✗ REVERSED** |
+| `heavy_box_rate >= 0.60` | **0/32** (max 0.3420) | NEAR_DEAD ✓ |
+
+Sharp's `light_box_rate` is on a **materially different scale** from my
+participation-derived `box <= 6` (med 0.4525 vs ~0.70). The proxy's
+`NEAR_CONSTANT` label was an artifact of my construction, not a property of
+production. **Do not cite the proxy's light-box label.**
+
+**Realized multipliers, 396 player rows — production's own values:**
+`wr1_target_mult` **1.0 × 396**; `wr1_5_target_mult` **1.0 × 396**;
+`slot_target_mult` 1.1 × 396; `te_target_mult` 1.265 × 383 / 1.1 × 13;
+`rb_rec_target_mult` 1.2 × 368 / 1.32 × 15 / 1.0 × 13;
+`rush_eff_mult` **1.0 × 381** / 1.07 × 15.
+
+So **perimeter WRs received no opponent coverage adjustment in any of 396
+rows**, while every TE and nearly every RB did, and the only
+opponent→RB-rushing-efficiency channel was inert in **96.2%** of rows.
+
+**REFINEMENT to the cleared role-routing trace:** `slot_target_mult` was 1.1 for
+**all** 396 rows via `middle_open_rate`, so slot receivers were **not** shut
+out. The shut-out role is specifically the **perimeter WR**.
+
+Near-universal multipliers (`slot` 1.1 everywhere, `te` 1.265 in 383/396) are
+**level shifts, not matchup signals** — they rescale a position group rather
+than discriminate between opponents.
+
+**Scope:** one week, one slate; player rows are not independent (~28 team
+states behind 396 rows); no predictive claim; no alternative proposed; Sharp's
+box definition still undocumented.
+
+### GAME SCRIPT TRANSMISSION — DELIVERED (`d149fce5`)
+
+`docs/research/PRISM_GAME_SCRIPT_TRANSMISSION_TRACE_V1.md`, 6 tests. Source-only,
+no artifacts needed.
+
+`project_game_script` computes opponent-aware `diff = success_diff(...)` →
+softmax `lead/neutral/trail`, then sets a bare **`pass_share = 0.57`** and builds
+the split from it. **Every opponent-aware output reaches no projection:**
+`lead_prob`/`trail_prob` → **diagnostics only** (`build_rule_diagnostics`);
+`neutral_prob`/`blowout_risk`/`shootout_risk` → **nowhere**. Only
+`projected_plays` (team-specific) and `projected_pass_attempts` (= `plays ×
+0.57`) reach a projection.
+
+**The constant PREEMPTS a richer path:** `simulation_v2._team_inputs` reads
+`rules_pass_rate` first, falling back to a PROE-based, win-probability-nudged
+rate only when non-finite. **`rules_pass_rate` is exactly 0.57 in all 1,412 real
+rows.**
+
+**This closes the read-vs-effective question** (audit `6449349551` blocker 3):
+`success_rate_def` **is** read via `success_diff`, but `diff`'s only outputs are
+the script probabilities and risk booleans, none of which reach a projection.
+**Read and effective come apart.**
+
+This is **upstream of every role multiplier traced** — the pass/rush split is
+the finite pool every target and carry is allocated from.
+
+**Not established:** that a non-constant split would improve anything. No
+alternative proposed, scoring window closed.
 
 ### NON-NEGOTIABLE BOUNDARIES
 
