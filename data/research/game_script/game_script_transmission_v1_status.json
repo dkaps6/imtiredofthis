@@ -1,0 +1,98 @@
+{
+  "FINDING": "project_game_script computes an opponent-aware diff via success_diff and turns it into lead/neutral/trail probabilities through a softmax on diff*20, then builds the pass/rush split from a bare pass_share literal that does not depend on diff. Team VOLUME stays team-specific through estimate_plays, but the pass/rush SPLIT is the same constant for every team whose context resolves.",
+  "PREEMPTION": "the constant does not merely sit beside a richer signal, it preempts one. simulation_v2._team_inputs reads rules_pass_rate FIRST and only falls back to a PROE-based, win-probability-nudged pass rate when that value is non-finite. Since apply_rules_to_metrics writes rules_pass_rate for every row whose offense and defense context resolves, the opponent/environment aware path runs only when the rules layer fails.",
+  "RESOLVES_READ_VS_EFFECTIVE": "audit 6449349551 blocker 3 correctly established that success_rate_def IS read by production, via rules_v2.success_diff inside project_game_script, and flagged whether it changes a named player's projection as a separate routing question. This trace answers it: diff's only outputs are the script probabilities and the risk booleans, none of which reach a projection. success_rate_def is READ and has NO PATH to any projection. Read and effective come apart.",
+  "WHY_THIS_IS_UPSTREAM": "the pass/rush split is the finite opportunity pool from which every target and every carry is allocated, so a constant here sits upstream of every role multiplier already traced.",
+  "artifacts_read": false,
+  "authorized_by": "USER_2026_10_27 parallel lane",
+  "field_consumption": {
+    "blowout_risk": {
+      "diagnostics_only_references": 0,
+      "projection_references": [],
+      "reaches_a_projection": false,
+      "referenced_in": []
+    },
+    "lead_prob": {
+      "diagnostics_only_references": 1,
+      "projection_references": [],
+      "reaches_a_projection": false,
+      "referenced_in": [
+        "scripts/modeling/simulation_rules.py"
+      ]
+    },
+    "neutral_prob": {
+      "diagnostics_only_references": 0,
+      "projection_references": [],
+      "reaches_a_projection": false,
+      "referenced_in": []
+    },
+    "projected_pass_attempts": {
+      "diagnostics_only_references": 1,
+      "projection_references": [
+        "scripts/modeling/simulation_rules.py"
+      ],
+      "reaches_a_projection": true,
+      "referenced_in": [
+        "scripts/modeling/simulation_rules.py"
+      ]
+    },
+    "projected_plays": {
+      "diagnostics_only_references": 1,
+      "projection_references": [
+        "scripts/modeling/simulation_rules.py"
+      ],
+      "reaches_a_projection": true,
+      "referenced_in": [
+        "scripts/modeling/simulation_rules.py"
+      ]
+    },
+    "projected_rush_attempts": {
+      "diagnostics_only_references": 1,
+      "projection_references": [],
+      "reaches_a_projection": false,
+      "referenced_in": [
+        "scripts/modeling/simulation_rules.py"
+      ]
+    },
+    "shootout_risk": {
+      "diagnostics_only_references": 0,
+      "projection_references": [],
+      "reaches_a_projection": false,
+      "referenced_in": []
+    },
+    "trail_prob": {
+      "diagnostics_only_references": 1,
+      "projection_references": [],
+      "reaches_a_projection": false,
+      "referenced_in": [
+        "scripts/modeling/simulation_rules.py"
+      ]
+    }
+  },
+  "not_established": [
+    "that a non-constant split would improve any projection -- untested, scoring window closed, and no alternative is proposed",
+    "the numeric effect on any named player's mean",
+    "whether 0.57 is a defensible league-average choice",
+    "per-team finiteness of rules_pass_rate in a live run (that needs the artifacts, which this session cannot read)"
+  ],
+  "opponent_aware_fields_not_reaching_any_projection": [
+    "lead_prob",
+    "neutral_prob",
+    "trail_prob",
+    "blowout_risk",
+    "shootout_risk"
+  ],
+  "outcomes_inspected": false,
+  "scientific_boundary": "READ_ONLY_SOURCE_TRACE_NO_FITTING_NO_SCORING",
+  "source_contract_checks": {
+    "opponent_aware_diff_computed": true,
+    "pass_share_literal": 0.57,
+    "proe_fallback_base": 0.58,
+    "proe_fallback_is_opponent_environment_aware": true,
+    "rules_pass_rate_is_constant_ratio": true,
+    "sim_prefers_rules_pass_rate": true,
+    "split_built_from_constant": true
+  },
+  "sportsbook_inputs_used": 0,
+  "version": "GAME_SCRIPT_TRANSMISSION_TRACE_V1"
+}
