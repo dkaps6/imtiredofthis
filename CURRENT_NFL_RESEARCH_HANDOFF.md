@@ -6,7 +6,7 @@
 
 ### WHAT THE NEXT SESSION SHOULD DO FIRST
 
-Read newest #535 **after comment 6448217205**.
+Read newest #535 **after comment 6449349551**.
 
 **Two studies have landed since the role-routing clearance.** Both are
 read-only, outcome-blind and awaiting audit; neither licenses a production
@@ -52,7 +52,7 @@ The prior disagreement about named-player work is settled: **run/audit the compa
 - **BIGGEST FINDING: no WR role reads zone coverage at all.** `wr1`/`wr1_5` key only on `coverage_man_rate`; only `te_target_mult` and `rb_rec_target_mult` read zone. KC's zone gate fired, so zone coverage — the most common coverage family in the league — moved every SEA **TE by ×1.265** and every **RB/FB by ×1.200** and could not move one wide receiver. This is an **architectural** asymmetry and stands on its own.
 - **RETRACTED FROM V10/V11: "Kupp is reduced twice over" and "his exclusion was not academic this week".** Both labelled WR multipliers were **1.000** because the man gate did not fire, and no WR role reads zone — so had Kupp been labelled WR1 or WR1_5 in this same frozen gate state, his coverage multiplier would **also** have been 1.000. His unlabelled status is **structural eligibility exposure with ZERO realized direct coverage effect** in this matchup: a missing potential channel, not an extra numeric penalty (audit `6445801491` correction 1).
 - **The −28.0% M38 reduction must NOT be attributed to the KC zone gate or any opponent context.** The WR hierarchy sharpening stage is keyed on **WR rank**, not on the defense. Both consequences follow from Kupp's rank, but only one is an opponent channel and that one was **inert** this week. The −28.0% is the only realized reduction.
-- **Fields 7/10 now read from the REAL allocator**, not inferred: `rules_tgt_share → post_m38_tgt_share → entitlement_tgt_share`. The WR hierarchy stage touches **only WRs** (TE/RB identical pre/post) and moves share from the non-top receivers to JSN: **Kupp −28.0%**, JSN **+29.3%**, Barner 0.0%. **So Kupp is reduced twice** — no coverage multiplier, then −28.0% at sharpening. Net `rules`→`entitlement`: JSN ×0.767, Barner ×0.785, **Kupp ×0.707**. Team mass conserved exactly (both stages sum 1.601148605998); room closes at **0.950000**, residual 0.05, `entitlement_gap` **5.55e-16**, 15 players.
+- **Fields 7/10 now read from the REAL allocator**, not inferred: `rules_tgt_share → post_m38_tgt_share → entitlement_tgt_share`. The WR hierarchy stage touches **only WRs** (TE/RB identical pre/post) and moves share from the non-top receivers to JSN: **Kupp −28.0%**, JSN **+29.3%**, Barner 0.0%. Net `rules`→`entitlement`: JSN ×0.767, Barner ×0.785, **Kupp ×0.707**. Team mass conserved exactly (both stages sum 1.601148605998); room closes at **0.950000**, residual 0.05, `entitlement_gap` **5.55e-16**, 15 players.
 - **The zero claim is SCOPED:** it is only the direct WR coverage-target rule-layer delta. It is **not** total opponent attribution and does **not** make any WR globally opponent-insensitive — shared `pass_eff_mult` can move YPT and the M38/entitlement stages move a WR's share for teammate-structural reasons.
 - **NOT ESTABLISHED:** `pass_eff_mult` exactly (bounded above); the decode's no-injury-modifier condition (evidenced, not proven); **total opponent attribution to the final mean** — the traced chain is the target-share path only, and YPT, game script and mean construction are not accounted for; league-wide gate firing frequency; predictive value of consuming `ypt_allowed_*`.
 - Guards hardened after audit: the unlabelled-WR fall-through check **raises** instead of recording a boolean; the two-label claim is proven by parsing the assignment statements (`{SLOT, WR1, WR1_5}` exactly, `perim` indices ⊆ `{0,1}`); and **`GATE_SPECS` is now derived from `rules_v2.matchup_multipliers` source** and compared semantically, so the mirror is a verified contract rather than an assertion. The derivation independently recovers all ten production multipliers, including `rb_rush_eff_mult`'s light/heavy-box gates. Mutation tests confirm both guards raise. `eligible_gates()` remains a hand mirror, not an executed production router.
@@ -201,12 +201,19 @@ Residual gap:
 Future fix:
 preserve opponent values + `rules_*_mult` so gate firing frequency can be measured on future runs.
 
-### GATE PREVALENCE — 2025 PROXY (target `91c3b81e`, re-audit pending)
+### GATE PREVALENCE — 2025 PROXY — **CLEARED, DESCRIPTIVE ONLY** (`91c3b81e`)
 
 `docs/research/PRISM_GATE_PREVALENCE_{PREREGISTRATION,RESULTS}_V1.md`; script
 `scripts/research/measure_opponent_gate_prevalence_v1.py`; artifacts
 `data/research/gate_prevalence/`; 8 tests. CI `audit-only` run `40546135824`
 green on that SHA (compileall + strict audit, **not** pytest).
+
+**CLEARED** by `6449328708`, disposition
+`GATE_PREVALENCE_2025_PROXY_V1_CLEARED_DESCRIPTIVE_ONLY__PRODUCTION_BEHAVIOR_NOT_ESTABLISHED`.
+Clearance covers **only** descriptive 2025 participation-proxy reachability
+under the declared arms and bases. It does **not** establish 2026 Sharp-sourced
+firing, a gate being faulty, player-level mean propagation, or improved
+accuracy.
 
 **A 2025 nflverse-participation PROXY, not production gate firing** — production
 **prefers Sharp Football** and no past-week Sharp values or snapshots exist.
@@ -235,7 +242,7 @@ Also: production counts kickoffs and punts as light boxes
 (`compute_personnel_rates` applies no play-type filter; only 52 of 9,093
 zero-box rows are scrimmage plays).
 
-### STRANDED SIGNAL DISPERSION — 2026 WEEKS 2–7 (target `945eb02e`, audit pending)
+### STRANDED SIGNAL DISPERSION — 2026 — **PERSISTENCE CLAIM REVERSED** (`21020507`, re-audit pending)
 
 `docs/research/PRISM_STRANDED_SIGNAL_DISPERSION_{PREREGISTRATION,RESULTS}_V1.md`;
 script `scripts/research/measure_stranded_signal_dispersion_v1.py`; artifacts
@@ -254,33 +261,47 @@ is gone"** — that was wrong and the user correctly challenged it.
 Outcome-blind, **player-blind**, chronology fails closed (`_assert_strictly_prior`
 raises on a leak; aggregates for week N use weeks 1..N-1 only).
 
-**All six stranded signals are widely dispersed AND persistent:**
+**RETRACTED (audit `6449349551` blocker 1): "persistent properties of a
+defense" and "not noise".** `build_as_of` builds target week N from weeks
+1..N-1, so my consecutive-week correlation compared weeks 1–5 with weeks 1–6 —
+**five of six weeks shared**. Those 0.764–0.883 figures were **forced by sample
+reuse**, not defensive skill. I built a statistic that could only come out high.
 
-| signal | median IQR | rank r | median faced range |
+Replacement frozen at `5618937d` **before** running: disjoint windows sharing
+**no play**, EARLY weeks 1–3 vs LATE weeks 4–7, ≥40 qualifying plays per half,
+cutoffs stated in the addendum. **The conclusion reverses:**
+
+| signal | V1 overlapping | **disjoint rho** | verdict |
 |---|---|---|---|
-| `def_rush_epa` | 0.1369 | **0.810** | 0.3073 |
-| `def_pass_epa` | 0.1887 | **0.764** | 0.4588 |
-| `success_rate_def` | 0.0439 | **0.781** | 0.0929 |
-| `explosive_rush_rate_allowed` | 0.0346 | **0.849** | 0.0813 |
-| `explosive_pass_rate_allowed` | 0.0413 | **0.849** | 0.0755 |
-| `rush_stuff_rate` | 0.0595 | **0.883** | 0.1247 |
+| `def_rush_epa` | 0.810 | **−0.350** | NOT_PERSISTENT |
+| `def_pass_epa` | 0.764 | **0.113** | NOT_PERSISTENT |
+| `success_rate_def` | 0.781 | **0.080** | NOT_PERSISTENT |
+| `explosive_rush_rate_allowed` | 0.849 | **0.256** | WEAKLY_PERSISTENT |
+| `explosive_pass_rate_allowed` | 0.849 | **0.103** | NOT_PERSISTENT |
+| `rush_stuff_rate` | 0.883 | **0.017** | NOT_PERSISTENT |
 
-All six `MATERIAL_DISPERSION`. Rank r of 0.76–0.88 means these are **persistent
-properties of a defense, not noise**; the pre-registration committed in advance
-to labelling a wide-but-unstable signal `UNSTABLE` and a test exercises that
-path on synthetic noise. The most rank-stable — `rush_stuff_rate` at 0.883 — is
-referenced by **no production module at all**.
+All 32 defenses eligible, none excluded. **Persistence is NOT ESTABLISHED.**
+Caution runs both ways: 32 defenses over a 3/4-week split gives one
+wide-uncertainty rho each, so this **also cannot establish the signals are
+noise**.
 
-So what production discards is **neither noise nor uniform**. With the cleared
-finding that the one live opponent→RB-rushing channel is a box gate whose
-branches are a near-constant and a corpse, the RB rushing path discards
-measurable matchup information and retains almost none.
+**Still stands:** real cross-sectional dispersion (median IQR 0.0346–0.1887).
+**Dispersion without rank persistence is closer to noise than to signal**, so
+the case for consuming these is materially weaker than I first presented.
 
-**WHAT THIS DOES NOT SHOW, and a test asserts it:** dispersion and persistence
-are **necessary but not sufficient**. A signal can vary widely, persist, and
-still add nothing once the player's own baseline and the finite allocation are
-accounted for. **Value requires a scoring window, which is CLOSED, and its own
-scoped proposal.** No threshold, coefficient or sign is proposed.
+**NOT six stranded production fields** (blocker 3). Verified in source:
+`rules_v2.success_diff()` reads `defense.success_rate_def` and is called in
+`project_game_script()`, so that one **IS read by production**. Only
+**`def_rush_epa`** is transported-but-stranded on cleared evidence;
+`def_pass_epa` is consumed on the promoted QB route; the three explosive/stuff
+constructs are **new PBP-derived candidates** whose lineage to any production
+column is **not established**.
+
+`MATERIAL_DISPERSION` is **post-hoc operationalization** — the IQR cutoffs were
+never in the frozen design (blocker 2). And "outcomes inspected: none" is
+**withdrawn** as absolute (blocker 4): `load_pbp` reads realized prior-play
+results. Correct claim — **no target-week outcomes**, prior-game results used
+only to build as-of defensive statistics, **no model scoring**.
 
 ### STILL OPEN
 
