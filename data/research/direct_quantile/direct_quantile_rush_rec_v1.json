@@ -1,0 +1,2098 @@
+{
+  "fit_seasons": [
+    2020,
+    2021,
+    2022
+  ],
+  "holdout_seasons": [
+    2014,
+    2015,
+    2016
+  ],
+  "markets": {
+    "receptions": {
+      "decision": {
+        "H1_SUPPORTED": false,
+        "Q1": {
+          "SUPPORTED": false,
+          "rule_1_more_calibrated_players": true,
+          "rule_2_pinball_majority_BOTH_tails": true,
+          "rule_3_high_mean_floor_better_ceiling_not_worse": false,
+          "rule_4_no_crossed_quantiles": true
+        },
+        "Q2": {
+          "SUPPORTED": false,
+          "rule_1_more_calibrated_players": true,
+          "rule_2_pinball_majority_BOTH_tails": true,
+          "rule_3_high_mean_floor_better_ceiling_not_worse": false,
+          "rule_4_no_crossed_quantiles": true
+        },
+        "preferred_arm": null
+      },
+      "diagnostics": [
+        {
+          "last_week": 17,
+          "market": "receptions",
+          "panel_players": 186,
+          "panel_rows": 1362,
+          "season": 2020,
+          "state_counts": {
+            "DNP_INACTIVE": 112,
+            "HEALTHY_FULL": 2974,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 124,
+            "PARTIAL_GAME": 230,
+            "UNRESOLVED_CONTEXT": 9
+          }
+        },
+        {
+          "last_week": 18,
+          "market": "receptions",
+          "panel_players": 187,
+          "panel_rows": 1463,
+          "season": 2021,
+          "state_counts": {
+            "DNP_INACTIVE": 92,
+            "HEALTHY_FULL": 3184,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 114,
+            "PARTIAL_GAME": 285,
+            "UNRESOLVED_CONTEXT": 15
+          }
+        },
+        {
+          "last_week": 18,
+          "market": "receptions",
+          "panel_players": 177,
+          "panel_rows": 1420,
+          "season": 2022,
+          "state_counts": {
+            "DNP_INACTIVE": 91,
+            "HEALTHY_FULL": 3075,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 140,
+            "PARTIAL_GAME": 275,
+            "UNRESOLVED_CONTEXT": 13
+          }
+        },
+        {
+          "last_week": 17,
+          "market": "receptions",
+          "panel_players": 169,
+          "panel_rows": 1421,
+          "season": 2014,
+          "state_counts": {
+            "DNP_INACTIVE": 116,
+            "HEALTHY_FULL": 2896,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 89,
+            "PARTIAL_GAME": 223,
+            "UNRESOLVED_CONTEXT": 10
+          }
+        },
+        {
+          "last_week": 17,
+          "market": "receptions",
+          "panel_players": 186,
+          "panel_rows": 1381,
+          "season": 2015,
+          "state_counts": {
+            "DNP_INACTIVE": 113,
+            "HEALTHY_FULL": 2896,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 70,
+            "PARTIAL_GAME": 239,
+            "UNRESOLVED_CONTEXT": 5
+          }
+        },
+        {
+          "last_week": 17,
+          "market": "receptions",
+          "panel_players": 175,
+          "panel_rows": 1450,
+          "season": 2016,
+          "state_counts": {
+            "DNP_INACTIVE": 102,
+            "HEALTHY_FULL": 2957,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 70,
+            "PARTIAL_GAME": 249,
+            "UNRESOLVED_CONTEXT": 4
+          }
+        },
+        {
+          "last_week": 17,
+          "market": "receptions",
+          "panel_players": 178,
+          "panel_rows": 1356,
+          "season": 2017,
+          "state_counts": {
+            "DNP_INACTIVE": 103,
+            "HEALTHY_FULL": 2983,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 81,
+            "PARTIAL_GAME": 237,
+            "UNRESOLVED_CONTEXT": 4
+          }
+        },
+        {
+          "last_week": 17,
+          "market": "receptions",
+          "panel_players": 186,
+          "panel_rows": 1320,
+          "season": 2018,
+          "state_counts": {
+            "DNP_INACTIVE": 89,
+            "HEALTHY_FULL": 2934,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 69,
+            "PARTIAL_GAME": 250,
+            "UNRESOLVED_CONTEXT": 20
+          }
+        },
+        {
+          "last_week": 17,
+          "market": "receptions",
+          "panel_players": 179,
+          "panel_rows": 1316,
+          "season": 2019,
+          "state_counts": {
+            "DNP_INACTIVE": 94,
+            "HEALTHY_FULL": 2903,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 135,
+            "PARTIAL_GAME": 230,
+            "UNRESOLVED_CONTEXT": 15
+          }
+        },
+        {
+          "last_week": 18,
+          "market": "receptions",
+          "panel_players": 181,
+          "panel_rows": 1449,
+          "season": 2023,
+          "state_counts": {
+            "DNP_INACTIVE": 86,
+            "HEALTHY_FULL": 3140,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 178,
+            "PARTIAL_GAME": 251,
+            "UNRESOLVED_CONTEXT": 9
+          }
+        },
+        {
+          "last_week": 18,
+          "market": "receptions",
+          "panel_players": 182,
+          "panel_rows": 1460,
+          "season": 2024,
+          "state_counts": {
+            "DNP_INACTIVE": 98,
+            "HEALTHY_FULL": 3158,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 175,
+            "PARTIAL_GAME": 225,
+            "UNRESOLVED_CONTEXT": 8
+          }
+        },
+        {
+          "last_week": 18,
+          "market": "receptions",
+          "panel_players": 181,
+          "panel_rows": 1428,
+          "season": 2025,
+          "state_counts": {
+            "DNP_INACTIVE": 149,
+            "HEALTHY_FULL": 3139,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 229,
+            "PARTIAL_GAME": 267,
+            "UNRESOLVED_CONTEXT": 14
+          }
+        }
+      ],
+      "discrete_outcome": true,
+      "fit_rows": 4245,
+      "fitted_coefficients": {
+        "Q1": {
+          "p20": [
+            -0.15412186859232946,
+            0.5519713280638724
+          ],
+          "p80": [
+            1.8502878870717838,
+            0.9673704447150748
+          ]
+        },
+        "Q2": {
+          "p20": [
+            -0.2176832108929697,
+            0.44979767391921205,
+            2.1741823100379802
+          ],
+          "p80": [
+            1.6305478006691163,
+            0.8161742852319892,
+            3.693202969599422
+          ]
+        }
+      },
+      "holdout_primary": {
+        "Q0": {
+          "coverage_deciles": [
+            0.35294117647058826,
+            0.4444444444444444,
+            0.46875,
+            0.5,
+            0.5294117647058824,
+            0.5666666666666667,
+            0.6176470588235294,
+            0.6666666666666666,
+            0.75
+          ],
+          "coverage_iqr": [
+            0.45454545454545453,
+            0.6363636363636364
+          ],
+          "coverage_median": 0.5294117647058824,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.5078534031413613,
+          "interval_width_median": 3.0298364408624914
+        },
+        "Q1": {
+          "coverage_deciles": [
+            0.4166666666666667,
+            0.5,
+            0.5454545454545454,
+            0.5714285714285714,
+            0.6,
+            0.64,
+            0.6666666666666666,
+            0.7,
+            0.75
+          ],
+          "coverage_iqr": [
+            0.5205254515599343,
+            0.6858552631578947
+          ],
+          "coverage_median": 0.6,
+          "frac_players_pin20_improved": 0.8219895287958116,
+          "frac_players_pin80_improved": 0.5602094240837696,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.6230366492146597,
+          "interval_width_median": 3.491205063079679
+        },
+        "Q2": {
+          "coverage_deciles": [
+            0.4375,
+            0.5,
+            0.5454545454545454,
+            0.5714285714285714,
+            0.6060606060606061,
+            0.6363636363636364,
+            0.6666666666666666,
+            0.6923076923076923,
+            0.75
+          ],
+          "coverage_iqr": [
+            0.525062656641604,
+            0.6715686274509804
+          ],
+          "coverage_median": 0.6060606060606061,
+          "frac_players_pin20_improved": 0.806282722513089,
+          "frac_players_pin80_improved": 0.5759162303664922,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.6492146596858639,
+          "interval_width_median": 3.4466346211489647
+        },
+        "bias_by_mean_tercile": {
+          "Q0": {
+            "high": {
+              "ceiling_bias": -0.060749050856393996,
+              "floor_bias": 0.5937895082811152
+            },
+            "low": {
+              "ceiling_bias": 0.09391815813280857,
+              "floor_bias": -0.3859182827296826
+            },
+            "mid": {
+              "ceiling_bias": 0.002792030343836492,
+              "floor_bias": 0.20787622440198056
+            }
+          },
+          "Q1": {
+            "high": {
+              "ceiling_bias": 0.10721198299374218,
+              "floor_bias": -0.3440623060834015
+            },
+            "low": {
+              "ceiling_bias": 0.35461916823097633,
+              "floor_bias": -0.05037951512111647
+            },
+            "mid": {
+              "ceiling_bias": 0.22435392567698917,
+              "floor_bias": 0.0060051053049567605
+            }
+          },
+          "Q2": {
+            "high": {
+              "ceiling_bias": 0.14618711479432442,
+              "floor_bias": -0.3228611862566072
+            },
+            "low": {
+              "ceiling_bias": 0.3132318886605464,
+              "floor_bias": -0.03907070617697419
+            },
+            "mid": {
+              "ceiling_bias": 0.2012982535247046,
+              "floor_bias": 0.012314619092118222
+            }
+          }
+        },
+        "min_holdout_games": 8,
+        "players_scored": 191,
+        "rows": 4252
+      },
+      "market": "receptions",
+      "production_sigma": 1.8,
+      "reported_not_decisive": {
+        "2017": {
+          "Q0": {
+            "coverage_deciles": [
+              0.3282051282051282,
+              0.4,
+              0.45454545454545453,
+              0.5,
+              0.5384615384615384,
+              0.6,
+              0.625,
+              0.6666666666666666,
+              0.75
+            ],
+            "coverage_iqr": [
+              0.4305555555555556,
+              0.6363636363636364
+            ],
+            "coverage_median": 0.5384615384615384,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.48484848484848486,
+            "interval_width_median": 3.0298364408624914
+          },
+          "Q1": {
+            "coverage_deciles": [
+              0.4,
+              0.48461538461538467,
+              0.5,
+              0.5833333333333334,
+              0.6153846153846154,
+              0.6363636363636364,
+              0.6666666666666666,
+              0.7,
+              0.8
+            ],
+            "coverage_iqr": [
+              0.5,
+              0.6794871794871795
+            ],
+            "coverage_median": 0.6153846153846154,
+            "frac_players_pin20_improved": 0.6666666666666666,
+            "frac_players_pin80_improved": 0.5959595959595959,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.6060606060606061,
+            "interval_width_median": 3.5466848705412755
+          },
+          "Q2": {
+            "coverage_deciles": [
+              0.4166666666666667,
+              0.46153846153846156,
+              0.5384615384615384,
+              0.5833333333333334,
+              0.6,
+              0.6363636363636364,
+              0.6666666666666666,
+              0.710909090909091,
+              0.8
+            ],
+            "coverage_iqr": [
+              0.5,
+              0.6794871794871795
+            ],
+            "coverage_median": 0.6,
+            "frac_players_pin20_improved": 0.7171717171717171,
+            "frac_players_pin80_improved": 0.5656565656565656,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5858585858585859,
+            "interval_width_median": 3.5649128268257444
+          },
+          "bias_by_mean_tercile": {
+            "Q0": {
+              "high": {
+                "ceiling_bias": 0.270035202548121,
+                "floor_bias": 0.6220169435038123
+              },
+              "low": {
+                "ceiling_bias": 0.41757453106276265,
+                "floor_bias": -0.5395346370724557
+              },
+              "mid": {
+                "ceiling_bias": -0.018743954785196387,
+                "floor_bias": -0.1394894865567783
+              }
+            },
+            "Q1": {
+              "high": {
+                "ceiling_bias": 0.43343835189064084,
+                "floor_bias": -0.37841810023524003
+              },
+              "low": {
+                "ceiling_bias": 0.6742499584641034,
+                "floor_bias": -0.2592701891314264
+              },
+              "mid": {
+                "ceiling_bias": 0.1973902488693838,
+                "floor_bias": -0.4158869506559079
+              }
+            },
+            "Q2": {
+              "high": {
+                "ceiling_bias": 0.5222908615438909,
+                "floor_bias": -0.32969317857263003
+              },
+              "low": {
+                "ceiling_bias": 0.6757985920380142,
+                "floor_bias": -0.22430924414578693
+              },
+              "mid": {
+                "ceiling_bias": 0.25817577850226087,
+                "floor_bias": -0.36241012233297953
+              }
+            }
+          },
+          "min_holdout_games": 8,
+          "players_scored": 99,
+          "rows": 1356
+        },
+        "2018": {
+          "Q0": {
+            "coverage_deciles": [
+              0.2762237762237762,
+              0.3659090909090909,
+              0.4166666666666667,
+              0.45454545454545453,
+              0.5,
+              0.5426573426573427,
+              0.625,
+              0.6666666666666666,
+              0.7
+            ],
+            "coverage_iqr": [
+              0.38461538461538464,
+              0.625
+            ],
+            "coverage_median": 0.5,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.4673913043478261,
+            "interval_width_median": 3.0298364408624914
+          },
+          "Q1": {
+            "coverage_deciles": [
+              0.3861538461538462,
+              0.46923076923076923,
+              0.5,
+              0.5555555555555556,
+              0.6076923076923078,
+              0.6666666666666666,
+              0.6923076923076923,
+              0.75,
+              0.8318181818181819
+            ],
+            "coverage_iqr": [
+              0.5,
+              0.7068181818181818
+            ],
+            "coverage_median": 0.6076923076923078,
+            "frac_players_pin20_improved": 0.717391304347826,
+            "frac_players_pin80_improved": 0.5760869565217391,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5434782608695652,
+            "interval_width_median": 3.665055120904092
+          },
+          "Q2": {
+            "coverage_deciles": [
+              0.38782051282051283,
+              0.5,
+              0.5115384615384616,
+              0.5666666666666667,
+              0.6153846153846154,
+              0.6666666666666666,
+              0.7,
+              0.75,
+              0.8181818181818182
+            ],
+            "coverage_iqr": [
+              0.5,
+              0.7272727272727273
+            ],
+            "coverage_median": 0.6153846153846154,
+            "frac_players_pin20_improved": 0.717391304347826,
+            "frac_players_pin80_improved": 0.5869565217391305,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.532608695652174,
+            "interval_width_median": 3.614001418537646
+          },
+          "bias_by_mean_tercile": {
+            "Q0": {
+              "high": {
+                "ceiling_bias": 0.2928943930041917,
+                "floor_bias": 0.8501547263352497
+              },
+              "low": {
+                "ceiling_bias": 0.23981382426624304,
+                "floor_bias": -0.37066777788657057
+              },
+              "mid": {
+                "ceiling_bias": 0.47766718468895064,
+                "floor_bias": 0.12783074382645992
+              }
+            },
+            "Q1": {
+              "high": {
+                "ceiling_bias": 0.42941611695154625,
+                "floor_bias": -0.5193827833853153
+              },
+              "low": {
+                "ceiling_bias": 0.49153419065336607,
+                "floor_bias": -0.15844009557648484
+              },
+              "mid": {
+                "ceiling_bias": 0.6822114023399989,
+                "floor_bias": -0.30770606469762174
+              }
+            },
+            "Q2": {
+              "high": {
+                "ceiling_bias": 0.420198222780188,
+                "floor_bias": -0.5392373312738896
+              },
+              "low": {
+                "ceiling_bias": 0.5261027585217515,
+                "floor_bias": -0.10603954209717595
+              },
+              "mid": {
+                "ceiling_bias": 0.6735998874246911,
+                "floor_bias": -0.2997592584406295
+              }
+            }
+          },
+          "min_holdout_games": 8,
+          "players_scored": 92,
+          "rows": 1320
+        },
+        "2019": {
+          "Q0": {
+            "coverage_deciles": [
+              0.3076923076923077,
+              0.375,
+              0.4166666666666667,
+              0.46153846153846156,
+              0.5,
+              0.5555555555555556,
+              0.625,
+              0.6666666666666666,
+              0.7777777777777778
+            ],
+            "coverage_iqr": [
+              0.38461538461538464,
+              0.6666666666666666
+            ],
+            "coverage_median": 0.5,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.45054945054945056,
+            "interval_width_median": 3.0298364408624914
+          },
+          "Q1": {
+            "coverage_deciles": [
+              0.4444444444444444,
+              0.5,
+              0.5,
+              0.5454545454545454,
+              0.6153846153846154,
+              0.6666666666666666,
+              0.7,
+              0.75,
+              0.8
+            ],
+            "coverage_iqr": [
+              0.5,
+              0.7272727272727273
+            ],
+            "coverage_median": 0.6153846153846154,
+            "frac_players_pin20_improved": 0.7252747252747253,
+            "frac_players_pin80_improved": 0.4725274725274725,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5714285714285714,
+            "interval_width_median": 3.661161397795138
+          },
+          "Q2": {
+            "coverage_deciles": [
+              0.4444444444444444,
+              0.5,
+              0.5,
+              0.5833333333333334,
+              0.625,
+              0.6666666666666666,
+              0.6923076923076923,
+              0.7272727272727273,
+              0.8
+            ],
+            "coverage_iqr": [
+              0.5,
+              0.7136363636363636
+            ],
+            "coverage_median": 0.625,
+            "frac_players_pin20_improved": 0.7472527472527473,
+            "frac_players_pin80_improved": 0.5384615384615384,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5934065934065934,
+            "interval_width_median": 3.667395866984031
+          },
+          "bias_by_mean_tercile": {
+            "Q0": {
+              "high": {
+                "ceiling_bias": 0.1599505377804333,
+                "floor_bias": 0.7301140969179424
+              },
+              "low": {
+                "ceiling_bias": 0.009105351047994821,
+                "floor_bias": -0.47234399304030283
+              },
+              "mid": {
+                "ceiling_bias": 0.35057420268498374,
+                "floor_bias": 0.12740442848915973
+              }
+            },
+            "Q1": {
+              "high": {
+                "ceiling_bias": 0.30285915633132254,
+                "floor_bias": -0.551726480312105
+              },
+              "low": {
+                "ceiling_bias": 0.2601436151804865,
+                "floor_bias": -0.2694820947440851
+              },
+              "mid": {
+                "ceiling_bias": 0.554479739710201,
+                "floor_bias": -0.3169019519792479
+              }
+            },
+            "Q2": {
+              "high": {
+                "ceiling_bias": 0.32487474581857806,
+                "floor_bias": -0.5506170706777844
+              },
+              "low": {
+                "ceiling_bias": 0.26850624252388144,
+                "floor_bias": -0.23278413512403814
+              },
+              "mid": {
+                "ceiling_bias": 0.6265127676666237,
+                "floor_bias": -0.26173752273766293
+              }
+            }
+          },
+          "min_holdout_games": 8,
+          "players_scored": 91,
+          "rows": 1316
+        },
+        "2023": {
+          "Q0": {
+            "coverage_deciles": [
+              0.32727272727272727,
+              0.3826923076923077,
+              0.4444444444444444,
+              0.46153846153846156,
+              0.5,
+              0.5666666666666667,
+              0.6182692307692308,
+              0.6938461538461539,
+              0.8
+            ],
+            "coverage_iqr": [
+              0.4,
+              0.6363636363636364
+            ],
+            "coverage_median": 0.5,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.4,
+            "interval_width_median": 3.029836440862491
+          },
+          "Q1": {
+            "coverage_deciles": [
+              0.4444444444444444,
+              0.5,
+              0.5,
+              0.5833333333333334,
+              0.6306818181818181,
+              0.6523809523809524,
+              0.6923076923076923,
+              0.75,
+              0.7700854700854702
+            ],
+            "coverage_iqr": [
+              0.5,
+              0.7
+            ],
+            "coverage_median": 0.6306818181818181,
+            "frac_players_pin20_improved": 0.66,
+            "frac_players_pin80_improved": 0.48,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.6,
+            "interval_width_median": 3.6623099937468657
+          },
+          "Q2": {
+            "coverage_deciles": [
+              0.4444444444444444,
+              0.5,
+              0.5,
+              0.5833333333333334,
+              0.625,
+              0.6363636363636364,
+              0.6923076923076923,
+              0.7318181818181819,
+              0.7692307692307693
+            ],
+            "coverage_iqr": [
+              0.5,
+              0.7
+            ],
+            "coverage_median": 0.625,
+            "frac_players_pin20_improved": 0.69,
+            "frac_players_pin80_improved": 0.51,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.62,
+            "interval_width_median": 3.67276671917453
+          },
+          "bias_by_mean_tercile": {
+            "Q0": {
+              "high": {
+                "ceiling_bias": -0.09473719602160385,
+                "floor_bias": 0.7602748479643905
+              },
+              "low": {
+                "ceiling_bias": 0.5644381587530957,
+                "floor_bias": -0.25951592916821903
+              },
+              "mid": {
+                "ceiling_bias": 0.23912275380721956,
+                "floor_bias": -0.06950156584315012
+              }
+            },
+            "Q1": {
+              "high": {
+                "ceiling_bias": 0.046949984778963005,
+                "floor_bias": -0.5383370008429468
+              },
+              "low": {
+                "ceiling_bias": 0.8160423079346433,
+                "floor_bias": -0.04888399769860399
+              },
+              "mid": {
+                "ceiling_bias": 0.4434810484688921,
+                "floor_bias": -0.5075912387653237
+              }
+            },
+            "Q2": {
+              "high": {
+                "ceiling_bias": 0.09416974612913284,
+                "floor_bias": -0.5228827397909673
+              },
+              "low": {
+                "ceiling_bias": 0.7831184956025321,
+                "floor_bias": -0.036262982746842115
+              },
+              "mid": {
+                "ceiling_bias": 0.5146015639052863,
+                "floor_bias": -0.45278133433467593
+              }
+            }
+          },
+          "min_holdout_games": 8,
+          "players_scored": 100,
+          "rows": 1449
+        },
+        "2024": {
+          "Q0": {
+            "coverage_deciles": [
+              0.3333333333333333,
+              0.4,
+              0.45874125874125876,
+              0.5,
+              0.5384615384615384,
+              0.5738095238095238,
+              0.6,
+              0.6666666666666666,
+              0.75
+            ],
+            "coverage_iqr": [
+              0.4226190476190476,
+              0.6306818181818181
+            ],
+            "coverage_median": 0.5384615384615384,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5436893203883495,
+            "interval_width_median": 3.029836440862491
+          },
+          "Q1": {
+            "coverage_deciles": [
+              0.3876923076923077,
+              0.46153846153846156,
+              0.5,
+              0.5454545454545454,
+              0.5833333333333334,
+              0.6376623376623376,
+              0.6923076923076923,
+              0.7220779220779222,
+              0.7777777777777778
+            ],
+            "coverage_iqr": [
+              0.5,
+              0.7
+            ],
+            "coverage_median": 0.5833333333333334,
+            "frac_players_pin20_improved": 0.6601941747572816,
+            "frac_players_pin80_improved": 0.6019417475728155,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5728155339805825,
+            "interval_width_median": 3.5116693006338444
+          },
+          "Q2": {
+            "coverage_deciles": [
+              0.4033333333333334,
+              0.46153846153846156,
+              0.5,
+              0.5454545454545454,
+              0.6,
+              0.6428571428571429,
+              0.6666666666666666,
+              0.7409090909090911,
+              0.7777777777777778
+            ],
+            "coverage_iqr": [
+              0.5,
+              0.7
+            ],
+            "coverage_median": 0.6,
+            "frac_players_pin20_improved": 0.6796116504854369,
+            "frac_players_pin80_improved": 0.6213592233009708,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5533980582524272,
+            "interval_width_median": 3.4942386166822645
+          },
+          "bias_by_mean_tercile": {
+            "Q0": {
+              "high": {
+                "ceiling_bias": -0.30433042550191725,
+                "floor_bias": 0.07759783951794508
+              },
+              "low": {
+                "ceiling_bias": 0.19035519934816106,
+                "floor_bias": -0.5023383843714729
+              },
+              "mid": {
+                "ceiling_bias": -0.10672253277552779,
+                "floor_bias": 0.010499849891393135
+              }
+            },
+            "Q1": {
+              "high": {
+                "ceiling_bias": -0.14683554536933355,
+                "floor_bias": -1.003962245137363
+              },
+              "low": {
+                "ceiling_bias": 0.4464440950438067,
+                "floor_bias": -0.23012746394120223
+              },
+              "mid": {
+                "ceiling_bias": 0.10977553882695243,
+                "floor_bias": -0.26090142985786574
+              }
+            },
+            "Q2": {
+              "high": {
+                "ceiling_bias": -0.04801847920372496,
+                "floor_bias": -0.9517549584095659
+              },
+              "low": {
+                "ceiling_bias": 0.4351797913455051,
+                "floor_bias": -0.2029461156390515
+              },
+              "mid": {
+                "ceiling_bias": 0.14875515968395106,
+                "floor_bias": -0.22011489667013068
+              }
+            }
+          },
+          "min_holdout_games": 8,
+          "players_scored": 103,
+          "rows": 1460
+        },
+        "2025": {
+          "Q0": {
+            "coverage_deciles": [
+              0.2914285714285714,
+              0.38461538461538464,
+              0.4444444444444444,
+              0.5,
+              0.5384615384615384,
+              0.5761904761904761,
+              0.6415584415584416,
+              0.75,
+              0.8181818181818182
+            ],
+            "coverage_iqr": [
+              0.4,
+              0.6794871794871795
+            ],
+            "coverage_median": 0.5384615384615384,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.3684210526315789,
+            "interval_width_median": 3.0298364408624914
+          },
+          "Q1": {
+            "coverage_deciles": [
+              0.4066666666666667,
+              0.46153846153846156,
+              0.5384615384615384,
+              0.5833333333333334,
+              0.6153846153846154,
+              0.6428571428571429,
+              0.6984615384615384,
+              0.7538461538461539,
+              0.8181818181818182
+            ],
+            "coverage_iqr": [
+              0.5,
+              0.7386363636363636
+            ],
+            "coverage_median": 0.6153846153846154,
+            "frac_players_pin20_improved": 0.7052631578947368,
+            "frac_players_pin80_improved": 0.43157894736842106,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.47368421052631576,
+            "interval_width_median": 3.562483190713494
+          },
+          "Q2": {
+            "coverage_deciles": [
+              0.4,
+              0.45454545454545453,
+              0.5076923076923077,
+              0.5650793650793651,
+              0.6,
+              0.6363636363636364,
+              0.6666666666666666,
+              0.75,
+              0.8181818181818182
+            ],
+            "coverage_iqr": [
+              0.5,
+              0.6923076923076923
+            ],
+            "coverage_median": 0.6,
+            "frac_players_pin20_improved": 0.7052631578947368,
+            "frac_players_pin80_improved": 0.43157894736842106,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5368421052631579,
+            "interval_width_median": 3.5590876752640423
+          },
+          "bias_by_mean_tercile": {
+            "Q0": {
+              "high": {
+                "ceiling_bias": 0.0007818706910721063,
+                "floor_bias": 0.6521954298285814
+              },
+              "low": {
+                "ceiling_bias": 0.47963984971931745,
+                "floor_bias": -0.3251965911431738
+              },
+              "mid": {
+                "ceiling_bias": 0.5102368485540665,
+                "floor_bias": 0.1449165367238335
+              }
+            },
+            "Q1": {
+              "high": {
+                "ceiling_bias": 0.15694631134936524,
+                "floor_bias": -0.44763260318069104
+              },
+              "low": {
+                "ceiling_bias": 0.7335670720923957,
+                "floor_bias": -0.08266709356444507
+              },
+              "mid": {
+                "ceiling_bias": 0.7221879827141703,
+                "floor_bias": -0.18891766084780726
+              }
+            },
+            "Q2": {
+              "high": {
+                "ceiling_bias": 0.20934600036390905,
+                "floor_bias": -0.42328792706320756
+              },
+              "low": {
+                "ceiling_bias": 0.7442398048292174,
+                "floor_bias": -0.04344359869831939
+              },
+              "mid": {
+                "ceiling_bias": 0.7897266833662632,
+                "floor_bias": -0.13315295494439044
+              }
+            }
+          },
+          "min_holdout_games": 8,
+          "players_scored": 95,
+          "rows": 1428
+        }
+      },
+      "sensitivity_min_holdout_games": {
+        "10": {
+          "Q0": 0.5290697674418605,
+          "Q1": 0.6511627906976745,
+          "Q2": 0.6802325581395349
+        },
+        "6": {
+          "Q0": 0.49029126213592233,
+          "Q1": 0.6067961165048543,
+          "Q2": 0.6359223300970874
+        }
+      }
+    },
+    "rush_yards": {
+      "decision": {
+        "H1_SUPPORTED": false,
+        "Q1": {
+          "SUPPORTED": false,
+          "rule_1_more_calibrated_players": true,
+          "rule_2_pinball_majority_BOTH_tails": true,
+          "rule_3_high_mean_floor_better_ceiling_not_worse": false,
+          "rule_4_no_crossed_quantiles": true
+        },
+        "Q2": {
+          "SUPPORTED": false,
+          "rule_1_more_calibrated_players": true,
+          "rule_2_pinball_majority_BOTH_tails": true,
+          "rule_3_high_mean_floor_better_ceiling_not_worse": false,
+          "rule_4_no_crossed_quantiles": true
+        },
+        "preferred_arm": null
+      },
+      "diagnostics": [
+        {
+          "last_week": 17,
+          "market": "rush_yards",
+          "panel_players": 63,
+          "panel_rows": 356,
+          "season": 2020,
+          "state_counts": {
+            "DNP_INACTIVE": 76,
+            "HEALTHY_FULL": 1224,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 49,
+            "PARTIAL_GAME": 121,
+            "UNRESOLVED_CONTEXT": 2
+          }
+        },
+        {
+          "last_week": 18,
+          "market": "rush_yards",
+          "panel_players": 60,
+          "panel_rows": 379,
+          "season": 2021,
+          "state_counts": {
+            "DNP_INACTIVE": 95,
+            "HEALTHY_FULL": 1227,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 64,
+            "PARTIAL_GAME": 129,
+            "UNRESOLVED_CONTEXT": 6
+          }
+        },
+        {
+          "last_week": 18,
+          "market": "rush_yards",
+          "panel_players": 58,
+          "panel_rows": 412,
+          "season": 2022,
+          "state_counts": {
+            "DNP_INACTIVE": 98,
+            "HEALTHY_FULL": 1276,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 61,
+            "PARTIAL_GAME": 140,
+            "UNRESOLVED_CONTEXT": 6
+          }
+        },
+        {
+          "last_week": 17,
+          "market": "rush_yards",
+          "panel_players": 62,
+          "panel_rows": 372,
+          "season": 2014,
+          "state_counts": {
+            "DNP_INACTIVE": 80,
+            "HEALTHY_FULL": 1244,
+            "PARTIAL_GAME": 158
+          }
+        },
+        {
+          "last_week": 17,
+          "market": "rush_yards",
+          "panel_players": 54,
+          "panel_rows": 348,
+          "season": 2015,
+          "state_counts": {
+            "DNP_INACTIVE": 100,
+            "HEALTHY_FULL": 1252,
+            "PARTIAL_GAME": 146
+          }
+        },
+        {
+          "last_week": 17,
+          "market": "rush_yards",
+          "panel_players": 57,
+          "panel_rows": 350,
+          "season": 2016,
+          "state_counts": {
+            "DNP_INACTIVE": 88,
+            "HEALTHY_FULL": 1187,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 14,
+            "PARTIAL_GAME": 144
+          }
+        },
+        {
+          "last_week": 17,
+          "market": "rush_yards",
+          "panel_players": 57,
+          "panel_rows": 377,
+          "season": 2017,
+          "state_counts": {
+            "DNP_INACTIVE": 73,
+            "HEALTHY_FULL": 1193,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 15,
+            "PARTIAL_GAME": 159,
+            "UNRESOLVED_CONTEXT": 8
+          }
+        },
+        {
+          "last_week": 17,
+          "market": "rush_yards",
+          "panel_players": 56,
+          "panel_rows": 365,
+          "season": 2018,
+          "state_counts": {
+            "DNP_INACTIVE": 68,
+            "HEALTHY_FULL": 1161,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 12,
+            "PARTIAL_GAME": 154,
+            "UNRESOLVED_CONTEXT": 4
+          }
+        },
+        {
+          "last_week": 17,
+          "market": "rush_yards",
+          "panel_players": 52,
+          "panel_rows": 366,
+          "season": 2019,
+          "state_counts": {
+            "DNP_INACTIVE": 83,
+            "HEALTHY_FULL": 1199,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 33,
+            "PARTIAL_GAME": 130
+          }
+        },
+        {
+          "last_week": 18,
+          "market": "rush_yards",
+          "panel_players": 57,
+          "panel_rows": 434,
+          "season": 2023,
+          "state_counts": {
+            "DNP_INACTIVE": 71,
+            "HEALTHY_FULL": 1232,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 43,
+            "PARTIAL_GAME": 125,
+            "UNRESOLVED_CONTEXT": 3
+          }
+        },
+        {
+          "last_week": 18,
+          "market": "rush_yards",
+          "panel_players": 59,
+          "panel_rows": 412,
+          "season": 2024,
+          "state_counts": {
+            "DNP_INACTIVE": 106,
+            "HEALTHY_FULL": 1251,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 58,
+            "PARTIAL_GAME": 116,
+            "UNRESOLVED_CONTEXT": 5
+          }
+        },
+        {
+          "last_week": 18,
+          "market": "rush_yards",
+          "panel_players": 57,
+          "panel_rows": 437,
+          "season": 2025,
+          "state_counts": {
+            "DNP_INACTIVE": 121,
+            "HEALTHY_FULL": 1250,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 93,
+            "PARTIAL_GAME": 102,
+            "UNRESOLVED_CONTEXT": 9
+          }
+        }
+      ],
+      "discrete_outcome": false,
+      "fit_rows": 1147,
+      "fitted_coefficients": {
+        "Q1": {
+          "p20": [
+            6.2820561927851495,
+            0.43722530059549125
+          ],
+          "p80": [
+            42.91189426634075,
+            0.7819383260465912
+          ]
+        },
+        "Q2": {
+          "p20": [
+            4.74671664141174,
+            0.3611150448605451,
+            10.760923115804957
+          ],
+          "p80": [
+            34.98215868977651,
+            0.6333793764008911,
+            26.489136239859615
+          ]
+        }
+      },
+      "holdout_primary": {
+        "Q0": {
+          "coverage_deciles": [
+            0.3125,
+            0.375,
+            0.4,
+            0.43478260869565216,
+            0.4666666666666667,
+            0.48484848484848486,
+            0.5454545454545454,
+            0.6086956521739131,
+            0.6666666666666666
+          ],
+          "coverage_iqr": [
+            0.3861283643892339,
+            0.5555555555555556
+          ],
+          "coverage_median": 0.4666666666666667,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.29411764705882354,
+          "interval_width_median": 40.39781921149989
+        },
+        "Q1": {
+          "coverage_deciles": [
+            0.4375,
+            0.52,
+            0.5625,
+            0.6190476190476191,
+            0.6363636363636364,
+            0.65625,
+            0.6666666666666666,
+            0.7142857142857143,
+            0.7777777777777778
+          ],
+          "coverage_iqr": [
+            0.5470085470085471,
+            0.6794871794871795
+          ],
+          "coverage_median": 0.6363636363636364,
+          "frac_players_pin20_improved": 0.7843137254901961,
+          "frac_players_pin80_improved": 0.6862745098039216,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.6078431372549019,
+          "interval_width_median": 56.922609492459046
+        },
+        "Q2": {
+          "coverage_deciles": [
+            0.4375,
+            0.47619047619047616,
+            0.5555555555555556,
+            0.5882352941176471,
+            0.6363636363636364,
+            0.6666666666666666,
+            0.6666666666666666,
+            0.7142857142857143,
+            0.7777777777777778
+          ],
+          "coverage_iqr": [
+            0.5192592592592593,
+            0.6899038461538461
+          ],
+          "coverage_median": 0.6363636363636364,
+          "frac_players_pin20_improved": 0.7647058823529411,
+          "frac_players_pin80_improved": 0.6862745098039216,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.5490196078431373,
+          "interval_width_median": 57.27571725645662
+        },
+        "bias_by_mean_tercile": {
+          "Q0": {
+            "high": {
+              "ceiling_bias": -6.9034820499304335,
+              "floor_bias": 4.028110503275559
+            },
+            "low": {
+              "ceiling_bias": -5.526541777985274,
+              "floor_bias": -7.100831577720451
+            },
+            "mid": {
+              "ceiling_bias": -7.285605424243073,
+              "floor_bias": 6.257751834845277
+            }
+          },
+          "Q1": {
+            "high": {
+              "ceiling_bias": -1.8362961466457666,
+              "floor_bias": -15.031292674340548
+            },
+            "low": {
+              "ceiling_bias": 7.865366787387056,
+              "floor_bias": -4.675747321826011
+            },
+            "mid": {
+              "ceiling_bias": 2.4621601149304446,
+              "floor_bias": -0.721987136446252
+            }
+          },
+          "Q2": {
+            "high": {
+              "ceiling_bias": -2.3593444369544194,
+              "floor_bias": -14.833047152362465
+            },
+            "low": {
+              "ceiling_bias": 6.88724400151645,
+              "floor_bias": -4.060724705916501
+            },
+            "mid": {
+              "ceiling_bias": 2.5510776471857777,
+              "floor_bias": 0.06313869726176294
+            }
+          }
+        },
+        "min_holdout_games": 8,
+        "players_scored": 51,
+        "rows": 1070
+      },
+      "market": "rush_yards",
+      "production_sigma": 24.0,
+      "reported_not_decisive": {
+        "2017": {
+          "Q0": {
+            "coverage_deciles": [
+              0.19999999999999998,
+              0.26,
+              0.32666666666666666,
+              0.36363636363636365,
+              0.4166666666666667,
+              0.45050505050505046,
+              0.509090909090909,
+              0.5555555555555556,
+              0.7111111111111114
+            ],
+            "coverage_iqr": [
+              0.3,
+              0.5505050505050505
+            ],
+            "coverage_median": 0.4166666666666667,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.2222222222222222,
+            "interval_width_median": 40.397819211499886
+          },
+          "Q1": {
+            "coverage_deciles": [
+              0.3704545454545455,
+              0.4033333333333334,
+              0.5,
+              0.5181818181818182,
+              0.5555555555555556,
+              0.625,
+              0.6666666666666666,
+              0.6666666666666666,
+              0.8464646464646466
+            ],
+            "coverage_iqr": [
+              0.45833333333333337,
+              0.6666666666666666
+            ],
+            "coverage_median": 0.5555555555555556,
+            "frac_players_pin20_improved": 0.8518518518518519,
+            "frac_players_pin80_improved": 0.6296296296296297,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5555555555555556,
+            "interval_width_median": 57.51884867677626
+          },
+          "Q2": {
+            "coverage_deciles": [
+              0.3381818181818182,
+              0.4033333333333334,
+              0.5363636363636364,
+              0.5555555555555556,
+              0.5833333333333334,
+              0.625,
+              0.6666666666666666,
+              0.6666666666666666,
+              0.8464646464646466
+            ],
+            "coverage_iqr": [
+              0.45833333333333337,
+              0.6666666666666666
+            ],
+            "coverage_median": 0.5833333333333334,
+            "frac_players_pin20_improved": 0.8518518518518519,
+            "frac_players_pin80_improved": 0.7037037037037037,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5555555555555556,
+            "interval_width_median": 56.09305862846452
+          },
+          "bias_by_mean_tercile": {
+            "Q0": {
+              "high": {
+                "ceiling_bias": -7.652068898848094,
+                "floor_bias": 14.75011188965202
+              },
+              "low": {
+                "ceiling_bias": -6.307561215251609,
+                "floor_bias": -10.816491537862598
+              },
+              "mid": {
+                "ceiling_bias": 7.012166124764031,
+                "floor_bias": 1.4143469132641502
+              }
+            },
+            "Q1": {
+              "high": {
+                "ceiling_bias": -1.9706990534120858,
+                "floor_bias": -2.7242021837817973
+              },
+              "low": {
+                "ceiling_bias": 6.790314662053323,
+                "floor_bias": -9.1502483687223
+              },
+              "mid": {
+                "ceiling_bias": 17.06983714235338,
+                "floor_bias": -4.765586391596781
+              }
+            },
+            "Q2": {
+              "high": {
+                "ceiling_bias": -0.7542088313919082,
+                "floor_bias": -1.774899651389726
+              },
+              "low": {
+                "ceiling_bias": 6.1466043673318795,
+                "floor_bias": -8.420624714073991
+              },
+              "mid": {
+                "ceiling_bias": 16.693923089425233,
+                "floor_bias": -4.146895771513942
+              }
+            }
+          },
+          "min_holdout_games": 8,
+          "players_scored": 27,
+          "rows": 377
+        },
+        "2018": {
+          "Q0": {
+            "coverage_deciles": [
+              0.125,
+              0.2222222222222222,
+              0.2727272727272727,
+              0.36363636363636365,
+              0.5,
+              0.5,
+              0.5555555555555556,
+              0.625,
+              0.6363636363636364
+            ],
+            "coverage_iqr": [
+              0.25,
+              0.6
+            ],
+            "coverage_median": 0.5,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.42857142857142855,
+            "interval_width_median": 40.39781921149989
+          },
+          "Q1": {
+            "coverage_deciles": [
+              0.3333333333333333,
+              0.36363636363636365,
+              0.5,
+              0.5,
+              0.5555555555555556,
+              0.6363636363636364,
+              0.6363636363636364,
+              0.6666666666666666,
+              0.7272727272727273
+            ],
+            "coverage_iqr": [
+              0.375,
+              0.6363636363636364
+            ],
+            "coverage_median": 0.5555555555555556,
+            "frac_players_pin20_improved": 0.7142857142857143,
+            "frac_players_pin80_improved": 0.7619047619047619,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5238095238095238,
+            "interval_width_median": 60.114630977105264
+          },
+          "Q2": {
+            "coverage_deciles": [
+              0.2727272727272727,
+              0.3333333333333333,
+              0.5,
+              0.5,
+              0.625,
+              0.6363636363636364,
+              0.6363636363636364,
+              0.6363636363636364,
+              0.7
+            ],
+            "coverage_iqr": [
+              0.3333333333333333,
+              0.6363636363636364
+            ],
+            "coverage_median": 0.625,
+            "frac_players_pin20_improved": 0.7619047619047619,
+            "frac_players_pin80_improved": 0.8095238095238095,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.6190476190476191,
+            "interval_width_median": 59.05380027921474
+          },
+          "bias_by_mean_tercile": {
+            "Q0": {
+              "high": {
+                "ceiling_bias": -14.841000453627103,
+                "floor_bias": 8.161180334873002
+              },
+              "low": {
+                "ceiling_bias": -6.770241232689318,
+                "floor_bias": -5.482346158474916
+              },
+              "mid": {
+                "ceiling_bias": -8.814324305300529,
+                "floor_bias": 6.873570768913869
+              }
+            },
+            "Q1": {
+              "high": {
+                "ceiling_bias": -9.881993865571491,
+                "floor_bias": -11.177412580701466
+              },
+              "low": {
+                "ceiling_bias": 6.104550079563523,
+                "floor_bias": -4.391840792144474
+              },
+              "mid": {
+                "ceiling_bias": -0.5777489864194507,
+                "floor_bias": -4.006255762697042
+              }
+            },
+            "Q2": {
+              "high": {
+                "ceiling_bias": -8.71923020290468,
+                "floor_bias": -10.30214267107302
+              },
+              "low": {
+                "ceiling_bias": 7.667758665819378,
+                "floor_bias": -2.7818031924918207
+              },
+              "mid": {
+                "ceiling_bias": -0.9944716480065746,
+                "floor_bias": -3.535757816569551
+              }
+            }
+          },
+          "min_holdout_games": 8,
+          "players_scored": 21,
+          "rows": 365
+        },
+        "2019": {
+          "Q0": {
+            "coverage_deciles": [
+              0.24166666666666667,
+              0.31333333333333335,
+              0.3775,
+              0.4,
+              0.4,
+              0.42424242424242425,
+              0.49545454545454537,
+              0.625,
+              0.6704545454545455
+            ],
+            "coverage_iqr": [
+              0.3560606060606061,
+              0.5729166666666667
+            ],
+            "coverage_median": 0.4,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.21428571428571427,
+            "interval_width_median": 40.397819211499886
+          },
+          "Q1": {
+            "coverage_deciles": [
+              0.4,
+              0.45454545454545453,
+              0.5,
+              0.5535353535353535,
+              0.5833333333333334,
+              0.6,
+              0.6224999999999999,
+              0.6745454545454546,
+              0.75
+            ],
+            "coverage_iqr": [
+              0.48863636363636365,
+              0.6278409090909091
+            ],
+            "coverage_median": 0.5833333333333334,
+            "frac_players_pin20_improved": 0.5357142857142857,
+            "frac_players_pin80_improved": 0.6071428571428571,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5714285714285714,
+            "interval_width_median": 56.87354765004965
+          },
+          "Q2": {
+            "coverage_deciles": [
+              0.4,
+              0.4484848484848485,
+              0.5,
+              0.5454545454545454,
+              0.5833333333333334,
+              0.6,
+              0.6,
+              0.625,
+              0.7340909090909091
+            ],
+            "coverage_iqr": [
+              0.45454545454545453,
+              0.625
+            ],
+            "coverage_median": 0.5833333333333334,
+            "frac_players_pin20_improved": 0.6071428571428571,
+            "frac_players_pin80_improved": 0.6785714285714286,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5714285714285714,
+            "interval_width_median": 56.87232088255139
+          },
+          "bias_by_mean_tercile": {
+            "Q0": {
+              "high": {
+                "ceiling_bias": -6.093156969805694,
+                "floor_bias": 16.553468263138868
+              },
+              "low": {
+                "ceiling_bias": -8.268423834378956,
+                "floor_bias": -7.4862430458788385
+              },
+              "mid": {
+                "ceiling_bias": -2.491772088397662,
+                "floor_bias": 4.577075366769119
+              }
+            },
+            "Q1": {
+              "high": {
+                "ceiling_bias": -3.0389507381850285,
+                "floor_bias": -7.701043294091629
+              },
+              "low": {
+                "ceiling_bias": 4.768582878389913,
+                "floor_bias": -5.977091332351705
+              },
+              "mid": {
+                "ceiling_bias": 6.813233473662661,
+                "floor_bias": -3.545340850416907
+              }
+            },
+            "Q2": {
+              "high": {
+                "ceiling_bias": -2.742256327708235,
+                "floor_bias": -7.315268728375916
+              },
+              "low": {
+                "ceiling_bias": 5.8814354550493455,
+                "floor_bias": -4.5382822905533775
+              },
+              "mid": {
+                "ceiling_bias": 8.096663569912007,
+                "floor_bias": -2.3069565410637756
+              }
+            }
+          },
+          "min_holdout_games": 8,
+          "players_scored": 28,
+          "rows": 366
+        },
+        "2023": {
+          "Q0": {
+            "coverage_deciles": [
+              0.24786324786324787,
+              0.35833333333333334,
+              0.4535353535353535,
+              0.4692307692307693,
+              0.5,
+              0.5363636363636364,
+              0.5555555555555556,
+              0.6,
+              0.7392857142857142
+            ],
+            "coverage_iqr": [
+              0.3995726495726496,
+              0.576388888888889
+            ],
+            "coverage_median": 0.5,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.4411764705882353,
+            "interval_width_median": 40.39781921149989
+          },
+          "Q1": {
+            "coverage_deciles": [
+              0.5,
+              0.5230769230769231,
+              0.5545454545454546,
+              0.6173076923076923,
+              0.6666666666666666,
+              0.7,
+              0.7527777777777778,
+              0.8181818181818182,
+              0.85
+            ],
+            "coverage_iqr": [
+              0.5454545454545454,
+              0.7944444444444445
+            ],
+            "coverage_median": 0.6666666666666666,
+            "frac_players_pin20_improved": 0.8235294117647058,
+            "frac_players_pin80_improved": 0.38235294117647056,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.5294117647058824,
+            "interval_width_median": 56.091956594175485
+          },
+          "Q2": {
+            "coverage_deciles": [
+              0.5,
+              0.5384615384615384,
+              0.5555555555555556,
+              0.593939393939394,
+              0.6666666666666666,
+              0.7,
+              0.7519230769230769,
+              0.7939393939393941,
+              0.85
+            ],
+            "coverage_iqr": [
+              0.547979797979798,
+              0.7756410256410257
+            ],
+            "coverage_median": 0.6666666666666666,
+            "frac_players_pin20_improved": 0.8823529411764706,
+            "frac_players_pin80_improved": 0.38235294117647056,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.6176470588235294,
+            "interval_width_median": 55.79874430513435
+          },
+          "bias_by_mean_tercile": {
+            "Q0": {
+              "high": {
+                "ceiling_bias": -1.1635718261893984,
+                "floor_bias": 4.874972598674348
+              },
+              "low": {
+                "ceiling_bias": -3.0908891800750316,
+                "floor_bias": -4.3553750582415836
+              },
+              "mid": {
+                "ceiling_bias": -0.7745661261245558,
+                "floor_bias": 3.1003419351028367
+              }
+            },
+            "Q1": {
+              "high": {
+                "ceiling_bias": 5.543434119882045,
+                "floor_bias": -9.952374505420122
+              },
+              "low": {
+                "ceiling_bias": 9.868879799726484,
+                "floor_bias": -3.0455588866523526
+              },
+              "mid": {
+                "ceiling_bias": 9.392105976983293,
+                "floor_bias": -2.798280802773529
+              }
+            },
+            "Q2": {
+              "high": {
+                "ceiling_bias": 5.501857644390478,
+                "floor_bias": -9.440022874358716
+              },
+              "low": {
+                "ceiling_bias": 10.145284209740318,
+                "floor_bias": -1.9521299452572485
+              },
+              "mid": {
+                "ceiling_bias": 10.856106463738874,
+                "floor_bias": -1.4242671886892604
+              }
+            }
+          },
+          "min_holdout_games": 8,
+          "players_scored": 34,
+          "rows": 434
+        },
+        "2024": {
+          "Q0": {
+            "coverage_deciles": [
+              0.2,
+              0.24755244755244757,
+              0.3033333333333333,
+              0.39272727272727276,
+              0.4166666666666667,
+              0.4222222222222222,
+              0.5,
+              0.5272727272727273,
+              0.6075
+            ],
+            "coverage_iqr": [
+              0.29318181818181815,
+              0.5
+            ],
+            "coverage_median": 0.4166666666666667,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.35714285714285715,
+            "interval_width_median": 40.39781921149989
+          },
+          "Q1": {
+            "coverage_deciles": [
+              0.4,
+              0.4277777777777778,
+              0.4552447552447552,
+              0.5,
+              0.5277777777777778,
+              0.6256410256410256,
+              0.6966666666666665,
+              0.75,
+              0.8227272727272728
+            ],
+            "coverage_iqr": [
+              0.452020202020202,
+              0.7124999999999999
+            ],
+            "coverage_median": 0.5277777777777778,
+            "frac_players_pin20_improved": 0.7142857142857143,
+            "frac_players_pin80_improved": 0.5714285714285714,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.39285714285714285,
+            "interval_width_median": 60.56746381948774
+          },
+          "Q2": {
+            "coverage_deciles": [
+              0.4116666666666667,
+              0.45454545454545453,
+              0.5,
+              0.5,
+              0.5470085470085471,
+              0.6733333333333332,
+              0.7,
+              0.75,
+              0.8227272727272728
+            ],
+            "coverage_iqr": [
+              0.4597902097902098,
+              0.75
+            ],
+            "coverage_median": 0.5470085470085471,
+            "frac_players_pin20_improved": 0.75,
+            "frac_players_pin80_improved": 0.5357142857142857,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.42857142857142855,
+            "interval_width_median": 59.57122104685858
+          },
+          "bias_by_mean_tercile": {
+            "Q0": {
+              "high": {
+                "ceiling_bias": -6.351709598876438,
+                "floor_bias": 11.717137856290341
+              },
+              "low": {
+                "ceiling_bias": -8.68407391017297,
+                "floor_bias": -1.9018931216728565
+              },
+              "mid": {
+                "ceiling_bias": -1.6556359880128209,
+                "floor_bias": 9.502100356042844
+              }
+            },
+            "Q1": {
+              "high": {
+                "ceiling_bias": -2.96491149448123,
+                "floor_bias": -11.679018870255574
+              },
+              "low": {
+                "ceiling_bias": 1.9227772030009995,
+                "floor_bias": -6.664499586799404
+              },
+              "mid": {
+                "ceiling_bias": 6.056908178112663,
+                "floor_bias": -2.7301484931810056
+              }
+            },
+            "Q2": {
+              "high": {
+                "ceiling_bias": -3.987031139449447,
+                "floor_bias": -11.804961000371726
+              },
+              "low": {
+                "ceiling_bias": 1.3396537446808914,
+                "floor_bias": -6.090295068712825
+              },
+              "mid": {
+                "ceiling_bias": 6.414275574006004,
+                "floor_bias": -1.9830577839760741
+              }
+            }
+          },
+          "min_holdout_games": 8,
+          "players_scored": 28,
+          "rows": 412
+        },
+        "2025": {
+          "Q0": {
+            "coverage_deciles": [
+              0.2659090909090909,
+              0.36363636363636365,
+              0.38461538461538464,
+              0.4102564102564103,
+              0.45454545454545453,
+              0.5,
+              0.5346153846153845,
+              0.5722222222222223,
+              0.62
+            ],
+            "coverage_iqr": [
+              0.37215909090909094,
+              0.547979797979798
+            ],
+            "coverage_median": 0.45454545454545453,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.42857142857142855,
+            "interval_width_median": 40.39781921149989
+          },
+          "Q1": {
+            "coverage_deciles": [
+              0.46153846153846156,
+              0.5181818181818182,
+              0.5726190476190476,
+              0.5833333333333334,
+              0.6,
+              0.625,
+              0.6352272727272728,
+              0.7030303030303031,
+              0.7583333333333333
+            ],
+            "coverage_iqr": [
+              0.5454545454545454,
+              0.6439393939393939
+            ],
+            "coverage_median": 0.6,
+            "frac_players_pin20_improved": 0.7857142857142857,
+            "frac_players_pin80_improved": 0.5714285714285714,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.6428571428571429,
+            "interval_width_median": 59.232211514658985
+          },
+          "Q2": {
+            "coverage_deciles": [
+              0.46153846153846156,
+              0.5,
+              0.548051948051948,
+              0.5833333333333334,
+              0.6125,
+              0.6363636363636364,
+              0.6666666666666666,
+              0.6969230769230769,
+              0.7424242424242424
+            ],
+            "coverage_iqr": [
+              0.5340909090909091,
+              0.673076923076923
+            ],
+            "coverage_median": 0.6125,
+            "frac_players_pin20_improved": 0.7142857142857143,
+            "frac_players_pin80_improved": 0.6428571428571429,
+            "frac_rows_crossed": 0.0,
+            "frac_well_calibrated": 0.6785714285714286,
+            "interval_width_median": 59.49888706033347
+          },
+          "bias_by_mean_tercile": {
+            "Q0": {
+              "high": {
+                "ceiling_bias": -3.5435769053642647,
+                "floor_bias": 13.436381660913625
+              },
+              "low": {
+                "ceiling_bias": -10.158606561309501,
+                "floor_bias": -4.33642577280938
+              },
+              "mid": {
+                "ceiling_bias": -2.5176820940119264,
+                "floor_bias": 4.817832027821522
+              }
+            },
+            "Q1": {
+              "high": {
+                "ceiling_bias": 1.1740468888740878,
+                "floor_bias": -6.5251732211958435
+              },
+              "low": {
+                "ceiling_bias": 2.322382728618525,
+                "floor_bias": -4.262246708670337
+              },
+              "mid": {
+                "ceiling_bias": 5.828656266873048,
+                "floor_bias": -5.778717475554417
+              }
+            },
+            "Q2": {
+              "high": {
+                "ceiling_bias": -0.03847427312622958,
+                "floor_bias": -6.632282172733538
+              },
+              "low": {
+                "ceiling_bias": 1.731251557315037,
+                "floor_bias": -3.5558471182446474
+              },
+              "mid": {
+                "ceiling_bias": 7.463401174723637,
+                "floor_bias": -4.466900352736333
+              }
+            }
+          },
+          "min_holdout_games": 8,
+          "players_scored": 28,
+          "rows": 437
+        }
+      },
+      "sensitivity_min_holdout_games": {
+        "10": {
+          "Q0": 0.225,
+          "Q1": 0.675,
+          "Q2": 0.6
+        },
+        "6": {
+          "Q0": 0.28125,
+          "Q1": 0.5625,
+          "Q2": 0.5
+        }
+      }
+    }
+  },
+  "preregistration": "docs/research/PRISM_DIRECT_QUANTILE_RUSH_REC_PREREGISTRATION_V1.md",
+  "sportsbook_inputs_used": false
+}
