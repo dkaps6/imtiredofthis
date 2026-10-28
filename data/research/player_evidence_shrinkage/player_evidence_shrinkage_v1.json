@@ -1,0 +1,109 @@
+{
+  "version": "PLAYER_EVIDENCE_SHRINKAGE_EVAL_V1",
+  "preregistration": "docs/research/PRISM_PLAYER_EVIDENCE_SHRINKAGE_PREREGISTRATION_V1.md",
+  "metric": "rush_share",
+  "scored_player_weeks": 18809,
+  "seasons": [
+    2014,
+    2025
+  ],
+  "primary1": {
+    "C0_incumbent": {
+      "mean_err": 0.14726864919050106,
+      "median_err": 0.1231872096900303
+    },
+    "C1_allocative": {
+      "mean_err": 0.12141771844539524,
+      "median_err": 0.08960920777849202,
+      "improvement_vs_C0": 0.025851,
+      "ci95": [
+        0.024844,
+        0.026844
+      ],
+      "ci_excludes_zero": true
+    },
+    "C2_precision": {
+      "mean_err": 0.15712015421171466,
+      "median_err": 0.13410912180164875,
+      "improvement_vs_C0": -0.009852,
+      "ci95": [
+        -0.010288,
+        -0.009405
+      ],
+      "ci_excludes_zero": false
+    },
+    "C3_both": {
+      "mean_err": 0.1209109007208631,
+      "median_err": 0.08765760641197512,
+      "improvement_vs_C0": 0.026358,
+      "ci95": [
+        0.025174,
+        0.027513
+      ],
+      "ci_excludes_zero": true
+    },
+    "C4_uniform_less_shrink": {
+      "mean_err": 0.1299159641680686,
+      "median_err": 0.1006236844333073,
+      "improvement_vs_C0": 0.017353,
+      "ci95": [
+        0.016816,
+        0.017873
+      ],
+      "ci_excludes_zero": true
+    }
+  },
+  "primary2_heterogeneity": {
+    "Q1 thin": {
+      "C0_incumbent": 0.18026049456881071,
+      "C1_allocative": 0.14888565573050716,
+      "C2_precision": 0.19753938153136957,
+      "C3_both": 0.1498390798618171,
+      "C4_uniform_less_shrink": 0.16247498413908695,
+      "n": 4703
+    },
+    "Q2": {
+      "C0_incumbent": 0.15835262975470368,
+      "C1_allocative": 0.1338956018970468,
+      "C2_precision": 0.16954609282499689,
+      "C3_both": 0.13260347170016523,
+      "C4_uniform_less_shrink": 0.1420691009157352,
+      "n": 4702
+    },
+    "Q3": {
+      "C0_incumbent": 0.14314027054039954,
+      "C1_allocative": 0.12159690706313209,
+      "C2_precision": 0.1523089800033098,
+      "C3_both": 0.12101790889558521,
+      "C4_uniform_less_shrink": 0.1278659991915707,
+      "n": 4702
+    },
+    "Q4 strong": {
+      "C0_incumbent": 0.10731418534228876,
+      "C1_allocative": 0.08128686733477315,
+      "C2_precision": 0.1090775663095304,
+      "C3_both": 0.08017699011215847,
+      "C4_uniform_less_shrink": 0.08724684792142155,
+      "n": 4702
+    }
+  },
+  "top1_actual": 0.6584059369529648,
+  "top1_by_candidate": {
+    "C0_incumbent": 0.5535218752622674,
+    "C1_allocative": 0.6417046484544411,
+    "C2_precision": 0.5269573067037284,
+    "C3_both": 0.6599452856201432,
+    "C4_uniform_less_shrink": 0.5988767700516189
+  },
+  "committee_err": {
+    "C0_incumbent": 0.12390775427587193,
+    "C1_allocative": 0.09846124412997351,
+    "C2_precision": 0.13079820792112376,
+    "C3_both": 0.09741267526191438,
+    "C4_uniform_less_shrink": 0.10831178773233666
+  },
+  "K2_c4_matches_c3": false,
+  "K3_gain_flat": false,
+  "sportsbook_inputs_used": false,
+  "promoted": false
+}
