@@ -1,0 +1,60 @@
+{
+  "derivation": {
+    "derived_at_git_sha": "73c316979e52309ccdda77f1753c3b0c2077f088",
+    "derived_at_utc": "2026-10-28T14:21:57+00:00",
+    "derived_from_weeks": [
+      1,
+      2,
+      6
+    ],
+    "excluded_from_derivation": [
+      7
+    ],
+    "preregistration": "docs/production/MC_DISPERSION_RECALIBRATION_PREREGISTRATION_V1.md",
+    "season": 2026,
+    "statistic": "k_market = sd((actual - model_proj) / model_sd)",
+    "target": "1.0 for a calibrated predictive distribution",
+    "validated_on": "2026 week 7 re-simulated from the archived fixture",
+    "validation_record": "data/research/mc_dispersion/mc_dispersion_recalibration_v1.json"
+  },
+  "markets": {
+    "pass_yards": {
+      "derivation_rows": 84,
+      "k": 1.3386
+    },
+    "rec_yards": {
+      "derivation_rows": 396,
+      "k": 1.6397
+    },
+    "receptions": {
+      "derivation_rows": 392,
+      "k": 1.3297
+    },
+    "rush_rec_yards": {
+      "derivation_rows": 94,
+      "k": 1.9692
+    },
+    "rush_yards": {
+      "derivation_rows": 216,
+      "k": 1.7563
+    }
+  },
+  "notes": [
+    "Applied AFTER every promoted synthesis sets the mean, so the QB M89/M90 and RB P3 mean invariants (AGENTS.md section 7) are untouched; validation measured the worst relative mean shift at 0.00000.",
+    "Widen-then-clip was REJECTED: it lifts a low-mean players mean by up to 27.8% because clipping at zero is not mean-preserving.",
+    "A market absent from this file is left UNCHANGED (k=1.0) and labelled, rather than failing the slate.",
+    "This is a calibration of dispersion, not a structural fix. The underlying cause is that simulation_v2 draws outcome noise conditional on point-estimate ypt/ypc/catch_rate/share with no sampling of their own uncertainty. That remains open."
+  ],
+  "purpose": "Mean-preserving dispersion scale for the empirical Monte Carlo pricing distribution. Production prices from np.mean(adjusted_outcomes > line); those draws were measurably under-dispersed, making probabilities overconfident. k widens the draws about their own mean without moving it.",
+  "validation_summary": {
+    "brier_baseline": 0.2713142834338028,
+    "brier_market_benchmark": 0.2491,
+    "brier_widened": 0.25552823294647886,
+    "mean_abs_calibration_gap_baseline": 0.16917149079779792,
+    "mean_abs_calibration_gap_widened": 0.09347725896689495,
+    "sd_z_baseline": 1.766801494915951,
+    "sd_z_widened": 1.186452535377118,
+    "worst_relative_mean_shift": 4.875768995908808e-16
+  },
+  "version": "MC_DISPERSION_CALIBRATION_V1"
+}

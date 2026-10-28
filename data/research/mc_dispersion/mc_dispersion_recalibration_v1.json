@@ -1,0 +1,261 @@
+{
+  "baseline": {
+    "actual_over_rate": 0.45598591549295775,
+    "brier": 0.2713142834338028,
+    "curve": [
+      {
+        "actual": 0.6296296296296297,
+        "bucket": "(-0.001, 0.1]",
+        "gap": -0.5752177777777778,
+        "predicted": 0.05441185185185185,
+        "rows": 27
+      },
+      {
+        "actual": 0.4,
+        "bucket": "(0.1, 0.2]",
+        "gap": -0.2529874285714286,
+        "predicted": 0.14701257142857144,
+        "rows": 70
+      },
+      {
+        "actual": 0.4,
+        "bucket": "(0.2, 0.3]",
+        "gap": -0.1472977391304348,
+        "predicted": 0.2527022608695652,
+        "rows": 115
+      },
+      {
+        "actual": 0.40186915887850466,
+        "bucket": "(0.3, 0.4]",
+        "gap": -0.049882242990654135,
+        "predicted": 0.3519869158878505,
+        "rows": 107
+      },
+      {
+        "actual": 0.4065934065934066,
+        "bucket": "(0.4, 0.5]",
+        "gap": 0.04107208791208794,
+        "predicted": 0.44766549450549453,
+        "rows": 91
+      },
+      {
+        "actual": 0.5,
+        "bucket": "(0.5, 0.6]",
+        "gap": 0.05343624999999996,
+        "predicted": 0.55343625,
+        "rows": 64
+      },
+      {
+        "actual": 0.52,
+        "bucket": "(0.6, 0.7]",
+        "gap": 0.12691039999999998,
+        "predicted": 0.6469104,
+        "rows": 50
+      },
+      {
+        "actual": 0.6333333333333333,
+        "bucket": "(0.7, 0.8]",
+        "gap": 0.106568,
+        "predicted": 0.7399013333333333,
+        "rows": 30
+      }
+    ],
+    "mean_abs_calibration_gap": 0.16917149079779792,
+    "predicted_over_rate": 0.3902106338028169,
+    "rows": 568
+  },
+  "decision": {
+    "SUPPORTED": true,
+    "mean_tolerance": 0.02,
+    "rule_1_brier_improves": true,
+    "rule_2_calibration_gaps_shrink": true,
+    "rule_3_sd_z_toward_one": true,
+    "rule_4_mean_preserved": true,
+    "worst_relative_mean_shift": 4.875768995908808e-16
+  },
+  "derive_weeks": [
+    1,
+    2,
+    6
+  ],
+  "iterations": 25000,
+  "k_by_market": {
+    "pass_yards": {
+      "k": 1.338628846335949,
+      "rows": 84,
+      "weeks": [
+        1,
+        2,
+        6
+      ]
+    },
+    "rec_yards": {
+      "k": 1.6396906633911124,
+      "rows": 396,
+      "weeks": [
+        1,
+        2,
+        6
+      ]
+    },
+    "receptions": {
+      "k": 1.3297360402735992,
+      "rows": 392,
+      "weeks": [
+        1,
+        2,
+        6
+      ]
+    },
+    "rush_rec_yards": {
+      "k": 1.9692442069743317,
+      "rows": 94,
+      "weeks": [
+        1,
+        2,
+        6
+      ]
+    },
+    "rush_yards": {
+      "k": 1.7562669932019148,
+      "rows": 216,
+      "weeks": [
+        1,
+        2,
+        6
+      ]
+    }
+  },
+  "mean_preservation_by_market": {
+    "pass_yards": {
+      "median_rel_shift": 0.0,
+      "worst_rel_shift": 2.6394320649542574e-16
+    },
+    "rec_yards": {
+      "median_rel_shift": 0.0,
+      "worst_rel_shift": 3.509877935655462e-16
+    },
+    "receptions": {
+      "median_rel_shift": 1.1398125586476495e-16,
+      "worst_rel_shift": 4.036954437485797e-16
+    },
+    "rush_rec_yards": {
+      "median_rel_shift": 0.0,
+      "worst_rel_shift": 2.1999350533191102e-16
+    },
+    "rush_yards": {
+      "median_rel_shift": 0.0,
+      "worst_rel_shift": 4.875768995908808e-16
+    }
+  },
+  "naive_clip_only_REJECTED_rule4": {
+    "actual_over_rate": 0.45598591549295775,
+    "brier": 0.25450072352394365,
+    "curve": [
+      {
+        "actual": 0.45161290322580644,
+        "bucket": "(0.1, 0.2]",
+        "gap": -0.2913341935483871,
+        "predicted": 0.16027870967741936,
+        "rows": 31
+      },
+      {
+        "actual": 0.3627450980392157,
+        "bucket": "(0.2, 0.3]",
+        "gap": -0.10984235294117645,
+        "predicted": 0.25290274509803923,
+        "rows": 102
+      },
+      {
+        "actual": 0.4527027027027027,
+        "bucket": "(0.3, 0.4]",
+        "gap": -0.1018956756756757,
+        "predicted": 0.350807027027027,
+        "rows": 148
+      },
+      {
+        "actual": 0.41044776119402987,
+        "bucket": "(0.4, 0.5]",
+        "gap": 0.03457761194029846,
+        "predicted": 0.44502537313432833,
+        "rows": 134
+      },
+      {
+        "actual": 0.5106382978723404,
+        "bucket": "(0.5, 0.6]",
+        "gap": 0.03874,
+        "predicted": 0.5493782978723404,
+        "rows": 94
+      },
+      {
+        "actual": 0.6111111111111112,
+        "bucket": "(0.6, 0.7]",
+        "gap": 0.02275444444444452,
+        "predicted": 0.6338655555555557,
+        "rows": 36
+      }
+    ],
+    "mean_abs_calibration_gap": 0.09985737975833038,
+    "note": "widen-then-clip is NOT mean-preserving; failed frozen rule 4",
+    "predicted_over_rate": 0.40417725352112677,
+    "rows": 568,
+    "worst_relative_mean_shift": 0.2780989869684479
+  },
+  "preregistration": "docs/production/MC_DISPERSION_RECALIBRATION_PREREGISTRATION_V1.md",
+  "sd_z_baseline": 1.766801494915951,
+  "sd_z_widened": 1.186452535377118,
+  "seed": 42,
+  "sportsbook_inputs_used_for_projection": false,
+  "target_week": 7,
+  "widened": {
+    "actual_over_rate": 0.45598591549295775,
+    "brier": 0.25552823294647886,
+    "curve": [
+      {
+        "actual": 0.4523809523809524,
+        "bucket": "(0.1, 0.2]",
+        "gap": -0.2879666666666667,
+        "predicted": 0.1644142857142857,
+        "rows": 42
+      },
+      {
+        "actual": 0.37735849056603776,
+        "bucket": "(0.2, 0.3]",
+        "gap": -0.1227671698113208,
+        "predicted": 0.25459132075471697,
+        "rows": 106
+      },
+      {
+        "actual": 0.4370860927152318,
+        "bucket": "(0.3, 0.4]",
+        "gap": -0.08704609271523184,
+        "predicted": 0.35003999999999996,
+        "rows": 151
+      },
+      {
+        "actual": 0.421875,
+        "bucket": "(0.4, 0.5]",
+        "gap": 0.02283875000000002,
+        "predicted": 0.44471375,
+        "rows": 128
+      },
+      {
+        "actual": 0.5227272727272727,
+        "bucket": "(0.5, 0.6]",
+        "gap": 0.02561590909090905,
+        "predicted": 0.5483431818181818,
+        "rows": 88
+      },
+      {
+        "actual": 0.6206896551724138,
+        "bucket": "(0.6, 0.7]",
+        "gap": 0.014628965517241244,
+        "predicted": 0.6353186206896551,
+        "rows": 29
+      }
+    ],
+    "mean_abs_calibration_gap": 0.09347725896689495,
+    "predicted_over_rate": 0.3929242253521127,
+    "rows": 568
+  }
+}

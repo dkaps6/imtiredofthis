@@ -31,6 +31,11 @@ import scripts.modeling.bayesian_v2 as bayesian_v2
 from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics
 from scripts.modeling.ensemble_v2 import apply_ensemble, load_weights
 from scripts.modeling.discrete_count_alignment_v1 import align_prealigned_outcomes
+from scripts.modeling.mc_dispersion_calibration_v1 import (
+    VERSION as MC_DISPERSION_VERSION,
+    apply_dispersion_calibration,
+    load_calibration as load_mc_dispersion_calibration,
+)
 from scripts.modeling.ml_v2 import apply_ml_to_metrics
 from scripts.modeling.qb_pass_synthesis_v1 import (
     attempt_conversion,
@@ -219,6 +224,10 @@ def price(season: int) -> pd.DataFrame:
             )
 
     sims = simulate(df)
+    mc_dispersion_calibration = load_mc_dispersion_calibration()
+    print(f"[pricing] mc dispersion calibration: state="
+          f"{mc_dispersion_calibration.get('state')} "
+          f"markets={sorted((mc_dispersion_calibration.get('k') or {}).keys())}")
 
     rb_rush_rec_v2 = {}
     rb_rush_rec_v2_version = ""
@@ -374,6 +383,15 @@ def price(season: int) -> pd.DataFrame:
         else:
             adjusted_outcomes = base_outcomes
 
+        # Widen the priced draws about their own mean, leaving the mean exactly
+        # where the promoted syntheses put it. Applied here -- after the football
+        # mean is aligned and before integer support is restored -- so count
+        # markets are re-aligned after widening and the QB/RB mean invariants
+        # (AGENTS.md section 7) are untouched.
+        adjusted_outcomes, mc_dispersion_meta = apply_dispersion_calibration(
+            adjusted_outcomes, market, mc_dispersion_calibration
+        )
+
         # V1 is representation-only: after the existing football mean is
         # aligned, restore integer support for qualified count markets.
         adjusted_outcomes, discrete_count_meta = align_prealigned_outcomes(
@@ -422,6 +440,7 @@ def price(season: int) -> pd.DataFrame:
             "model_proj": model_proj,
             "mc_proj": mc_proj,
             "model_sd": model_sd,
+            **mc_dispersion_meta,
             "simulation_iterations": sims.iterations,
             "ensemble_proj": ensemble_proj,
             "ensemble_status": ens["ensemble_status"],
