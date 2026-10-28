@@ -1,0 +1,9 @@
+opportunity_kind,roster_position,cards,position_prior_only,fallback_can_move_allocation,fallback_prior_mass,production_prior_value,pct_position_prior_only,pct_allocation_moving
+carry,QB,747,241,241,33.74,0.14,0.3226,0.3226
+carry,RB,1315,348,348,111.36,0.32,0.2646,0.2646
+carry,TE,1233,1058,0,0.0,0.0,0.8581,0.0
+carry,WR,2185,1566,1566,31.32,0.02,0.7167,0.7167
+target,QB,747,672,0,0.0,0.0,0.8996,0.0
+target,RB,1315,404,404,32.32,0.08,0.3072,0.3072
+target,TE,1233,404,404,48.48,0.12,0.3277,0.3277
+target,WR,2185,729,729,116.64,0.16,0.3336,0.3336

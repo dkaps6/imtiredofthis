@@ -1,0 +1,97 @@
+{
+  "anomaly_gate_version": "PLAYER_STATE_ANOMALY_GATE_V2_INJURY_RESOLVED",
+  "audit_corrections_applied": "6420504608_A_through_E",
+  "cards": 35196,
+  "cards_without_target_team_tenure": 29930,
+  "denominator_contradicted_cards": 24,
+  "evidence_authority_counts": {
+    "current_only": 558,
+    "position_prior_only": 29515,
+    "prior+current": 2409,
+    "prior_only": 2714
+  },
+  "evidence_authority_counts_opportunity_eligible": {
+    "current_only": 538,
+    "position_prior_only": 5422,
+    "prior+current": 2407,
+    "prior_only": 2593
+  },
+  "gate_cards_with_withheld_weeks": 1440,
+  "gate_weeks_withheld_total": 2026,
+  "history_state_counts": {
+    "current_only": 558,
+    "no_history": 27928,
+    "participation_only_zero_opportunity": 1587,
+    "prior+current": 2409,
+    "prior_only": 2714
+  },
+  "history_state_counts_opportunity_eligible": {
+    "current_only": 538,
+    "no_history": 3903,
+    "participation_only_zero_opportunity": 1519,
+    "prior+current": 2407,
+    "prior_only": 2593
+  },
+  "identity_bridge": {
+    "bridge_ambiguous_pfr_ids": 0,
+    "bridge_match_rate": 0.8135119585764774,
+    "bridge_matched": 29694,
+    "bridge_players_mapped": 2520,
+    "bridge_state": "ok",
+    "bridge_unmatched": 6807,
+    "bye_detection": "available",
+    "offensive_player_weeks_total": 14474,
+    "offensive_player_weeks_unmatched": 4900,
+    "partial_bridge_gsis_ids": [],
+    "partial_bridge_player_weeks": 0,
+    "partial_bridge_players": 0,
+    "participation_player_weeks": 9574,
+    "roster_rows": 64455,
+    "roster_rows_bridgeable": 48111,
+    "roster_rows_with_gsis": 64429,
+    "roster_rows_with_pfr": 48111,
+    "snap_rows": 36501,
+    "unbridged_absent_from_roster": 381,
+    "unbridged_on_roster_without_gsis": 0,
+    "unbridged_only_players": 381
+  },
+  "injury_source_state": "available",
+  "model_facing_rows": 10960,
+  "no_baseline_with_limiting_designation": 0,
+  "opportunity_eligible_cards": 10960,
+  "partial_game_source_state": "SOURCE_BLOCKED_NO_2026_PARTICIPATION_DATA",
+  "player_week_state_counts": {
+    "HEALTHY_FULL": 6786,
+    "INJURY_LIMITED": 110,
+    "NO_BASELINE": 1279,
+    "RETURN_FROM_INJURY": 228,
+    "UNRESOLVED_CONTEXT": 1171
+  },
+  "players": 3053,
+  "population_fallback_cards": 29515,
+  "population_fallback_cards_opportunity_eligible": 5422,
+  "prior_seasons": [
+    2025
+  ],
+  "scientific_boundary": "DESCRIPTIVE_STATE_ONLY_NO_FIT_NO_PROMOTION",
+  "season": 2026,
+  "sportsbook_inputs_used": 0,
+  "strict_prior": true,
+  "target_weeks": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "team_share_semantic": "TARGET_TEAM_TENURE_SHARE_V1",
+  "teams": 32,
+  "universe_durable": "COMPLETE_ROSTER_UNIVERSE",
+  "universe_model_facing": "MODEL_FACING_OPPORTUNITY_UNIVERSE",
+  "untrusted_denominator_cards": 0,
+  "version": "PLAYER_IDENTITY_CARD_V1",
+  "withheld_explained_cards": 226,
+  "withheld_unexplained_cards": 1308
+}

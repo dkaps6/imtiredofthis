@@ -1,0 +1,73 @@
+{
+  "diagnostics": {
+    "defense_team_weeks": 544,
+    "panel_players": 231,
+    "panel_rows": 1765,
+    "state_label_counts": {
+      "DNP_INACTIVE": 270,
+      "HEALTHY_FULL": 4389,
+      "HEALTHY_FULL_SNAPS_UNKNOWN": 322,
+      "PARTIAL_GAME": 369,
+      "UNRESOLVED_CONTEXT": 23
+    },
+    "weekly_rows_considered": 5373
+  },
+  "preregistration": "docs/research/PRISM_PLAYER_SPECIFIC_MATCHUP_PREREGISTRATION_V1.md",
+  "result": {
+    "H1_SUPPORTED": false,
+    "M0_holdout_mae": 22.559825623140068,
+    "M0_n_params": 2,
+    "M1_holdout_mae": 22.389457605640455,
+    "M1_n_params": 8,
+    "M2_holdout_mae": 22.397989077543606,
+    "M2_n_params": 10,
+    "concentration": {
+      "middle_mean_improvement": 0.011899509352906904,
+      "middle_quartile_players": 109,
+      "off_mean_mean_improvement": -0.0066959344371587915,
+      "off_mean_quartile_players": 112
+    },
+    "disjoint_persistence": {
+      "window_A_4_10": {
+        "adot_x_man": 1.5043481614207583,
+        "adot_x_zone": -0.8802542046501517,
+        "rows": 572
+      },
+      "window_B_11_18": {
+        "adot_x_man": -0.4300235311241852,
+        "adot_x_zone": -0.1442910292629993,
+        "rows": 1193
+      }
+    },
+    "fit_rows": 701,
+    "fit_weeks": [
+      4,
+      11
+    ],
+    "holdout_rows": 1064,
+    "holdout_weeks": [
+      12,
+      18
+    ],
+    "player_level": {
+      "mean_improvement": 0.00247557403848447,
+      "median_improvement": -0.013729919420470083,
+      "players_improved": 105,
+      "players_scored": 221,
+      "players_worsened": 116
+    },
+    "rule_1_M2_beats_M1_player_level": true,
+    "rule_2_sign_persists_disjoint": true,
+    "rule_3_concentrated_off_mean": false
+  },
+  "season": 2025,
+  "secondary_outcomes_reported_not_decisive": {
+    "targets": {
+      "M0_holdout_mae": 1.9632590743099287,
+      "M1_holdout_mae": 1.9773135514554823,
+      "M2_holdout_mae": 1.975209695896786,
+      "M2_minus_M1": -0.0021038555586962993
+    }
+  },
+  "sportsbook_inputs_used": false
+}

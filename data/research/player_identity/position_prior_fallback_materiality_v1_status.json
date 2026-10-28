@@ -1,0 +1,187 @@
+{
+  "authorized_by": "GPT_AUDIT_6425282770_MATERIALITY_CORRECTION",
+  "by_kind_position": [
+    {
+      "cards": 747,
+      "fallback_can_move_allocation": 241,
+      "fallback_prior_mass": 33.74,
+      "opportunity_kind": "carry",
+      "pct_allocation_moving": 0.3226,
+      "pct_position_prior_only": 0.3226,
+      "position_prior_only": 241,
+      "production_prior_value": 0.14,
+      "roster_position": "QB"
+    },
+    {
+      "cards": 1315,
+      "fallback_can_move_allocation": 348,
+      "fallback_prior_mass": 111.36,
+      "opportunity_kind": "carry",
+      "pct_allocation_moving": 0.2646,
+      "pct_position_prior_only": 0.2646,
+      "position_prior_only": 348,
+      "production_prior_value": 0.32,
+      "roster_position": "RB"
+    },
+    {
+      "cards": 1233,
+      "fallback_can_move_allocation": 0,
+      "fallback_prior_mass": 0.0,
+      "opportunity_kind": "carry",
+      "pct_allocation_moving": 0.0,
+      "pct_position_prior_only": 0.8581,
+      "position_prior_only": 1058,
+      "production_prior_value": 0.0,
+      "roster_position": "TE"
+    },
+    {
+      "cards": 2185,
+      "fallback_can_move_allocation": 1566,
+      "fallback_prior_mass": 31.32,
+      "opportunity_kind": "carry",
+      "pct_allocation_moving": 0.7167,
+      "pct_position_prior_only": 0.7167,
+      "position_prior_only": 1566,
+      "production_prior_value": 0.02,
+      "roster_position": "WR"
+    },
+    {
+      "cards": 747,
+      "fallback_can_move_allocation": 0,
+      "fallback_prior_mass": 0.0,
+      "opportunity_kind": "target",
+      "pct_allocation_moving": 0.0,
+      "pct_position_prior_only": 0.8996,
+      "position_prior_only": 672,
+      "production_prior_value": 0.0,
+      "roster_position": "QB"
+    },
+    {
+      "cards": 1315,
+      "fallback_can_move_allocation": 404,
+      "fallback_prior_mass": 32.32,
+      "opportunity_kind": "target",
+      "pct_allocation_moving": 0.3072,
+      "pct_position_prior_only": 0.3072,
+      "position_prior_only": 404,
+      "production_prior_value": 0.08,
+      "roster_position": "RB"
+    },
+    {
+      "cards": 1233,
+      "fallback_can_move_allocation": 404,
+      "fallback_prior_mass": 48.48,
+      "opportunity_kind": "target",
+      "pct_allocation_moving": 0.3277,
+      "pct_position_prior_only": 0.3277,
+      "position_prior_only": 404,
+      "production_prior_value": 0.12,
+      "roster_position": "TE"
+    },
+    {
+      "cards": 2185,
+      "fallback_can_move_allocation": 729,
+      "fallback_prior_mass": 116.64,
+      "opportunity_kind": "target",
+      "pct_allocation_moving": 0.3336,
+      "pct_position_prior_only": 0.3336,
+      "position_prior_only": 729,
+      "production_prior_value": 0.16,
+      "roster_position": "WR"
+    }
+  ],
+  "by_week": [
+    {
+      "cards": 1842,
+      "fallback_can_move_allocation": 801,
+      "fallback_prior_mass": 87.3,
+      "pct_allocation_moving": 0.4349,
+      "pct_position_prior_only": 0.5939,
+      "position_prior_only": 1094,
+      "production_prior_value": 0.32,
+      "target_week": 1
+    },
+    {
+      "cards": 1570,
+      "fallback_can_move_allocation": 529,
+      "fallback_prior_mass": 53.7,
+      "pct_allocation_moving": 0.3369,
+      "pct_position_prior_only": 0.4981,
+      "position_prior_only": 782,
+      "production_prior_value": 0.32,
+      "target_week": 2
+    },
+    {
+      "cards": 1586,
+      "fallback_can_move_allocation": 514,
+      "fallback_prior_mass": 51.36,
+      "pct_allocation_moving": 0.3241,
+      "pct_position_prior_only": 0.4836,
+      "position_prior_only": 767,
+      "production_prior_value": 0.32,
+      "target_week": 3
+    },
+    {
+      "cards": 1602,
+      "fallback_can_move_allocation": 506,
+      "fallback_prior_mass": 49.42,
+      "pct_allocation_moving": 0.3159,
+      "pct_position_prior_only": 0.4738,
+      "position_prior_only": 759,
+      "production_prior_value": 0.32,
+      "target_week": 4
+    },
+    {
+      "cards": 1516,
+      "fallback_can_move_allocation": 476,
+      "fallback_prior_mass": 46.8,
+      "pct_allocation_moving": 0.314,
+      "pct_position_prior_only": 0.4723,
+      "position_prior_only": 716,
+      "production_prior_value": 0.32,
+      "target_week": 5
+    },
+    {
+      "cards": 1430,
+      "fallback_can_move_allocation": 436,
+      "fallback_prior_mass": 42.56,
+      "pct_allocation_moving": 0.3049,
+      "pct_position_prior_only": 0.458,
+      "position_prior_only": 655,
+      "production_prior_value": 0.32,
+      "target_week": 6
+    },
+    {
+      "cards": 1414,
+      "fallback_can_move_allocation": 430,
+      "fallback_prior_mass": 42.72,
+      "pct_allocation_moving": 0.3041,
+      "pct_position_prior_only": 0.459,
+      "position_prior_only": 649,
+      "production_prior_value": 0.32,
+      "target_week": 7
+    }
+  ],
+  "focus_week": 7,
+  "focus_week_allocation_moving": 430,
+  "focus_week_allocation_moving_pct": 0.3041,
+  "focus_week_eligible_cards": 1414,
+  "focus_week_position_prior_only": 649,
+  "focus_week_position_prior_only_pct": 0.459,
+  "kind_to_metric": {
+    "carry": "rush_share",
+    "target": "tgt_share"
+  },
+  "opportunity_eligible_cards": 10960,
+  "outcomes_inspected": false,
+  "pooled_allocation_moving": 3692,
+  "pooled_allocation_moving_pct": 0.3369,
+  "pooled_position_prior_only": 5422,
+  "pooled_position_prior_only_pct": 0.4947,
+  "position_mapping_source": "scripts/modeling/bayesian_v2._position_group",
+  "prior_table_source": "scripts/modeling/bayesian_v2.DEFAULTS",
+  "scientific_boundary": "DESCRIPTIVE_DECOMPOSITION_ONLY_NO_FITTING",
+  "sportsbook_inputs_used": 0,
+  "version": "POSITION_PRIOR_FALLBACK_MATERIALITY_V1",
+  "zero_prior_fallback_cards": 1730
+}

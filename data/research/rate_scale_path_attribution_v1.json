@@ -1,0 +1,140 @@
+{
+  "coverage_fallback_reach": {
+    "fallback_teams": [
+      "BUF",
+      "JAX",
+      "LAC",
+      "WAS"
+    ],
+    "fallback_teams_on_slate": [],
+    "man_gate_false_fires_reach_slate": false
+  },
+  "disclosed_limitations": [
+    "baseline parity against the archive FAILS: the preserved fixture is a column subset missing neutral_pace_last5 and plays_est, both consumed by context_bridge v1; absolute levels here are counterfactual, only the same-fixture differential is clean",
+    "rules_ypt/rules_ypc invariance is UNMEASURED (all-NaN in both arms), not demonstrated",
+    "entitlement-stage teammate redistribution is not measured by this trace"
+  ],
+  "effect_size": {
+    "by_position": {
+      "FB": {
+        "rows": 16,
+        "rows_moved": 0
+      },
+      "QB": {
+        "rows": 158,
+        "rows_moved": 0
+      },
+      "RB": {
+        "rows": 375,
+        "rows_moved": 0
+      },
+      "TE": {
+        "rows": 307,
+        "rows_moved": 206
+      },
+      "WR": {
+        "rows": 526,
+        "rows_moved": 0
+      }
+    },
+    "distinct_relative_multipliers": [
+      0.909091
+    ],
+    "mean_delta_among_moved": -0.013664348957638097,
+    "negative_control_max_abs_delta": 0.0,
+    "negative_control_unaffected_teams": 10,
+    "players_moved": 51,
+    "positions_moved": [
+      "TE"
+    ],
+    "rows_moved": 206,
+    "rows_total": 1382,
+    "slate_teams": 28,
+    "teams_moved": 18
+  },
+  "gate_state": {
+    "coverage_man_rate": {
+      "false_fires_removed": 4,
+      "fires_as_is": 4,
+      "fires_fixed": 0,
+      "teams_evaluated": 32,
+      "threshold": 0.5
+    },
+    "coverage_zone_rate": {
+      "false_fires_removed": 0,
+      "fires_as_is": 31,
+      "fires_fixed": 31,
+      "teams_evaluated": 32,
+      "threshold": 0.6
+    },
+    "middle_open_rate": {
+      "false_fires_removed": 19,
+      "fires_as_is": 32,
+      "fires_fixed": 13,
+      "teams_evaluated": 32,
+      "threshold": 0.5
+    }
+  },
+  "one_variable_proof": {
+    "opponent": {
+      "verdict": "UNCHANGED"
+    },
+    "position": {
+      "verdict": "UNCHANGED"
+    },
+    "rules_pass_rate": {
+      "max_abs_diff": 0.0,
+      "rows_compared": 1412,
+      "verdict": "UNCHANGED"
+    },
+    "rules_plays_est": {
+      "max_abs_diff": 0.0,
+      "rows_compared": 1412,
+      "verdict": "UNCHANGED"
+    },
+    "rules_role": {
+      "verdict": "UNCHANGED"
+    },
+    "rules_rush_share": {
+      "max_abs_diff": 0.0,
+      "rows_compared": 1382,
+      "verdict": "UNCHANGED"
+    },
+    "rules_ypc": {
+      "rows_compared": 0,
+      "verdict": "UNMEASURED_ALL_NAN"
+    },
+    "rules_ypt": {
+      "rows_compared": 0,
+      "verdict": "UNMEASURED_ALL_NAN"
+    },
+    "team": {
+      "verdict": "UNCHANGED"
+    }
+  },
+  "path_attribution": {
+    "guard_installed_in": "scripts/team_context_v3.py",
+    "guard_on_rules_path": false,
+    "rules_stage_bridge": "scripts/modeling/context_bridge.py",
+    "rules_stage_reads": [
+      "cb_coverage_team.csv",
+      "team_form.csv"
+    ],
+    "team_context_v3_consumers": [
+      "scripts/audit_2026_production_readiness.py",
+      "scripts/run_model_context_bridge.py"
+    ]
+  },
+  "source_contract": {
+    "apply_rules_to_metrics_discards_teams_dict": true,
+    "context_bridge_v1_reads_team_context_v3": false,
+    "percenty_cols_still_missing": [
+      "coverage_man_rate",
+      "coverage_zone_rate",
+      "middle_open_rate",
+      "middle_closed_rate"
+    ],
+    "simulation_rules_uses_context_bridge_v1": true
+  },
+  "sportsbook_inputs_used": false
+}

@@ -1,0 +1,129 @@
+{
+  "authorized_by": "GPT_AUDIT_RESPONSE_6428042413",
+  "outcomes_inspected": false,
+  "part1_full_football_universe_population_fallback": {
+    "current_games_zero_rows": 69,
+    "evidence_state_counts": {
+      "position_prior_only": 34,
+      "prior+current": 327,
+      "prior_only": 35
+    },
+    "football_universe_rows": 396,
+    "position_prior_only_rows": 34,
+    "teams": 28,
+    "true_zero_history_rows": 34,
+    "true_zero_history_teams": 21,
+    "zero_history_equals_position_prior_only": true
+  },
+  "part2_nonzero_posterior_fallback": {
+    "note": "DEFAULTS lists rush_share[TE]=0.00 and tgt_share[QB]=0.0, but production's posterior for those cells is nonzero; the earlier zero-prior count was a constant-table artifact",
+    "posterior_by_position_group": {
+      "QB": {
+        "bayes_rush_share": 0.111763,
+        "bayes_tgt_share": 0.000706
+      },
+      "RB": {
+        "bayes_rush_share": 0.359568,
+        "bayes_tgt_share": 0.079174
+      },
+      "TE": {
+        "bayes_rush_share": 0.002982,
+        "bayes_tgt_share": 0.129391
+      },
+      "WR": {
+        "bayes_rush_share": 0.008382,
+        "bayes_tgt_share": 0.165842
+      }
+    },
+    "rows_with_exactly_zero_rush_posterior": 0,
+    "rows_with_exactly_zero_tgt_posterior": 0,
+    "rows_with_nonzero_rush_posterior": 34,
+    "rows_with_nonzero_tgt_posterior": 34
+  },
+  "part3_rush_allocator_materiality": {
+    "final_rush_allocation_probability": 1.824446,
+    "method": "production's own _top_n_shares + room normalisation from simulation_v2.py applied to preserved rules_rush_share",
+    "per_team": [
+      {
+        "allocation_probability": 0.320205,
+        "team": "LAR",
+        "zero_history_admitted": 2
+      },
+      {
+        "allocation_probability": 0.265311,
+        "team": "PIT",
+        "zero_history_admitted": 2
+      },
+      {
+        "allocation_probability": 0.252108,
+        "team": "MIN",
+        "zero_history_admitted": 1
+      },
+      {
+        "allocation_probability": 0.22821,
+        "team": "KC",
+        "zero_history_admitted": 1
+      },
+      {
+        "allocation_probability": 0.216676,
+        "team": "CLE",
+        "zero_history_admitted": 1
+      },
+      {
+        "allocation_probability": 0.10384,
+        "team": "CAR",
+        "zero_history_admitted": 1
+      },
+      {
+        "allocation_probability": 0.09443,
+        "team": "PHI",
+        "zero_history_admitted": 1
+      },
+      {
+        "allocation_probability": 0.089933,
+        "team": "DEN",
+        "zero_history_admitted": 1
+      },
+      {
+        "allocation_probability": 0.089532,
+        "team": "DAL",
+        "zero_history_admitted": 1
+      },
+      {
+        "allocation_probability": 0.0872,
+        "team": "NE",
+        "zero_history_admitted": 1
+      },
+      {
+        "allocation_probability": 0.077002,
+        "team": "ARI",
+        "zero_history_admitted": 1
+      }
+    ],
+    "reproduces_audit_1_824446": true,
+    "teams_with_admission": 11,
+    "zero_history_rows_admitted_to_top_five": 13
+  },
+  "part4_target_room_materiality": {
+    "method": "production's own entitlement_tgt_share, READ not re-derived: it is the end of rules_tgt_share -> m38_explicit_entitlement_tgt_share -> post_m38_tgt_share -> team_scale, which the sharpening function alone cannot reconstruct",
+    "reproduces_audit_1_264686": true,
+    "total_modeled_player_target_mass": 26.6,
+    "zero_history_final_target_entitlement": 1.264686,
+    "zero_history_players_entitlement_ge_0_05": 17,
+    "zero_history_share_of_total": 0.047545
+  },
+  "part5_priced_board_subset_sportsbook_availability_only": {
+    "WARNING": "this is sportsbook AVAILABILITY, not a football population. A player can move the finite football room and never receive a prop, so this must never bound parts 1-4. Using it that way is the \u00a73 error the auditor caught in 6427742545.",
+    "football_universe_fallback_rows_for_comparison": 34,
+    "position_prior_only_priced_players": 13,
+    "position_prior_only_priced_rows": 60,
+    "priced_players": 328,
+    "priced_rows": 2894,
+    "ratio_football_to_priced_fallback_players": 2.62
+  },
+  "scientific_boundary": "DESCRIPTIVE_REPORT_ONLY_NO_FITTING",
+  "source_artifact": "12456298985",
+  "source_run": "39849371821",
+  "version": "WEEK7_FALLBACK_MATERIALITY_REPORT_V1",
+  "week": 7
+}

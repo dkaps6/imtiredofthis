@@ -1,0 +1,586 @@
+name: Research Player Identity Card V1
+
+# Builds the descriptive, strictly-prior Player Identity Card specified by
+# docs/research/PLAYER_IDENTITY_ROLE_STATE_ARCHITECTURE_V1.md.
+#
+# Scientific boundary: DESCRIPTIVE STATE ONLY. Fits nothing, scores nothing,
+# promotes nothing, reads no sportsbook data, makes no OddsAPI call. Predictive
+# use of this state is gated by the anti-retest rules in control-room comment
+# 6420198257 and must not be run from here.
+#
+# A card for (player, season, week=w) is built only from weeks < w plus whole
+# prior seasons, so week w never contributes to its own card.
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Target season"
+        required: false
+        default: "2026"
+      weeks:
+        description: "Target weeks, e.g. 1-7"
+        required: false
+        default: "1-7"
+      prior_seasons:
+        description: "Comma list of whole prior seasons used as history"
+        required: false
+        default: "2025"
+  push:
+    branches:
+      - research-prism-player-first-identity-environment-2026-10-26
+    paths:
+      - '.github/workflows/research-player-identity-card-v1.yml'
+      - 'scripts/research/build_player_identity_card_v1.py'
+      - 'tests/test_build_player_identity_card_v1.py'
+
+permissions:
+  contents: write
+
+# Both workflows commit to the same research branch.
+concurrency:
+  group: player-identity-research-commits
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      SEASON: ${{ github.event.inputs.season || '2026' }}
+      WEEKS: ${{ github.event.inputs.weeks || '1-7' }}
+      PRIOR_SEASONS: ${{ github.event.inputs.prior_seasons || '2025' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest
+          # Full Slate pins pyarrow explicitly for the same numpy-compat reason;
+          # requirements.txt leaves it unbounded, so pin it here too.
+          pip install 'pyarrow==17.0.0'
+
+      - name: Unit tests
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          pytest -q tests/test_build_player_identity_card_v1.py
+
+      - name: Probe the roster/snap identity bridge before building
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          # Establish that the authorities the audit requires actually exist
+          # before spending a full PBP load on them.
+          import nflreadpy as nflv
+          for fn in ("load_rosters_weekly", "load_weekly_rosters",
+                     "load_rosters", "load_snap_counts"):
+              print(f"  {fn}: {'present' if hasattr(nflv, fn) else 'ABSENT'}")
+          for fn in ("load_rosters_weekly", "load_weekly_rosters"):
+              if not hasattr(nflv, fn):
+                  continue
+              try:
+                  df = getattr(nflv, fn)(seasons=[2025])
+                  try: df = df.to_pandas()
+                  except AttributeError: pass
+                  cols = sorted(str(c).lower() for c in df.columns)
+                  print(f"\n{fn}(2025) rows={len(df)}")
+                  print("  id/team/week cols:",
+                        [c for c in cols if any(k in c for k in
+                         ('gsis', 'pfr', 'team', 'week', 'status', 'position'))])
+                  break
+              except Exception as exc:
+                  print(f"{fn} raised {type(exc).__name__}: {exc}")
+          EOF
+
+      - name: Build the descriptive identity cards
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          mkdir -p data/research/player_identity
+          python scripts/research/build_player_identity_card_v1.py \
+            --season "${SEASON}" \
+            --weeks "${WEEKS}" \
+            --prior-seasons "${PRIOR_SEASONS}" \
+            --require-participation \
+            --out "data/research/player_identity/player_identity_card_v1_${SEASON}.csv" \
+            --status-out "data/research/player_identity/player_identity_card_v1_${SEASON}_status.json"
+
+      - name: Assert the audit corrections actually hold
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          import json, os, sys
+          import numpy as np
+          import pandas as pd
+          season = os.environ["SEASON"]
+          base = f"data/research/player_identity/player_identity_card_v1_{season}"
+          cards = pd.read_csv(f"{base}.csv", low_memory=False)
+          status = json.load(open(f"{base}_status.json"))
+          fail = []
+
+          # (A)(E) participation bridge was genuinely used
+          if status["identity_bridge"].get("bridge_state") != "ok":
+              fail.append(f"bridge not ok: {status['identity_bridge']}")
+          # Three-valued now: a partially-bridged player keeps his raw counts
+          # but his rates fail closed, so that state is expected and allowed.
+          # "unavailable" is the one that means the denominator never existed.
+          states = set(cards["participation_source_state"].unique())
+          if "unavailable" in states:
+              n_un = int((cards["participation_source_state"]
+                          == "unavailable").sum())
+              fail.append(f"{n_un} cards have no participation denominator")
+          unknown = states - {"available", "unavailable",
+                              "available_untrusted_partial_bridge"}
+          if unknown:
+              fail.append(f"unexpected participation_source_state: {unknown}")
+
+          # An understated denominator must never surface as a confident rate.
+          untrusted = cards["participation_source_state"].eq(
+              "available_untrusted_partial_bridge")
+          leaked = untrusted & pd.to_numeric(
+              cards["opp_per_participation_week"], errors="coerce").notna()
+          if leaked.any():
+              fail.append(f"{int(leaked.sum())} untrusted-denominator cards "
+                          "still published a per-week rate")
+          # A contradiction (fewer participation weeks than weeks with observed
+          # opportunity) means the bridge missed that player entirely. It is
+          # reported, not fatal: the harm would be publishing a rate on top of
+          # a denominator we have just proved is short. Gate on the harm.
+          contra = cards["participation_denominator_contradicted"].astype(bool)
+          contra_rated = contra & pd.to_numeric(
+              cards["opp_per_participation_week"], errors="coerce").notna()
+          if contra_rated.any():
+              fail.append(f"{int(contra_rated.sum())} cards published a "
+                          "per-week rate on a provably short denominator")
+
+          # (B) active zero-opportunity weeks are represented, not dropped
+          az = pd.to_numeric(cards["active_zero_opportunity_weeks"],
+                             errors="coerce")
+          # NaN is legitimate exactly where the denominator is not trusted:
+          # an understated n_part understates the zero count too. Everywhere
+          # else it must be a real, non-negative integer.
+          state = cards["participation_source_state"]
+          trusted_rows = state.eq("available")
+          if not (az[trusted_rows] >= 0).all():
+              fail.append("active_zero_opportunity_weeks missing/negative on "
+                          "cards whose denominator IS trusted")
+          stray = az[~trusted_rows].notna()
+          if stray.any():
+              fail.append(f"{int(stray.sum())} untrusted cards still report an "
+                          "active-zero week count")
+          if az[trusted_rows].sum() <= 0:
+              fail.append("no active zero-opportunity weeks found at all, "
+                          "which means they are still being dropped")
+
+          # (C) target-week team is populated and distinct from history
+          if cards["team_target_week"].isna().any():
+              fail.append("null team_target_week")
+
+          # (D) universe includes players with no prior opportunity
+          if "no_history" not in set(cards["history_state"]):
+              fail.append("no no_history cards: universe is still "
+                          "opportunity-observed only")
+
+          sc = status.get("player_week_state_counts") or {}
+
+          # PLAYER-STATE ANOMALY INVESTIGATION GATE (AGENTS.md, non-negotiable)
+          # Priority 1 of GPT audit 6425282770: the source-qualified resolver.
+          if status.get("anomaly_gate_version") != \
+             "PLAYER_STATE_ANOMALY_GATE_V2_INJURY_RESOLVED":
+              fail.append("anomaly gate not stamped as injury-resolved: "
+                          f"{status.get('anomaly_gate_version')}")
+          if status.get("injury_source_state") != "available":
+              fail.append("injury source unavailable: the gate is back to "
+                          "participation-only and cannot name a cause")
+          if "SOURCE_BLOCKED" not in str(status.get("partial_game_source_state")):
+              fail.append("PARTIAL_GAME source state not declared")
+          resolved = {k: sc.get(k, 0) for k in
+                      ("INJURY_LIMITED", "RETURN_FROM_INJURY")}
+          if sum(resolved.values()) <= 0:
+              fail.append("resolver explained nothing: every abnormal week is "
+                          f"still UNRESOLVED_CONTEXT ({resolved})")
+          # Explanation must not promote a contaminated week. A week labelled
+          # INJURY_LIMITED or RETURN_FROM_INJURY is explained, not
+          # representative, so it must still be withheld.
+          if int(status.get("gate_weeks_withheld_total", 0)) < sum(resolved.values()):
+              fail.append("fewer withheld week-slots than explained weeks: "
+                          "resolution has promoted contaminated weeks")
+          if "PARTIAL_GAME" in sc:
+              fail.append("PARTIAL_GAME label emitted although its source is "
+                          "blocked for 2026")
+          # A bye is a gap for every player on an idle team; without the
+          # schedule-aware correction the gate flags whole rosters.
+          if status["identity_bridge"].get("bye_detection") != "available":
+              fail.append("bye detection unavailable: a team bye would be "
+                          "read as an absence for its entire roster")
+          if "UNRESOLVED_CONTEXT" not in sc:
+              fail.append("gate never fired on real data: no UNRESOLVED_CONTEXT "
+                          "player-weeks, which means anomalies are still being "
+                          "read as clean weeks")
+          wh = pd.to_numeric(cards["gate_weeks_withheld"], errors="coerce")
+          if not (wh.fillna(0) >= 0).all():
+              fail.append("negative gate_weeks_withheld")
+          if int(status.get("gate_weeks_withheld_total", 0)) <= 0:
+              fail.append("gate withheld nothing anywhere")
+          # The gate must actually change a published number somewhere, or it
+          # is decorative.
+          gated = pd.to_numeric(cards["opp_per_participation_week"],
+                                errors="coerce")
+          ung = pd.to_numeric(cards["opp_per_participation_week_all_weeks"],
+                              errors="coerce")
+          both = gated.notna() & ung.notna()
+          if not (gated[both] != ung[both]).any():
+              fail.append("gated and all-weeks rates are identical on every "
+                          "card: the gate has no effect")
+          # A withheld week must never leave the rate unreconstructible.
+          used = pd.to_numeric(cards["gate_weeks_used"], errors="coerce")
+          opp = pd.to_numeric(cards["opp_in_gate_weeks"], errors="coerce")
+          rec = (opp / used.replace(0, np.nan))
+          bad = both & (rec - gated).abs().gt(1e-9)
+          if bad.any():
+              fail.append(f"{int(bad.sum())} cards publish a rate that does "
+                          "not equal opp_in_gate_weeks / gate_weeks_used")
+
+          # BLOCKER A (audit 6425282770): baseline insufficiency must not
+          # override an independent contamination signal.
+          if int(status.get("no_baseline_with_limiting_designation", -1)) != 0:
+              fail.append(
+                  f"{status.get('no_baseline_with_limiting_designation')} "
+                  "player-weeks are NO_BASELINE despite a known limiting "
+                  "designation, i.e. usable despite known contamination")
+
+          # BLOCKER B: target-team-tenure share semantics.
+          if status.get("team_share_semantic") != "TARGET_TEAM_TENURE_SHARE_V1":
+              fail.append("team share semantic not stamped")
+          if not (cards["team_share_semantic"]
+                  == "TARGET_TEAM_TENURE_SHARE_V1").all():
+              fail.append("per-card team share semantic missing")
+          no_ten = cards["no_target_team_tenure_evidence"].astype(bool)
+          leaked_share = no_ten & pd.to_numeric(
+              cards["team_share_current"], errors="coerce").notna()
+          if leaked_share.any():
+              fail.append(f"{int(leaked_share.sum())} cards publish a role "
+                          "share with no target-team tenure evidence")
+          leaked_ung = no_ten & pd.to_numeric(
+              cards["team_share_current_all_weeks"], errors="coerce").notna()
+          if leaked_ung.any():
+              fail.append(f"{int(leaked_ung.sum())} cards publish an ungated "
+                          "role share with no target-team tenure evidence")
+          # Numerator must never exceed the all-teams raw count.
+          tgt = pd.to_numeric(cards["opp_total_current_season_target_team"],
+                              errors="coerce").fillna(0)
+          allt = pd.to_numeric(cards["opp_total_current_season"],
+                               errors="coerce").fillna(0)
+          if (tgt > allt).any():
+              fail.append("target-team opportunity exceeds all-teams count")
+          # Target week 1 has no earlier weeks by construction, so no tenure
+          # authority exists for it. The gate is therefore semantic rather than
+          # positional: whatever the source, a card that did NOT use the
+          # participation authority must publish no tenure and no share.
+          src = cards["target_team_tenure_source"]
+          known = {"participation_team", "opportunity_posteam_fallback",
+                   "no_prior_participation"}
+          if not set(src.dropna().unique()) <= known:
+              fail.append(f"unexpected tenure sources: "
+                          f"{set(src.unique()) - known}")
+          if "participation_team" not in set(src.unique()):
+              fail.append("participation tenure authority never used")
+          weak = src.ne("participation_team")
+          leaked_weak = weak & ~cards["no_target_team_tenure_evidence"].astype(bool)
+          if leaked_weak.any():
+              fail.append(f"{int(leaked_weak.sum())} cards claim target-team "
+                          "tenure without the participation authority")
+          print("tenure sources:", json.dumps(
+              {k: int(v) for k, v in src.value_counts().items()},
+              sort_keys=True))
+          print("cards without target-team tenure:",
+                status.get("cards_without_target_team_tenure"))
+          print("NO_BASELINE despite limiting designation:",
+                status.get("no_baseline_with_limiting_designation"))
+
+          # Week-matched team-share denominators (audit 6425282770 #2).
+          ts = pd.to_numeric(cards["team_share_current"], errors="coerce")
+          tsa = pd.to_numeric(cards["team_share_current_all_weeks"],
+                              errors="coerce")
+          pnum = pd.to_numeric(cards["player_opp_in_gate_weeks_current"],
+                               errors="coerce")
+          tden = pd.to_numeric(cards["team_opp_in_gate_weeks"], errors="coerce")
+          recon = pnum / tden.replace(0, np.nan)
+          off = ts.notna() & recon.notna() & (ts - recon).abs().gt(1e-9)
+          if off.any():
+              fail.append(f"{int(off.sum())} cards publish a team share that "
+                          "is not player_opp_in_gate_weeks_current / "
+                          "team_opp_in_gate_weeks")
+          # A zero accepted-week denominator must give NaN, never a confident 0%.
+          z = (tden.fillna(0) == 0) & ts.notna()
+          if z.any():
+              fail.append(f"{int(z.sum())} cards publish a share on a zero "
+                          "accepted-week denominator")
+          if (ts.dropna() > 1.0 + 1e-9).any():
+              fail.append("team share above 1.0: denominator is not the team "
+                          "total over the same weeks")
+          bo = ts.notna() & tsa.notna()
+          if not (ts[bo] != tsa[bo]).any():
+              fail.append("gated and all-weeks team shares identical on every "
+                          "card: the share gate has no effect")
+
+          # The gate names efficiency as well as trajectory.
+          effw = pd.to_numeric(cards["efficiency_opp_withheld"],
+                               errors="coerce").fillna(0)
+          if (effw < 0).any():
+              fail.append("negative efficiency_opp_withheld")
+          if effw.sum() <= 0:
+              fail.append("efficiency gate withheld no opportunity anywhere")
+          yg = pd.to_numeric(cards["yards_per_opp"], errors="coerce")
+          ya = pd.to_numeric(cards["yards_per_opp_all_weeks"], errors="coerce")
+          bb = yg.notna() & ya.notna()
+          if not (yg[bb] != ya[bb]).any():
+              fail.append("gated and all-weeks efficiency identical on every "
+                          "card: the efficiency gate has no effect")
+
+          # Evidence authority + model-facing universe (audit 6425282770 #2,
+          # and the position-prior requirement from the zero-history audit).
+          mf_path = f"{base}_model_facing.csv"
+          if not os.path.exists(mf_path):
+              fail.append("model-facing opportunity universe not written")
+          else:
+              mf = pd.read_csv(mf_path, low_memory=False)
+              if not mf["can_receive_opportunity"].astype(bool).all():
+                  fail.append("model-facing universe contains ineligible rows")
+              if not (mf["universe"] == "MODEL_FACING_OPPORTUNITY_UNIVERSE").all():
+                  fail.append("model-facing universe not stamped")
+              if len(mf) >= len(cards):
+                  fail.append("model-facing universe is not a strict subset")
+              print(f"model-facing universe rows={len(mf)} "
+                    f"({len(mf)/max(1,len(cards)):.1%} of durable card)")
+          if not (cards["universe"] == "COMPLETE_ROSTER_UNIVERSE").all():
+              fail.append("durable card not stamped as the complete universe")
+          ea = set(cards["evidence_authority"].dropna().unique())
+          if "position_prior_only" not in ea:
+              fail.append("no position_prior_only cards: population fallback "
+                          "is not being named, only absence of history")
+          unknown_ea = ea - {"position_prior_only", "prior_only",
+                             "current_only", "prior+current"}
+          if unknown_ea:
+              fail.append(f"unexpected evidence_authority values: {unknown_ea}")
+          # A card naming player evidence must not also claim fallback.
+          pf = cards["opportunity_from_population_fallback"].astype(bool)
+          contradiction = pf & cards["evidence_authority"].ne("position_prior_only")
+          if contradiction.any():
+              fail.append(f"{int(contradiction.sum())} cards claim population "
+                          "fallback while naming player evidence")
+          print("evidence authority:",
+                json.dumps(status["evidence_authority_counts"], sort_keys=True))
+          print("evidence authority (opportunity-eligible):", json.dumps(
+              status["evidence_authority_counts_opportunity_eligible"],
+              sort_keys=True))
+          print("population-fallback cards: all=%s eligible=%s" % (
+              status.get("population_fallback_cards"),
+              status.get("population_fallback_cards_opportunity_eligible")))
+
+          # boundary
+          if not (pd.to_numeric(cards["sportsbook_inputs_used"]) == 0).all():
+              fail.append("sportsbook inputs present")
+          if status["scientific_boundary"] != \
+             "DESCRIPTIVE_STATE_ONLY_NO_FIT_NO_PROMOTION":
+              fail.append("scientific boundary not stamped")
+
+          print(f"cards={len(cards)} players={status['players']} "
+                f"teams={status['teams']}")
+          print("history_state (all):", status["history_state_counts"])
+          print("opportunity-eligible cards:",
+                status["opportunity_eligible_cards"])
+          print("history_state (opportunity-eligible):",
+                status["history_state_counts_opportunity_eligible"])
+          print("active zero-opportunity player-weeks:", int(az[trusted_rows].sum()))
+          print("player-week states:", json.dumps(sc, sort_keys=True))
+          print("injury source: %s | PARTIAL_GAME: %s" % (
+              status.get("injury_source_state"),
+              status.get("partial_game_source_state")))
+          print("withholding: explained_cards=%s unexplained_cards=%s" % (
+              status.get("withheld_explained_cards"),
+              status.get("withheld_unexplained_cards")))
+          print("gate: cards_with_withheld_weeks=%s weeks_withheld_total=%s" % (
+              status.get("gate_cards_with_withheld_weeks"),
+              status.get("gate_weeks_withheld_total")))
+          print("untrusted-denominator cards:",
+                status["untrusted_denominator_cards"])
+          print("denominator contradictions:",
+                status["denominator_contradicted_cards"])
+          b = status["identity_bridge"]
+          print("roster coverage: rows=%s with_gsis=%s with_pfr=%s "
+                "bridgeable=%s" % (b.get("roster_rows"),
+                                   b.get("roster_rows_with_gsis"),
+                                   b.get("roster_rows_with_pfr"),
+                                   b.get("roster_rows_bridgeable")))
+          print("identity map: players_mapped=%s ambiguous_pfr_ids=%s" % (
+              b.get("bridge_players_mapped"),
+              b.get("bridge_ambiguous_pfr_ids")))
+          print("never-bridged players: %s (absent from roster=%s, "
+                "on roster without gsis=%s)" % (
+                    b.get("unbridged_only_players"),
+                    b.get("unbridged_absent_from_roster"),
+                    b.get("unbridged_on_roster_without_gsis")))
+          print("bridge:", json.dumps(
+              {k: v for k, v in status["identity_bridge"].items()
+               if k != "partial_bridge_gsis_ids"}, sort_keys=True))
+          if fail:
+              print("\nFAILED ASSERTIONS:")
+              for f in fail:
+                  print("  -", f)
+              sys.exit(1)
+          print("\nall audit-correction assertions hold")
+          EOF
+
+      - name: Decompose position-prior fallback materiality
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/decompose_position_prior_fallback_materiality_v1.py \
+            --cards "data/research/player_identity/player_identity_card_v1_${SEASON}.csv" \
+            --out-dir data/research/player_identity \
+            --focus-week 7
+
+      - name: Assert the decomposition stayed descriptive
+        run: |
+          set -euo pipefail
+          python - <<'EOF'
+          import json
+          base = ("data/research/player_identity/"
+                  "position_prior_fallback_materiality_v1_status.json")
+          d = json.load(open(base))
+          fail = []
+          if d.get("outcomes_inspected"):
+              fail.append("outcomes inspected")
+          if int(d.get("sportsbook_inputs_used", 1)) != 0:
+              fail.append("sportsbook inputs reported")
+          if d.get("prior_table_source") != "scripts/modeling/bayesian_v2.DEFAULTS":
+              fail.append("priors not sourced from production")
+          # The whole point of the correction: the pooled figure must be
+          # separated from the allocation-moving one.
+          if d["pooled_allocation_moving"] > d["pooled_position_prior_only"]:
+              fail.append("allocation-moving exceeds total fallback")
+          if d["zero_prior_fallback_cards"] <= 0:
+              fail.append("no zero-prior fallback rows identified, so the "
+                          "pooled figure is still being reported as severity")
+          print("pooled fallback %s (%.1f%%) | allocation-moving %s (%.1f%%) | "
+                "zero-prior %s" % (
+                    d["pooled_position_prior_only"],
+                    100 * d["pooled_position_prior_only_pct"],
+                    d["pooled_allocation_moving"],
+                    100 * d["pooled_allocation_moving_pct"],
+                    d["zero_prior_fallback_cards"]))
+          print("week %s: fallback %s (%.1f%%) | allocation-moving %s (%.1f%%)" % (
+              d["focus_week"], d["focus_week_position_prior_only"],
+              100 * d["focus_week_position_prior_only_pct"],
+              d["focus_week_allocation_moving"],
+              100 * d["focus_week_allocation_moving_pct"]))
+          if fail:
+              print("\nFAILED ASSERTIONS:")
+              for f in fail:
+                  print("  -", f)
+              raise SystemExit(1)
+          print("\ndecomposition descriptive and internally consistent")
+          EOF
+
+      - name: Reconcile fallback against production's durable board
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/reconcile_production_fallback_admission_v1.py \
+            --cards "data/research/player_identity/player_identity_card_v1_${SEASON}.csv" \
+            --board data/market_track_record/boards/2026_wk07.csv \
+            --week 7 \
+            --out-dir data/research/player_identity
+
+      - name: Assert the reconciliation claims only what it establishes
+        run: |
+          set -euo pipefail
+          python - <<'EOF'
+          import json
+          d = json.load(open("data/research/player_identity/"
+                             "production_fallback_admission_v1_week7_status.json"))
+          fail = []
+          if d.get("outcomes_inspected"):
+              fail.append("outcomes inspected")
+          banned = ("line", "odds", "price", "edge", "prob", "proj")
+          leaked = [c for c in d["board_columns_read"]
+                    if any(k in c.lower() for k in banned)]
+          if leaked:
+              fail.append(f"decision columns read: {leaked}")
+          # The posterior is NOT computable from this repo. Claiming otherwise
+          # would re-commit the exact error re-audit 6427742545 caught.
+          if d.get("fallback_posterior_established") is not False:
+              fail.append("fallback posterior claimed as established")
+          if d["production_fallback_players"] > d["production_priced_players"]:
+              fail.append("more fallback players than priced players")
+          print("week %s | card fallback %s players | production fallback %s "
+                "players across %s rows (%s in uncertified markets)" % (
+                    d["week"], d["card_fallback_players"],
+                    d["production_fallback_players"],
+                    d["production_fallback_rows"],
+                    d["production_fallback_rows_uncertified_market"]))
+          print("agreement: %s of %s" % (
+              d["production_fallback_also_fallback_in_card"],
+              d["production_fallback_players"]))
+          if fail:
+              print("\nFAILED ASSERTIONS:")
+              for f in fail:
+                  print("  -", f)
+              raise SystemExit(1)
+          print("\nreconciliation claims only what it establishes")
+          EOF
+
+      - name: Commit the descriptive cards
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/research/player_identity/
+          if git diff --cached --quiet; then
+            echo "identity cards unchanged"
+            exit 0
+          fi
+          git commit -m "Player Identity Card V1: descriptive strictly-prior state, season ${SEASON} weeks ${WEEKS}
+
+          Produced by run ${GITHUB_RUN_ID}. Descriptive state only: no fit, no
+          scoring, no promotion, no sportsbook input."
+          # Two workflows trigger on the same push and both commit here, so
+          # whichever lands second hits a non-fast-forward. Rebase onto the
+          # other bot's commit and retry rather than failing a run whose
+          # science succeeded.
+          for i in 1 2 3 4 5; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "pushed on attempt $i"
+              exit 0
+            fi
+            echo "push rejected; rebasing onto origin/${GITHUB_REF_NAME}"
+            git fetch origin "${GITHUB_REF_NAME}"
+            if ! git rebase "origin/${GITHUB_REF_NAME}"; then
+              git rebase --abort || true
+              echo "rebase failed; refusing to force"
+              exit 1
+            fi
+            sleep $((i * 3))
+          done
+          echo "could not push after 5 attempts"
+          exit 1
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player_identity_card_v1_${{ github.run_id }}
+          path: data/research/player_identity/
+          if-no-files-found: warn
+          retention-days: 90

@@ -1,0 +1,216 @@
+name: Research Preserve Week7 Opportunity Trace V1
+
+# Extracts the PRE-SPORTSBOOK explanatory state from the paid Week-7 run
+# artifact 12456298985 (run 39849371821, head 4dc178b5) and commits it to git
+# before that artifact expires on 2027-01-20.
+#
+# Authorized by audit response 6428042413. This makes NO OddsAPI call and
+# fetches no new market data: it reads an artifact that already exists and
+# keeps only the football explanatory fields, excluding every sportsbook and
+# decision column by denylist. The runner is used because the cloud session's
+# network policy denies Azure blob storage, where Actions artifacts live.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Source run id holding the paid artifact"
+        required: false
+        default: "39849371821"
+      artifact_name:
+        description: "Artifact name to download"
+        required: false
+        default: "run_39849371821"
+      week:
+        description: "Target week"
+        required: false
+        default: "7"
+  # workflow_dispatch only resolves for files on the default branch, and this
+  # lives on the research branch, so a push trigger is how it actually runs --
+  # matching the other research workflows in this lane.
+  push:
+    branches:
+      - research-prism-player-first-identity-environment-2026-10-26
+    paths:
+      - '.github/workflows/research-preserve-week7-opportunity-trace-v1.yml'
+      - 'scripts/research/preserve_week7_opportunity_trace_v1.py'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: player-identity-research-commits
+  cancel-in-progress: false
+
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUN_ID: ${{ github.event.inputs.run_id || '39849371821' }}
+      ART_NAME: ${{ github.event.inputs.artifact_name || 'run_39849371821' }}
+      WEEK: ${{ github.event.inputs.week || '7' }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install 'pyarrow==17.0.0'
+
+      - name: Confirm the artifact still exists
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts" \
+            --jq '.artifacts[] | "id=\(.id) name=\(.name) bytes=\(.size_in_bytes) expired=\(.expired) expires=\(.expires_at)"'
+
+      - name: Download the paid Week-7 artifact
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/wk7
+          gh run download "${RUN_ID}" -n "${ART_NAME}" -D /tmp/wk7
+          echo "files: $(find /tmp/wk7 -type f | wc -l)"
+
+      - name: Extract the pre-sportsbook explanatory trace
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/preserve_week7_opportunity_trace_v1.py \
+            --artifact-dir /tmp/wk7 \
+            --week "${WEEK}" \
+            --out-dir "data/research/week7_opportunity_trace" \
+            --stem-prefix "week${WEEK}" \
+            --run-id "${RUN_ID}"
+
+      - name: Assert the trace carries no sportsbook or decision column
+        run: |
+          set -euo pipefail
+          python - <<'EOF'
+          import csv, glob, json, os
+          deny = {"odds","vegas","line","price","edge","implied","payout","clv",
+                  "book","bookmaker","sportsbook","prob","fair","proj","sd",
+                  "graded","result","hit","won","profit","roi","stake","ticket"}
+          exempt = {"sportsbook_inputs_used","bayes_evidence_state","evidence_state"}
+          fail = []
+          files = sorted(glob.glob("data/research/week7_opportunity_trace/*.csv"))
+          if not files:
+              fail.append("no durable trace files written")
+          for f in files:
+              with open(f, newline="") as fh:
+                  cols = next(csv.reader(fh))
+              bad = [c for c in cols
+                     if c.strip().lower() not in exempt
+                     and deny & set(c.strip().lower().split("_"))]
+              if bad:
+                  fail.append(f"{os.path.basename(f)} carries {bad}")
+          st = json.load(open("data/research/week7_opportunity_trace/"
+                              f"week{os.environ['WEEK']}_opportunity_trace_v1_status.json"))
+          if not st.get("sportsbook_columns_excluded"):
+              fail.append("sportsbook exclusion not stamped")
+          if st.get("outcomes_inspected"):
+              fail.append("outcomes inspected")
+          print(f"durable trace files: {len(files)}")
+          print("artifact files catalogued:", st["artifact_file_count"])
+          for w in st["durable_files"]:
+              print(f"  {w['durable_file']}: {w['rows']} rows, "
+                    f"{len(w['columns'])} cols")
+          miss = st["extraction_diagnostics"]["required_columns_missing_from_artifact"]
+          if miss:
+              print("\nrequested columns absent from the artifact:", miss)
+          if fail:
+              print("\nFAILED ASSERTIONS:")
+              for x in fail:
+                  print("  -", x)
+              raise SystemExit(1)
+          print("\ntrace is pre-sportsbook explanatory state only")
+          EOF
+
+      - name: Build the five-part materiality report
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/report_week7_fallback_materiality_v1.py \
+            --trace-dir data/research/week7_opportunity_trace \
+            --out-dir data/research/week7_opportunity_trace \
+            --week "${WEEK}"
+
+      - name: Assert the report reproduces the audit and keeps part 5 separate
+        run: |
+          set -euo pipefail
+          python - <<'EOF'
+          import json, os
+          d = json.load(open("data/research/week7_opportunity_trace/"
+                             f"week{os.environ['WEEK']}_fallback_materiality_report_v1.json"))
+          fail = []
+          if d.get("outcomes_inspected"):
+              fail.append("outcomes inspected")
+          p3, p4 = (d["part3_rush_allocator_materiality"],
+                    d["part4_target_room_materiality"])
+          if not p3["reproduces_audit_1_824446"]:
+              fail.append(f"rush route does not reproduce the audit: "
+                          f"{p3['final_rush_allocation_probability']}")
+          if not p4["reproduces_audit_1_264686"]:
+              fail.append(f"target route does not reproduce the audit: "
+                          f"{p4['zero_history_final_target_entitlement']}")
+          p5 = d["part5_priced_board_subset_sportsbook_availability_only"]
+          if "WARNING" not in p5:
+              fail.append("part 5 lost its sportsbook-availability warning")
+          print("part1 universe rows:",
+                d["part1_full_football_universe_population_fallback"]["football_universe_rows"])
+          print("part2 exactly-zero posteriors: rush=%s tgt=%s" % (
+              d["part2_nonzero_posterior_fallback"]["rows_with_exactly_zero_rush_posterior"],
+              d["part2_nonzero_posterior_fallback"]["rows_with_exactly_zero_tgt_posterior"]))
+          print("part3 rush allocation probability:",
+                p3["final_rush_allocation_probability"])
+          print("part4 target entitlement:",
+                p4["zero_history_final_target_entitlement"],
+                f"({p4['zero_history_share_of_total']:.4%})")
+          print("part5 priced fallback players:",
+                p5["position_prior_only_priced_players"])
+          if fail:
+              print("\nFAILED ASSERTIONS:")
+              for f in fail:
+                  print("  -", f)
+              raise SystemExit(1)
+          print("\nreport reproduces the audit on both routes")
+          EOF
+
+      - name: Commit the durable trace
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/research/week7_opportunity_trace/
+          if git diff --cached --quiet; then
+            echo "trace unchanged"
+            exit 0
+          fi
+          git commit -m "Week-7 pre-sportsbook opportunity trace preserved from artifact ${ART_NAME}
+
+          Extracted by run ${GITHUB_RUN_ID} from source run ${RUN_ID}. Football
+          explanatory state only: every sportsbook and decision column excluded
+          by denylist. No OddsAPI call, no new market data."
+          for i in 1 2 3 4 5; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then exit 0; fi
+            git fetch origin "${GITHUB_REF_NAME}"
+            git rebase "origin/${GITHUB_REF_NAME}" || { git rebase --abort || true; exit 1; }
+            sleep $((i * 3))
+          done
+          exit 1
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: week7_opportunity_trace_v1_${{ github.run_id }}
+          path: data/research/week7_opportunity_trace/
+          if-no-files-found: warn
+          retention-days: 90

@@ -1,0 +1,764 @@
+{
+  "HEADLINE_SCOPE": "a gate is reported non-informative UNCONDITIONALLY only if its label is identical across all arm x basis combinations. Any other gate's label is conditional on the analysis choices named in the arm, and the time basis is one of those choices, not a universal result. AS_OF_PREGAME is preferred as the production-faithful planning basis -- a pregame value for week N is built from weeks 1..N-1 -- and single-week rates additionally carry sampling noise from far fewer plays, which mechanically pushes a rate across a threshold. That is a reason to prefer it, not a reason to call its result basis-independent.",
+  "WITHDRAWN_SHARP_DENOMINATOR_INFERENCE": "V1 concluded from the single source-conditioned 2026 W7 KC zone decode that production's Sharp-fed coverage fields behave like the COVERAGE_CLASSIFIED arm. Withdrawn per audit 6448026674 finding 4: the ALL_ROWS arm does fire rarely but nonzero (2/512 on scrimmage/defense-deployed), Sharp is a different provider whose denominator is unknown, and one inferred gate cannot identify a provider convention. Sharp's denominator and provenance are UNESTABLISHED.",
+  "arms": {
+    "PRODUCTION_FAITHFUL_UNFILTERED__DEFENSE_DEPLOYED__ALL_ROWS": {
+      "AS_OF_PREGAME": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.1679,
+          "p10": 0.105,
+          "p90": 0.2355,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.3242,
+          "p10": 0.2561,
+          "p90": 0.3941,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.0364,
+          "p10": 0.0126,
+          "p90": 0.0754,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.9922,
+          "label": "NEAR_CONSTANT",
+          "median_value": 0.7614,
+          "p10": 0.6836,
+          "p90": 0.8571,
+          "team_weeks": 512,
+          "team_weeks_firing": 508
+        }
+      },
+      "SINGLE_WEEK": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.1476,
+          "p10": 0.0695,
+          "p90": 0.2532,
+          "team_weeks": 544,
+          "team_weeks_firing": 0
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.0018,
+          "label": "NEAR_DEAD",
+          "median_value": 0.329,
+          "p10": 0.2184,
+          "p90": 0.4545,
+          "team_weeks": 544,
+          "team_weeks_firing": 1
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.0311,
+          "p10": 0.0,
+          "p90": 0.1079,
+          "team_weeks": 544,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.8603,
+          "label": "DISCRIMINATING",
+          "median_value": 0.7541,
+          "p10": 0.5604,
+          "p90": 0.8988,
+          "team_weeks": 544,
+          "team_weeks_firing": 468
+        }
+      }
+    },
+    "PRODUCTION_FAITHFUL_UNFILTERED__DEFENSE_DEPLOYED__COVERAGE_CLASSIFIED": {
+      "AS_OF_PREGAME": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0586,
+          "label": "NEAR_DEAD",
+          "median_value": 0.3333,
+          "p10": 0.2199,
+          "p90": 0.4651,
+          "team_weeks": 512,
+          "team_weeks_firing": 30
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.7109,
+          "label": "DISCRIMINATING",
+          "median_value": 0.6667,
+          "p10": 0.5349,
+          "p90": 0.7801,
+          "team_weeks": 512,
+          "team_weeks_firing": 364
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.0364,
+          "p10": 0.0126,
+          "p90": 0.0754,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.9922,
+          "label": "NEAR_CONSTANT",
+          "median_value": 0.7614,
+          "p10": 0.6836,
+          "p90": 0.8571,
+          "team_weeks": 512,
+          "team_weeks_firing": 508
+        }
+      },
+      "SINGLE_WEEK": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.1213,
+          "label": "DISCRIMINATING",
+          "median_value": 0.3077,
+          "p10": 0.1474,
+          "p90": 0.5,
+          "team_weeks": 544,
+          "team_weeks_firing": 66
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.7371,
+          "label": "DISCRIMINATING",
+          "median_value": 0.6923,
+          "p10": 0.5,
+          "p90": 0.8526,
+          "team_weeks": 544,
+          "team_weeks_firing": 401
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.0311,
+          "p10": 0.0,
+          "p90": 0.1079,
+          "team_weeks": 544,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.8603,
+          "label": "DISCRIMINATING",
+          "median_value": 0.7541,
+          "p10": 0.5604,
+          "p90": 0.8988,
+          "team_weeks": 544,
+          "team_weeks_firing": 468
+        }
+      }
+    },
+    "PRODUCTION_FAITHFUL_UNFILTERED__OFFENSE_FACED__ALL_ROWS": {
+      "AS_OF_PREGAME": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.1661,
+          "p10": 0.1281,
+          "p90": 0.2188,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.3252,
+          "p10": 0.2703,
+          "p90": 0.3781,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.035,
+          "p10": 0.016,
+          "p90": 0.071,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.9922,
+          "label": "NEAR_CONSTANT",
+          "median_value": 0.7621,
+          "p10": 0.6883,
+          "p90": 0.8415,
+          "team_weeks": 512,
+          "team_weeks_firing": 508
+        }
+      },
+      "SINGLE_WEEK": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.1476,
+          "p10": 0.0695,
+          "p90": 0.2532,
+          "team_weeks": 544,
+          "team_weeks_firing": 0
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.0018,
+          "label": "NEAR_DEAD",
+          "median_value": 0.329,
+          "p10": 0.2184,
+          "p90": 0.4545,
+          "team_weeks": 544,
+          "team_weeks_firing": 1
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.0311,
+          "p10": 0.0,
+          "p90": 0.1079,
+          "team_weeks": 544,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.8603,
+          "label": "DISCRIMINATING",
+          "median_value": 0.7541,
+          "p10": 0.5604,
+          "p90": 0.8988,
+          "team_weeks": 544,
+          "team_weeks_firing": 468
+        }
+      }
+    },
+    "PRODUCTION_FAITHFUL_UNFILTERED__OFFENSE_FACED__COVERAGE_CLASSIFIED": {
+      "AS_OF_PREGAME": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0312,
+          "label": "NEAR_DEAD",
+          "median_value": 0.3374,
+          "p10": 0.269,
+          "p90": 0.4333,
+          "team_weeks": 512,
+          "team_weeks_firing": 16
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.8047,
+          "label": "DISCRIMINATING",
+          "median_value": 0.6626,
+          "p10": 0.5667,
+          "p90": 0.731,
+          "team_weeks": 512,
+          "team_weeks_firing": 412
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.035,
+          "p10": 0.016,
+          "p90": 0.071,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.9922,
+          "label": "NEAR_CONSTANT",
+          "median_value": 0.7621,
+          "p10": 0.6883,
+          "p90": 0.8415,
+          "team_weeks": 512,
+          "team_weeks_firing": 508
+        }
+      },
+      "SINGLE_WEEK": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.1213,
+          "label": "DISCRIMINATING",
+          "median_value": 0.3077,
+          "p10": 0.1474,
+          "p90": 0.5,
+          "team_weeks": 544,
+          "team_weeks_firing": 66
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.7371,
+          "label": "DISCRIMINATING",
+          "median_value": 0.6923,
+          "p10": 0.5,
+          "p90": 0.8526,
+          "team_weeks": 544,
+          "team_weeks_firing": 401
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.0311,
+          "p10": 0.0,
+          "p90": 0.1079,
+          "team_weeks": 544,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.8603,
+          "label": "DISCRIMINATING",
+          "median_value": 0.7541,
+          "p10": 0.5604,
+          "p90": 0.8988,
+          "team_weeks": 544,
+          "team_weeks_firing": 468
+        }
+      }
+    },
+    "SCRIMMAGE_ONLY__DEFENSE_DEPLOYED__ALL_ROWS": {
+      "AS_OF_PREGAME": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.2,
+          "p10": 0.1257,
+          "p90": 0.2857,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.0039,
+          "label": "NEAR_DEAD",
+          "median_value": 0.4054,
+          "p10": 0.3221,
+          "p90": 0.4939,
+          "team_weeks": 512,
+          "team_weeks_firing": 2
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.0462,
+          "p10": 0.0161,
+          "p90": 0.0934,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.9004,
+          "label": "NEAR_CONSTANT",
+          "median_value": 0.7021,
+          "p10": 0.6001,
+          "p90": 0.8214,
+          "team_weeks": 512,
+          "team_weeks_firing": 461
+        }
+      },
+      "SINGLE_WEEK": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0018,
+          "label": "NEAR_DEAD",
+          "median_value": 0.1769,
+          "p10": 0.0816,
+          "p90": 0.3018,
+          "team_weeks": 544,
+          "team_weeks_firing": 1
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.0662,
+          "label": "NEAR_DEAD",
+          "median_value": 0.4074,
+          "p10": 0.2767,
+          "p90": 0.5692,
+          "team_weeks": 544,
+          "team_weeks_firing": 36
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.037,
+          "p10": 0.0,
+          "p90": 0.137,
+          "team_weeks": 544,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.6985,
+          "label": "DISCRIMINATING",
+          "median_value": 0.695,
+          "p10": 0.4536,
+          "p90": 0.8729,
+          "team_weeks": 544,
+          "team_weeks_firing": 380
+        }
+      }
+    },
+    "SCRIMMAGE_ONLY__DEFENSE_DEPLOYED__COVERAGE_CLASSIFIED": {
+      "AS_OF_PREGAME": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0586,
+          "label": "NEAR_DEAD",
+          "median_value": 0.3241,
+          "p10": 0.2133,
+          "p90": 0.4524,
+          "team_weeks": 512,
+          "team_weeks_firing": 30
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.7344,
+          "label": "DISCRIMINATING",
+          "median_value": 0.6759,
+          "p10": 0.5476,
+          "p90": 0.7867,
+          "team_weeks": 512,
+          "team_weeks_firing": 376
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.0462,
+          "p10": 0.0161,
+          "p90": 0.0934,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.9004,
+          "label": "NEAR_CONSTANT",
+          "median_value": 0.7021,
+          "p10": 0.6001,
+          "p90": 0.8214,
+          "team_weeks": 512,
+          "team_weeks_firing": 461
+        }
+      },
+      "SINGLE_WEEK": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0993,
+          "label": "NEAR_DEAD",
+          "median_value": 0.2952,
+          "p10": 0.1339,
+          "p90": 0.4906,
+          "team_weeks": 544,
+          "team_weeks_firing": 54
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.7555,
+          "label": "DISCRIMINATING",
+          "median_value": 0.7048,
+          "p10": 0.5094,
+          "p90": 0.8661,
+          "team_weeks": 544,
+          "team_weeks_firing": 411
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.037,
+          "p10": 0.0,
+          "p90": 0.137,
+          "team_weeks": 544,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.6985,
+          "label": "DISCRIMINATING",
+          "median_value": 0.695,
+          "p10": 0.4536,
+          "p90": 0.8729,
+          "team_weeks": 544,
+          "team_weeks_firing": 380
+        }
+      }
+    },
+    "SCRIMMAGE_ONLY__OFFENSE_FACED__ALL_ROWS": {
+      "AS_OF_PREGAME": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.1975,
+          "p10": 0.1545,
+          "p90": 0.2642,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.002,
+          "label": "NEAR_DEAD",
+          "median_value": 0.4078,
+          "p10": 0.3457,
+          "p90": 0.4744,
+          "team_weeks": 512,
+          "team_weeks_firing": 1
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.0437,
+          "p10": 0.0196,
+          "p90": 0.0879,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.9121,
+          "label": "NEAR_CONSTANT",
+          "median_value": 0.7042,
+          "p10": 0.6053,
+          "p90": 0.8,
+          "team_weeks": 512,
+          "team_weeks_firing": 467
+        }
+      },
+      "SINGLE_WEEK": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0018,
+          "label": "NEAR_DEAD",
+          "median_value": 0.1769,
+          "p10": 0.0816,
+          "p90": 0.3018,
+          "team_weeks": 544,
+          "team_weeks_firing": 1
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.0662,
+          "label": "NEAR_DEAD",
+          "median_value": 0.4074,
+          "p10": 0.2767,
+          "p90": 0.5692,
+          "team_weeks": 544,
+          "team_weeks_firing": 36
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.037,
+          "p10": 0.0,
+          "p90": 0.137,
+          "team_weeks": 544,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.6985,
+          "label": "DISCRIMINATING",
+          "median_value": 0.695,
+          "p10": 0.4536,
+          "p90": 0.8729,
+          "team_weeks": 544,
+          "team_weeks_firing": 380
+        }
+      }
+    },
+    "SCRIMMAGE_ONLY__OFFENSE_FACED__COVERAGE_CLASSIFIED": {
+      "AS_OF_PREGAME": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0234,
+          "label": "NEAR_DEAD",
+          "median_value": 0.3267,
+          "p10": 0.2605,
+          "p90": 0.4219,
+          "team_weeks": 512,
+          "team_weeks_firing": 12
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.8418,
+          "label": "DISCRIMINATING",
+          "median_value": 0.6733,
+          "p10": 0.5781,
+          "p90": 0.7395,
+          "team_weeks": 512,
+          "team_weeks_firing": 431
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.0437,
+          "p10": 0.0196,
+          "p90": 0.0879,
+          "team_weeks": 512,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.9121,
+          "label": "NEAR_CONSTANT",
+          "median_value": 0.7042,
+          "p10": 0.6053,
+          "p90": 0.8,
+          "team_weeks": 512,
+          "team_weeks_firing": 467
+        }
+      },
+      "SINGLE_WEEK": {
+        "coverage_man_rate": {
+          "condition": "coverage_man_rate >= 0.5",
+          "fraction_firing": 0.0993,
+          "label": "NEAR_DEAD",
+          "median_value": 0.2952,
+          "p10": 0.1339,
+          "p90": 0.4906,
+          "team_weeks": 544,
+          "team_weeks_firing": 54
+        },
+        "coverage_zone_rate": {
+          "condition": "coverage_zone_rate >= 0.6",
+          "fraction_firing": 0.7555,
+          "label": "DISCRIMINATING",
+          "median_value": 0.7048,
+          "p10": 0.5094,
+          "p90": 0.8661,
+          "team_weeks": 544,
+          "team_weeks_firing": 411
+        },
+        "heavy_box_rate": {
+          "condition": "heavy_box_rate >= 0.6",
+          "fraction_firing": 0.0,
+          "label": "NEAR_DEAD",
+          "median_value": 0.037,
+          "p10": 0.0,
+          "p90": 0.137,
+          "team_weeks": 544,
+          "team_weeks_firing": 0
+        },
+        "light_box_rate": {
+          "condition": "light_box_rate >= 0.6",
+          "fraction_firing": 0.6985,
+          "label": "DISCRIMINATING",
+          "median_value": 0.695,
+          "p10": 0.4536,
+          "p90": 0.8729,
+          "team_weeks": 544,
+          "team_weeks_firing": 380
+        }
+      }
+    }
+  },
+  "authorized_by": "USER_2026_10_27; frontier named by GPT_6446595260",
+  "basis_dependent_gates": [
+    "coverage_man_rate",
+    "coverage_zone_rate",
+    "light_box_rate"
+  ],
+  "caveat_orientation": "participation has NO defensive team column; production groups by possession_team, so its value is the box an OFFENSE faced while rules_v2 reads it as a defensive tendency. Both orientations are reported; which is correct is a semantic question for audit.",
+  "caveat_sharp_preferred": "production PREFERS Sharp Football over the participation path for box rates, so these are the participation-derived values, not necessarily what production used in a given week",
+  "cross_basis_label_agreement": {
+    "coverage_man_rate": {
+      "labels_across_arm_x_basis": {
+        "DISCRIMINATING": 2,
+        "NEAR_DEAD": 14
+      },
+      "n_combinations": 16,
+      "unconditional": false
+    },
+    "coverage_zone_rate": {
+      "labels_across_arm_x_basis": {
+        "DISCRIMINATING": 8,
+        "NEAR_DEAD": 8
+      },
+      "n_combinations": 16,
+      "unconditional": false
+    },
+    "heavy_box_rate": {
+      "labels_across_arm_x_basis": {
+        "NEAR_DEAD": 16
+      },
+      "n_combinations": 16,
+      "unconditional": true
+    },
+    "light_box_rate": {
+      "labels_across_arm_x_basis": {
+        "DISCRIMINATING": 8,
+        "NEAR_CONSTANT": 8
+      },
+      "n_combinations": 16,
+      "unconditional": false
+    }
+  },
+  "disclosed_prereg_underspecification": "the frozen design said 'per team-week' without fixing whether a team-week rate is a single week or the season-to-date value a pregame run would hold. Both are reported; AS_OF_PREGAME is the production-faithful basis.",
+  "gates_NOT_measured_here": [
+    "middle_open_rate >= 0.50 (te_target_mult, slot_target_mult)",
+    "pressure mismatch > 0.075 (rb_rec_target_mult, pass_eff_mult, sack_mult, int_mult, volatility_mult)"
+  ],
+  "is_a_2026_claim": false,
+  "outcomes_inspected": false,
+  "plays_joined": 43049,
+  "prereg_labels": {
+    "NEAR_CONSTANT": "> 0.9",
+    "NEAR_DEAD": "< 0.1"
+  },
+  "preregistration": "docs/research/PRISM_GATE_PREVALENCE_PREREGISTRATION_V1.md",
+  "production_definitions": {
+    "heavy": "defenders_in_box >= 8",
+    "light": "defenders_in_box <= 6",
+    "source": "make_team_form.compute_personnel_rates"
+  },
+  "scientific_boundary": "DESCRIPTIVE_REACHABILITY_ONLY_NO_FITTING_NO_SCORING",
+  "season_measured": 2025,
+  "sportsbook_inputs_used": 0,
+  "unconditional_gates": [
+    "heavy_box_rate"
+  ],
+  "version": "OPPONENT_GATE_PREVALENCE_V1",
+  "weeks": [
+    1,
+    18
+  ]
+}
