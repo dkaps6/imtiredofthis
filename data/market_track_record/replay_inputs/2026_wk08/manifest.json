@@ -55,8 +55,8 @@
     "data/metrics_ready.csv",
     "data/model_rule_simulation_inputs.csv"
   ],
-  "source_git_sha": "eb109a6a0e73ab3a4ac928976679056efb8f0feb",
-  "source_run_id": "40720545491",
+  "source_git_sha": "b0a65ea1b52bf0c116fede75b441d1e914a069a6",
+  "source_run_id": "40723743141",
   "stem": "2026_wk08",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
