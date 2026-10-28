@@ -237,3 +237,124 @@ is preregistered, and the 8 absent backs must be state-labelled first.
 
 No coefficient, cap or weight changed. No sportsbook variable in any measurement. Betting
 remains **CLOSED**. No odds fetch.
+
+---
+
+# Addendum 2 — the roster-coverage defect is structural: Ourlads is the SOLE existence authority
+
+Per GPT audit
+[#535 comment 6478960995](https://github.com/dkaps6/imtiredofthis/issues/535#issuecomment-6478960995),
+which state-labelled the nine outside carriers from official transaction timing and ruled
+on sequencing. Their classification is **verified below against nflverse weekly roster
+status**, and it holds.
+
+## 1. Correction accepted: the budget claim was unconditional and should not be
+
+My *"empirical budget = 1.0000"* was too strong. GPT's wording is the correct one:
+
+> **Conditional on a complete skill-position roster**, there is no evidence for a blanket
+> 5% non-skill rusher reserve; the football budget should be near 1.0.
+
+**1.0 was not the realized modeled-roster budget of that snapshot.** The source universe
+came from Full Slate run **39849371821** (run id confirmed in the trace provenance), a
+*Thursday* run — so the snapshot was incomplete relative to the eventual active roster.
+**"Skill-position class coverage = 100%" is not "the pregame modeled roster was 100%
+complete."** The realized share belonging to players actually present in that Thursday
+universe is ~**92.59%** on the mean-of-team-fractions definition.
+
+## 2. The nine carriers are three defect classes, verified against nflverse
+
+nflverse `load_rosters_weekly(2026)` status by week (`ACT` active, `RES` reserve/IR,
+`DEV` practice squad, `INA` inactive):
+
+| player | carries | weekly status trail | class |
+|---|---|---|---|
+| Mike Washington Jr. (LV) | 6 | ACT w1–w8, present in **all** repo artifacts | **alias/join defect** |
+| Velus Jones Jr. (SEA) | 5 | ACT **w3, w4, w5, w6**, w7 | **provider omission** |
+| Anthony Tyus III (CAR) | 3 | ACT **w3, w4, w6**, w7 | **provider omission** |
+| Michael Carter (TEN) | 3 | ACT from **w2** onward | **provider omission** |
+| Jordan Mason (MIN) | **15** | ACT w1, **RES w2–w5**, ACT w7 | return from reserve |
+| Jonah Coleman (DEN) | 9 | ACT w1–w2, **RES w3–w6**, ACT w7 | return from reserve |
+| Dylan Sampson (CLE) | 6 | ACT w1, **RES w2–w6**, ACT w7 | return from reserve |
+| Khalil Herbert (ATL) | 2 | **DEV w2–w6**, ACT w7, DEV w8 | practice-squad elevation |
+| Elijah Mitchell (PHI) | 3 | first appears **ACT w7** | late addition |
+
+**Totals: 17 carries deterministic defects, 30 return-from-reserve, 5 elevations.**
+
+**One refinement to GPT's framing:** the provider omissions are not marginal
+stale-by-a-day cases. Velus Jones was `ACT` for **four consecutive weeks** before week 7,
+Tyus for three, Carter since week 2. These are **sustained** omissions from the depth
+chart, which strengthens rather than softens that bucket.
+
+## 3. The structural finding: the availability layer can only NARROW, never ADD
+
+This is why the 17 deterministic carries were unrecoverable. Row counts through the
+production chain on the W7 trace:
+
+| artifact | rows |
+|---|---|
+| `roles_ourlads` | **458** |
+| `roles_ourlads_status_v1` | 458 |
+| `current_player_availability` | 458 |
+| `roles_current_production_eligible_v1` | **396** |
+| `football_simulation_universe` | **396** |
+
+The availability/injury certification layer **never adds a row** — it takes Ourlads' 458
+and narrows to 396. So **Ourlads is the sole authority on player *existence***. A player
+Ourlads does not list cannot enter the universe no matter what the injury, inactives or
+availability feeds say about him. Velus Jones was on the active roster for a month and was
+structurally unreachable.
+
+That confirms GPT's recommendation 2 and makes it concrete: **Ourlads may remain the
+depth-role source, but it cannot remain the sole existence source.**
+
+## 4. Sequencing ruling — accepted
+
+Roster/availability integrity **first**, budget reconciliation **second**. The reason is
+the one I raised and GPT confirmed: forcing an incomplete Thursday roster to a 1.0 target
+assigns Jordan Mason's 15 carries to Aaron Jones and Max Bredeson. That makes the team
+aggregate right while making named-player projections worse — the exact aggregate-vs-player
+trap this project exists to avoid.
+
+Order of work, per GPT, adopted:
+
+1. fix deterministic identity/coverage defects (Washington alias; audit stale Ourlads
+   omissions against the official active roster);
+2. build a **union availability universe** — depth chart ∪ official active/transaction feed
+   ∪ IR/designated-for-return ∪ relevant practice-squad elevation candidates ∪ inactives —
+   rather than Ourlads-only existence;
+3. require a **final game-day roster refresh** before authoritative player projections;
+4. only then reconcile the player rush vector to the validated team mass target;
+5. hold a **dynamic unresolved-roster residual** before roster lock instead of handing that
+   mass to known players;
+6. after lock, with a complete eligible universe, the residual collapses toward zero and the
+   budget approaches 1.0;
+7. keep the hard cap as corruption protection, never as the normal allocator.
+
+## 5. The budget contract, as designed (not promoted)
+
+```
+team_modeled_mass_target = 1 - unresolved_roster_rush_mass
+```
+
+with the residual **state-derived**, not a universal 0.05:
+
+- final official active/elevation roster complete → target ≈ 1.0;
+- Thursday with a credible return/elevation candidate unresolved → **preserve** a residual
+  rather than redistribute it;
+- a known active player missing from Ourlads → **fail/repair roster integrity**, do not
+  silently inflate the residual.
+
+This separates two laws cleanly: **team conservation** (a valid budget) and **player
+entitlement** (who gets it). The player-first objective is preserved — the budget is a
+conservation law; its division stays player-specific.
+
+## 6. What this W7 audit does and does not establish
+
+- **does not** support a fixed 5% non-skill reserve — no carry went to a non-skill position;
+- **does** show final eligible skill players can account for essentially all official carries;
+- **does** show pregame roster uncertainty is real and **time-dependent**;
+- therefore points to a **dynamic roster-coverage residual, not another hard-coded constant**.
+
+One week, 27–28 teams, one preserved pregame universe. No coefficient, cap or weight
+changed. Betting remains **CLOSED**. No odds fetch.

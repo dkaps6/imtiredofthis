@@ -26,13 +26,28 @@ promoted. Live pricing is unchanged by anything in this lane.
    start there without scrolling the other 967 comments. Then fetch anything after it.
    GPT ↔ Claude Code work channel.
 
-**Most important immediate next task:** reproduce the **team rush-share mass budget**
-measurement on a prospective live-odds universe, then design the reconciliation. Raw
-`rules_rush_share` sums to **1.2729** per team (28/28 teams over the 0.95 cap), so
-`_allocate_counts` applies a uniform **0.7574** haircut and RB carries land at **19.77 vs
-23.15 actual (−3.38)**. Do NOT simply remove the cap — pre-cap mass is **over** by +3.26.
-The defect is that per-player shares are never reconciled as a team allocation.
-Preregister before scoring, as always.
+**Most important immediate next task — SEQUENCED, agreed with the auditor (#535 comment
+6478960995):** **roster/availability integrity FIRST, budget reconciliation SECOND.**
+
+1. **Ourlads is the SOLE authority on player *existence*.** Verified by row counts through
+   the W7 chain: `roles_ourlads` 458 → `roles_ourlads_status_v1` 458 →
+   `current_player_availability` 458 → `roles_current_production_eligible_v1` **396** →
+   `football_simulation_universe` **396**. The availability/injury layer **never adds a
+   row** — it only narrows. A player Ourlads omits is structurally unreachable whatever the
+   injury or inactives feeds say. Velus Jones Jr. was `ACT` for **four consecutive weeks**
+   and still never entered the universe. Fix: a **union** existence universe (depth chart ∪
+   official active/transaction feed ∪ designated-for-return ∪ relevant elevation candidates
+   ∪ inactives), plus a **final game-day roster refresh** before authoritative projections.
+2. **Then** reconcile the rush vector to `team_modeled_mass_target = 1 −
+   unresolved_roster_rush_mass`, with the residual **state-derived**, never a universal
+   0.05. Raw `rules_rush_share` sums to **1.2729** per team (28/28 over the 0.95 cap), so
+   `_allocate_counts` applies a uniform **0.7574** haircut and RB carries land at **19.77
+   vs 23.15 actual (−3.38)**.
+
+**Do NOT reconcile before the roster is fixed, and do NOT simply remove the cap.** Pre-cap
+mass is **over** by +3.26, and forcing an incomplete Thursday roster to 1.0 hands Jordan
+Mason's 15 carries to Aaron Jones and Max Bredeson — the team aggregate gets righter while
+named-player projections get worse. Preregister before scoring, as always.
 
 ### NON-NEGOTIABLE USER SCIENCE
 **THE PLAYER SHOULD HAVE THE RULES, NOT THE POSITION HAVE THE PLAYER.** Named-individual
