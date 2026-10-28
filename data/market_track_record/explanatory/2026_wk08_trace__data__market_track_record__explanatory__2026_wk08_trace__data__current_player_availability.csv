@@ -86,7 +86,7 @@ CIN,Chase Brown,RB,chasebrown,ourlads_depth
 CIN,Colbie Young,RWR,colbieyoung,ourlads_depth
 CIN,Dohnte Meyers,SWR,dohntemeyers,ourlads_depth
 CIN,Drew Sample,TE,drewsample,ourlads_depth
-CIN,Erick All,TE,erickall,ourlads_depth
+CIN,Jack Endries,TE,jackendries,ourlads_depth
 CIN,Ja'Marr Chase,LWR,jamarrchase,ourlads_depth
 CIN,Joe Burrow,QB,joeburrow,ourlads_depth
 CIN,JOE Flacco,QB,joeflacco,ourlads_depth
@@ -114,7 +114,6 @@ DAL,Brevyn Spann-Ford,TE,brevynspannford,ourlads_depth
 DAL,Camden Brown,LWR,camdenbrown,ourlads_depth
 DAL,Ceedee Lamb,RWR,ceedeelamb,ourlads_depth
 DAL,DAK Prescott,QB,dakprescott,ourlads_depth
-DAL,Emari Demercado,RB,emaridemercado,ourlads_depth
 DAL,George Pickens,LWR,georgepickens,ourlads_depth
 DAL,Hunter Luepke,FB,hunterluepke,ourlads_depth
 DAL,Jake Ferguson,TE,jakeferguson,ourlads_depth
@@ -263,6 +262,7 @@ LV,Brock Bowers,TE,brockbowers,ourlads_depth
 LV,Cody White,RWR,codywhite,ourlads_depth
 LV,Connor Heyward,FB,connorheyward,ourlads_depth
 LV,Dareke Young,SWR,darekeyoung,ourlads_depth
+LV,Dont'E Thornton,LWR,dontethornton,ourlads_depth
 LV,Dylan Laube,RB,dylanlaube,ourlads_depth
 LV,Fernando Mendoza,QB,fernandomendoza,ourlads_depth
 LV,IAN Thomas,TE,ianthomas,ourlads_depth
@@ -333,6 +333,7 @@ NYG,Charlie Jones,SWR,charliejones,ourlads_depth
 NYG,Chris Manhertz,TE,chrismanhertz,ourlads_depth
 NYG,Darnell Mooney,SWR,darnellmooney,ourlads_depth
 NYG,Devin Singletary,RB,devinsingletary,ourlads_depth
+NYG,Gregory Desrosiers,RB,gregorydesrosiers,ourlads_depth
 NYG,Isaiah Likely,TE,isaiahlikely,ourlads_depth
 NYG,Jake Haener,QB,jakehaener,ourlads_depth
 NYG,Jameis Winston,QB,jameiswinston,ourlads_depth
@@ -341,7 +342,6 @@ NYG,Malachi Fields,RWR,malachifields,ourlads_depth
 NYG,Malik Nabers,LWR,maliknabers,ourlads_depth
 NYG,Patrick Ricard,FB,patrickricard,ourlads_depth
 NYG,Theo Johnson,TE,theojohnson,ourlads_depth
-NYG,Tyrone Tracy,RB,tyronetracy,ourlads_depth
 NYJ,Adonai Mitchell,LWR,adonaimitchell,ourlads_depth
 NYJ,Andrew Beck,FB,andrewbeck,ourlads_depth
 NYJ,Braelon Allen,RB,braelonallen,ourlads_depth
@@ -364,7 +364,6 @@ PHI,Dameon Pierce,RB,dameonpierce,ourlads_depth
 PHI,Darius Cooper,RWR,dariuscooper,ourlads_depth
 PHI,Devonta Smith,RWR,devontasmith,ourlads_depth
 PHI,Dontayvion Wicks,LWR,dontayvionwicks,ourlads_depth
-PHI,Elijah Mitchell,RB,elijahmitchell,ourlads_depth
 PHI,Elijah Moore,SWR,elijahmoore,ourlads_depth
 PHI,Grant Calcaterra,TE,grantcalcaterra,ourlads_depth
 PHI,Hollywood Brown,LWR,hollywoodbrown,ourlads_depth
@@ -441,7 +440,7 @@ TEN,David Martin-Robinson,TE,davidmartinrobinson,ourlads_depth
 TEN,Elic Ayomanor,LWR,elicayomanor,ourlads_depth
 TEN,Gunnar Helm,TE,gunnarhelm,ourlads_depth
 TEN,Mitchell Trubisky,QB,mitchelltrubisky,ourlads_depth
-TEN,Nicholas Singleton,RB,nicholassingleton,ourlads_depth
+TEN,Nick Singleton,RB,nicksingleton,ourlads_depth
 TEN,Tony Pollard,RB,tonypollard,ourlads_depth
 TEN,Tyjae Spears,RB,tyjaespears,ourlads_depth
 TEN,Wan'Dale Robinson,SWR,wandalerobinson,ourlads_depth
