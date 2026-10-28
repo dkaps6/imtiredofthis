@@ -1,0 +1,9 @@
+market,candidate,mc_weight,ml_weight,state_weight,fit_scope,promoted
+rush_yards,C0_incumbent,0.556954,0.443046,0.0,no_fit,False
+rush_yards,C1_refit_wk12,1.0,0.0,0.0,2026_wk1_2_only,False
+rush_yards,C2_pure_ml,0.0,1.0,0.0,no_fit,False
+rush_yards,C3_equal,0.333333,0.333333,0.333333,no_fit,False
+rush_rec_yards,C0_incumbent,1.0,0.0,0.0,no_fit,False
+rush_rec_yards,C1_refit_wk12,0.88963,0.0,0.11037,2026_wk1_2_only,False
+rush_rec_yards,C2_pure_ml,0.0,1.0,0.0,no_fit,False
+rush_rec_yards,C3_equal,0.333333,0.333333,0.333333,no_fit,False
