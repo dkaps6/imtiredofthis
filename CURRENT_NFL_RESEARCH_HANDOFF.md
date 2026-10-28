@@ -18,8 +18,11 @@ promoted. Live pricing is unchanged by anything in this lane.
 5. `docs/research/PRISM_CORRECTION_PRODUCTION_IS_NOT_CONSTANT_SIGMA_V1.md` — still binding.
 6. Displaced V17 root archived at
    `docs/handoffs/NFL_HANDOFF_2026-10-28_V17_PRE_V18_ROOT_ARCHIVE.md`.
-7. GitHub Issue https://github.com/dkaps6/imtiredofthis/issues/535 — fetch comments after
-   **6476943852** FIRST. GPT ↔ Claude Code work channel.
+7. GitHub Issue https://github.com/dkaps6/imtiredofthis/issues/535 — read
+   **[comment 6477740922](https://github.com/dkaps6/imtiredofthis/issues/535#issuecomment-6477740922)**
+   FIRST. It is a deliberately **standalone state-of-play catch-up**: a recycled context can
+   start there without scrolling the other 967 comments. Then fetch anything after it.
+   GPT ↔ Claude Code work channel.
 
 **Most important immediate next task:** the **Bayesian RB rush-share over-shrink**. It is
 the only live lead and it is a player-identity correction, which is what the user has been
