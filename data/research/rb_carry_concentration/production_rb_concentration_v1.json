@@ -1,0 +1,52 @@
+{
+  "version": "PRODUCTION_RB_CONCENTRATION_MEASUREMENT_V1B",
+  "retracted_predecessor": {
+    "value": 0.2226,
+    "why_wrong": "read metrics_ready (one row per player-market) and called simulate() directly; production builds a DEDUPED universe via _build_full_universe, which raises on duplicate (team, player_clean_key). Off the production path."
+  },
+  "source": "data/research/week7_opportunity_trace/week7_trace__data__model_rule_simulation_inputs.csv",
+  "share_column": "rules_rush_share",
+  "production_teams": 25,
+  "production_mean_top1": 0.5173,
+  "production_mean_backs": 3.04,
+  "football_team_weeks": 6296,
+  "football_mean_top1": 0.6478,
+  "matched_by_n_backs": [
+    {
+      "n_backs": 2,
+      "prod_n": 5,
+      "prod_top1": 0.6064,
+      "fb_n": 2391,
+      "fb_top1": 0.7058,
+      "gap": -0.0994
+    },
+    {
+      "n_backs": 3,
+      "prod_n": 14,
+      "prod_top1": 0.5334,
+      "fb_n": 2975,
+      "fb_top1": 0.6277,
+      "gap": -0.0943
+    },
+    {
+      "n_backs": 4,
+      "prod_n": 6,
+      "prod_top1": 0.4056,
+      "fb_n": 838,
+      "fb_top1": 0.5625,
+      "gap": -0.1569
+    }
+  ],
+  "size_standardized": {
+    "production": 0.5173,
+    "football": 0.6277,
+    "gap": -0.1103,
+    "gap_ci95": [
+      -0.1453,
+      -0.0741
+    ]
+  },
+  "population_limitation": "deduped PRICED universe (28 teams) rather than the full 396-row football universe; unpriced roster backs also carry rules_rush_share in production.",
+  "sportsbook_inputs_used": false,
+  "fits_anything": false
+}

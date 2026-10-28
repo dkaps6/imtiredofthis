@@ -33,6 +33,19 @@ MARKET_MAP = {
 WR_POSITIONS = {"WR", "LWR", "RWR", "SWR"}
 WR_TARGET_HIERARCHY_MULTIPLIERS = (1.40, 1.14, 0.91, 0.78)
 
+# RB carry concentration (docs/research/PRISM_RB_CARRY_CONCENTRATION_RESULTS_V1.md).
+# Production's RB rush-share vector is flat by 11pp against a strictly-prior football
+# target: top-1 within-RB share 0.5173 vs 0.6277, 95% CI [-0.1453, -0.0741]. gamma=1.75
+# reproduces that target (0.6283). NOT PROMOTED: the transform is mass-preserving, so it
+# moves ~10.3 yd from backs 2+ to the top back while EVERY rank is biased low, which is
+# kill condition K4 in the preregistration. It stays inert until the prospective test
+# resolves that interaction. Both authorities must agree before gamma can move.
+RB_RUSH_POSITIONS = {"RB", "HB", "TB", "FB"}
+RB_CARRY_CONCENTRATION_GAMMA_CANDIDATE = 1.75
+RB_CARRY_CONCENTRATION_GAMMA_NEUTRAL = 1.0
+RB_CARRY_CONCENTRATION_PROMOTED = False
+RB_CARRY_CONCENTRATION_VERSION = "RB_CARRY_CONCENTRATION_V1"
+
 
 @dataclass
 class SimulationResult:
@@ -116,6 +129,41 @@ def _sharpen_wr_target_shares(team_df: pd.DataFrame, shares: np.ndarray) -> np.n
     return out
 
 
+def _is_rb_position(position: object) -> bool:
+    p=str(position).strip().upper()
+    return p in RB_RUSH_POSITIONS or p.startswith("RB")
+
+
+def rb_carry_concentration_gamma() -> float:
+    """Effective exponent. Neutral (1.0 = identity) unless promoted."""
+    if not RB_CARRY_CONCENTRATION_PROMOTED: return RB_CARRY_CONCENTRATION_GAMMA_NEUTRAL
+    return float(np.clip(RB_CARRY_CONCENTRATION_GAMMA_CANDIDATE,1.0,4.0))
+
+
+def _sharpen_rb_rush_shares(team_df: pd.DataFrame, shares: np.ndarray) -> np.ndarray:
+    """Concentrate RB rush shares toward the prior-season football target, preserving mass.
+
+    Backs are re-weighted by share**gamma and renormalized back to the RB subset's
+    original share total, so simulated team RB carry volume -- already correct at bias
+    -0.52 -- cannot move. QB/WR/TE rush shares are untouched. Monotone, so a back with a
+    genuinely higher pregame share stays higher; a rank lookup table was rejected because
+    it would overwrite every team's distribution with one positional curve.
+    """
+    clean=np.nan_to_num(np.asarray(shares,dtype=float),nan=0.0,posinf=0.0,neginf=0.0); clean=np.clip(clean,0.0,0.95)
+    gamma=rb_carry_concentration_gamma()
+    if gamma == 1.0: return clean
+    positions=team_df.get("position",pd.Series("",index=team_df.index)).fillna("").astype(str).to_numpy()
+    rb_idx=np.flatnonzero([_is_rb_position(p) for p in positions])
+    if len(rb_idx) <= 1: return clean
+    rb=clean[rb_idx].copy(); total=float(rb.sum())
+    if total <= 0.0: return clean
+    sharpened=np.power(rb,gamma)
+    if not np.isfinite(sharpened).all() or sharpened.sum() <= 0.0: return clean
+    sharpened*=total/float(sharpened.sum())
+    out=clean.copy(); out[rb_idx]=sharpened
+    return out
+
+
 def _player_key(row: pd.Series) -> str:
     value=row.get("player_clean_key")
     if pd.notna(value) and str(value).strip(): return str(value).strip()
@@ -136,7 +184,7 @@ def simulate(metrics: pd.DataFrame, *, iterations: int | None=None, seed: int | 
             if pd.isna(team) or not str(team).strip(): continue
             plays_mean,pass_rate_mean=_team_inputs(team_df); plays=np.rint(np.clip(rng.normal(plays_mean,3.5,iterations)+game_pace_shock,45,85)).astype(int); pass_rate=np.clip(rng.normal(pass_rate_mean,0.035,iterations),0.25,0.82); pass_att=rng.binomial(plays,pass_rate); rush_att=plays-pass_att
             pass_eff_shock=np.clip(rng.normal(1.0,0.09,iterations),0.65,1.35); rush_eff_shock=np.clip(rng.normal(1.0,0.10,iterations),0.60,1.40)
-            raw_target_shares=np.array([_num(r,"rules_tgt_share","bayes_tgt_share","target_share","tgt_share",default=0.0) for _,r in team_df.iterrows()]); target_shares=_sharpen_wr_target_shares(team_df,raw_target_shares); raw_rush_shares=np.array([_num(r,"rules_rush_share","bayes_rush_share","rush_share",default=0.0) for _,r in team_df.iterrows()]); rush_shares=_top_n_shares(raw_rush_shares,5)
+            raw_target_shares=np.array([_num(r,"rules_tgt_share","bayes_tgt_share","target_share","tgt_share",default=0.0) for _,r in team_df.iterrows()]); target_shares=_sharpen_wr_target_shares(team_df,raw_target_shares); raw_rush_shares=np.array([_num(r,"rules_rush_share","bayes_rush_share","rush_share",default=0.0) for _,r in team_df.iterrows()]); rush_shares=_sharpen_rb_rush_shares(team_df,_top_n_shares(raw_rush_shares,5))
             targets=_allocate_counts(rng,pass_att,target_shares); carries=_allocate_counts(rng,rush_att,rush_shares)
             if allocation_trace is not None:
                 clean=np.clip(np.nan_to_num(rush_shares.astype(float),nan=0.0,posinf=0.0,neginf=0.0),0.0,0.95); raw_sum=float(clean.sum()); used=clean.copy()

@@ -1,0 +1,104 @@
+{
+  "version": "RB_CARRY_CONCENTRATION_FIT_V1",
+  "preregistration": "docs/research/PRISM_RB_CARRY_CONCENTRATION_PREREGISTRATION_V1.md",
+  "calibration_seasons": [
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "excluded_seasons": [
+    2026
+  ],
+  "rows": 17520,
+  "team_weeks": 6296,
+  "gamma_pooled": 0.76,
+  "sse": 559.7215,
+  "sse_at_gamma_1": 590.8394,
+  "concentration": {
+    "n_team_weeks": 6296,
+    "top1_proxy_share": 0.6973,
+    "top1_sharpened_share": 0.6431,
+    "top1_actual_share": 0.6478
+  },
+  "walk_forward": [
+    {
+      "season": 2014,
+      "gamma": 0.83,
+      "train_team_weeks": 473
+    },
+    {
+      "season": 2015,
+      "gamma": 0.8,
+      "train_team_weeks": 948
+    },
+    {
+      "season": 2016,
+      "gamma": 0.79,
+      "train_team_weeks": 1426
+    },
+    {
+      "season": 2017,
+      "gamma": 0.76,
+      "train_team_weeks": 1888
+    },
+    {
+      "season": 2018,
+      "gamma": 0.77,
+      "train_team_weeks": 2365
+    },
+    {
+      "season": 2019,
+      "gamma": 0.76,
+      "train_team_weeks": 2827
+    },
+    {
+      "season": 2020,
+      "gamma": 0.77,
+      "train_team_weeks": 3292
+    },
+    {
+      "season": 2021,
+      "gamma": 0.76,
+      "train_team_weeks": 3768
+    },
+    {
+      "season": 2022,
+      "gamma": 0.76,
+      "train_team_weeks": 4271
+    },
+    {
+      "season": 2023,
+      "gamma": 0.76,
+      "train_team_weeks": 4775
+    },
+    {
+      "season": 2024,
+      "gamma": 0.76,
+      "train_team_weeks": 5275
+    },
+    {
+      "season": 2025,
+      "gamma": 0.76,
+      "train_team_weeks": 5783
+    }
+  ],
+  "walk_forward_stability": {
+    "min": 0.76,
+    "max": 0.83,
+    "spread": 0.07,
+    "mean": 0.773,
+    "sd": 0.022
+  },
+  "proxy": "within-season prior-weeks share of team RB carries; ranking is pregame only",
+  "sportsbook_inputs_used": false
+}
