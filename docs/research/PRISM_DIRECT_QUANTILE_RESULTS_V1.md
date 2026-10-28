@@ -1,5 +1,14 @@
 # PRISM — Direct per-tail quantile fit: RESULTS (V1)
 
+> ⚠️ **CORRECTED — read `PRISM_CORRECTION_PRODUCTION_IS_NOT_CONSTANT_SIGMA_V1.md` first.**
+> This document's `Q0` baseline assumes production prices from a constant σ through a
+> normal CDF. **It does not.** The live path runs `run_pricing_v2.py`, which prices from
+> the empirical Monte Carlo distribution and reports a per-player `model_sd`;
+> `pricing_v2.SIGMA` is never referenced on the production path. Every comparison below
+> is therefore against a textbook baseline, **not** against the deployed system, and its
+> gains must not be quoted as gains over production. The measurements of how floors and
+> ceilings scale in the data remain valid.
+
 **Preregistration:** `PRISM_DIRECT_QUANTILE_PREREGISTRATION_V1.md`, frozen at
 `abe11db5` **before** scoring.
 **Script:** `scripts/research/measure_direct_quantile_fit_v1.py`

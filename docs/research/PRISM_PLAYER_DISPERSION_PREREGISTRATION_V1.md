@@ -1,5 +1,14 @@
 # PRISM — Player-specific dispersion: PREREGISTRATION (V1)
 
+> ⚠️ **CORRECTED — read `PRISM_CORRECTION_PRODUCTION_IS_NOT_CONSTANT_SIGMA_V1.md` first.**
+> This document's `Q0` baseline assumes production prices from a constant σ through a
+> normal CDF. **It does not.** The live path runs `run_pricing_v2.py`, which prices from
+> the empirical Monte Carlo distribution and reports a per-player `model_sd`;
+> `pricing_v2.SIGMA` is never referenced on the production path. Every comparison below
+> is therefore against a textbook baseline, **not** against the deployed system, and its
+> gains must not be quoted as gains over production. The measurements of how floors and
+> ceilings scale in the data remain valid.
+
 **Frozen before any scoring.** Committed before the model is fit or evaluated. If a
 result below contradicts the hypothesis, that is the finding and it will be reported
 as such.

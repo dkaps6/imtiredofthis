@@ -1,0 +1,215 @@
+{
+  "bet_grading_blocker": "PRODUCTION_DECISION_GATES_V1.json preserves decision-gate evidence for weeks [1, 2] only; the canonical grader fails closed on the rest because grading a full board without knowing which rows were blocked would overstate the production decision set",
+  "diagnostics": {
+    "board_rows": 11648,
+    "identity_status_counts": {
+      "RESOLVED_GSIS": "11612",
+      "UNRESOLVED_IDENTITY": "36"
+    },
+    "rows_with_actual": 6066,
+    "rows_without_actual": 5582
+  },
+  "fair_prob_calibration": {
+    "brier_market": 0.24907767626870134,
+    "brier_model": 0.28002110900572885,
+    "brier_model_minus_market": 0.030943432737027515,
+    "by_market": {
+      "pass_yards": {
+        "actual": 0.5405405405405406,
+        "brier": 0.23866273464504503,
+        "predicted": 0.4923387387387387,
+        "rows": 111
+      },
+      "rec_yards": {
+        "actual": 0.49056603773584906,
+        "brier": 0.26926249696,
+        "predicted": 0.42952,
+        "rows": 530
+      },
+      "receptions": {
+        "actual": 0.49049429657794674,
+        "brier": 0.27606162382965777,
+        "predicted": 0.39392806083650195,
+        "rows": 526
+      },
+      "rush_rec_yards": {
+        "actual": 0.5333333333333333,
+        "brier": 0.37212045378666675,
+        "predicted": 0.302576,
+        "rows": 120
+      },
+      "rush_yards": {
+        "actual": 0.44014084507042256,
+        "brier": 0.2846817138197183,
+        "predicted": 0.39270999999999995,
+        "rows": 284
+      }
+    },
+    "calibration_curve": [
+      {
+        "actual_over_rate": 0.4473684210526316,
+        "bucket": "(-0.001, 0.1]",
+        "gap": -0.3865242105263158,
+        "mean_predicted": 0.060844210526315785,
+        "rows": 76
+      },
+      {
+        "actual_over_rate": 0.4857142857142857,
+        "bucket": "(0.1, 0.2]",
+        "gap": -0.3296891428571429,
+        "mean_predicted": 0.15602514285714283,
+        "rows": 140
+      },
+      {
+        "actual_over_rate": 0.48582995951417,
+        "bucket": "(0.2, 0.3]",
+        "gap": -0.23244048582995952,
+        "mean_predicted": 0.2533894736842105,
+        "rows": 247
+      },
+      {
+        "actual_over_rate": 0.45454545454545453,
+        "bucket": "(0.3, 0.4]",
+        "gap": -0.10166467532467532,
+        "mean_predicted": 0.3528807792207792,
+        "rows": 308
+      },
+      {
+        "actual_over_rate": 0.4732142857142857,
+        "bucket": "(0.4, 0.5]",
+        "gap": -0.025869642857142883,
+        "mean_predicted": 0.4473446428571428,
+        "rows": 336
+      },
+      {
+        "actual_over_rate": 0.4808510638297872,
+        "bucket": "(0.5, 0.6]",
+        "gap": 0.06770485106382979,
+        "mean_predicted": 0.548555914893617,
+        "rows": 235
+      },
+      {
+        "actual_over_rate": 0.5735294117647058,
+        "bucket": "(0.6, 0.7]",
+        "gap": 0.06863235294117653,
+        "mean_predicted": 0.6421617647058824,
+        "rows": 136
+      },
+      {
+        "actual_over_rate": 0.6,
+        "bucket": "(0.7, 0.8]",
+        "gap": 0.14182600000000012,
+        "mean_predicted": 0.7418260000000001,
+        "rows": 60
+      },
+      {
+        "actual_over_rate": 0.5384615384615384,
+        "bucket": "(0.8, 0.9]",
+        "gap": 0.3054953846153846,
+        "mean_predicted": 0.843956923076923,
+        "rows": 26
+      }
+    ],
+    "overall_actual_over_rate": 0.48822406110757477,
+    "overall_predicted": 0.40569071928707834,
+    "rows": 1571
+  },
+  "model_vs_vegas_accuracy": {
+    "by_market": {
+      "pass_yards": {
+        "frac_model_closer": 0.5405405405405406,
+        "model_mae": 53.27795083021982,
+        "model_minus_vegas_mae": -1.9067338544648607,
+        "rows": 111,
+        "vegas_mae": 55.18468468468468
+      },
+      "rec_yards": {
+        "frac_model_closer": 0.45660377358490567,
+        "model_mae": 21.769451328699443,
+        "model_minus_vegas_mae": 0.6373758570013308,
+        "rows": 530,
+        "vegas_mae": 21.132075471698112
+      },
+      "receptions": {
+        "frac_model_closer": 0.49619771863117873,
+        "model_mae": 1.643993782528219,
+        "model_minus_vegas_mae": 0.06414587378297187,
+        "rows": 526,
+        "vegas_mae": 1.579847908745247
+      },
+      "rush_rec_yards": {
+        "frac_model_closer": 0.4083333333333333,
+        "model_mae": 31.85700411131401,
+        "model_minus_vegas_mae": 4.865337444647341,
+        "rows": 120,
+        "vegas_mae": 26.991666666666667
+      },
+      "rush_yards": {
+        "frac_model_closer": 0.4753521126760563,
+        "model_mae": 19.02864719421757,
+        "model_minus_vegas_mae": 1.1624500111189775,
+        "rows": 284,
+        "vegas_mae": 17.866197183098592
+      }
+    },
+    "by_week": {
+      "1": {
+        "frac_model_closer": 0.4375,
+        "model_mae": 18.07179856571652,
+        "model_minus_vegas_mae": 1.240780047198001,
+        "rows": 432,
+        "vegas_mae": 16.83101851851852
+      },
+      "2": {
+        "frac_model_closer": 0.46859903381642515,
+        "model_mae": 18.30451032682246,
+        "model_minus_vegas_mae": 0.6571673316533762,
+        "rows": 414,
+        "vegas_mae": 17.647342995169083
+      },
+      "6": {
+        "frac_model_closer": 0.49404761904761907,
+        "model_mae": 15.920429996482458,
+        "model_minus_vegas_mae": 0.5722157107681713,
+        "rows": 336,
+        "vegas_mae": 15.348214285714286
+      },
+      "7": {
+        "frac_model_closer": 0.5089974293059126,
+        "model_mae": 17.50393325958427,
+        "model_minus_vegas_mae": 0.18902323387732878,
+        "rows": 389,
+        "vegas_mae": 17.31491002570694
+      }
+    },
+    "overall": {
+      "frac_model_closer": 0.475493316359007,
+      "model_mae": 17.5323862332848,
+      "model_minus_vegas_mae": 0.6835638271740443,
+      "rows": 1571,
+      "vegas_mae": 16.848822406110756
+    }
+  },
+  "note": "sportsbook lines appear here only as a comparison benchmark and as the graded boundary, never as a projection input",
+  "season": 2026,
+  "sportsbook_inputs_used_for_projection": false,
+  "weeks_bet_gradable": [
+    1,
+    2
+  ],
+  "weeks_blocked_from_bet_grading": [
+    6,
+    7
+  ],
+  "weeks_permanently_lost": [
+    3,
+    4,
+    5
+  ],
+  "weeks_with_archived_boards": [
+    1,
+    2,
+    6,
+    7
+  ]
+}

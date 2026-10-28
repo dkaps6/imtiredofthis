@@ -1,6 +1,6 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-28 — V15 — FIRST VALIDATED WIN: PER-TAIL QUANTILES BEAT THE CONSTANT SIGMA / INTEGRATION DESIGN OPEN / CLAUDE ISSUE #535
+## TOP CHECKPOINT — 2026-10-28 — V16 — **CORRECTION: PRODUCTION IS NOT CONSTANT-SIGMA** / LIVE 2026 BACKTEST DONE / CLAUDE ISSUE #535
 
 **Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis. **Current state:** one production fix merged to `main` (`9aa6058c`); next lane identified and not yet started.
 
@@ -12,14 +12,67 @@
 5. Prior deep continuity if needed: `docs/handoffs/NFL_HANDOFF_2026-10-27_V13_RATE_GUARD_PLAYER_ALLOCATION_CONTINUITY.md`; displaced V13 root archived at `docs/handoffs/NFL_HANDOFF_2026-10-28_V13_PRE_V14_ROOT_ARCHIVE.md`.
 6. GitHub Issue https://github.com/dkaps6/imtiredofthis/issues/535 — fetch comments after **6457028486** FIRST. GPT ↔ Claude Code work channel.
 
-**Most important immediate next task:** answer the **integration design question** before any code moves — a per-tail interval gives p20/p80, but `pricing_v2._prob_over` needs a probability for an **arbitrary** sportsbook line, so how are two fitted quantiles turned into a full distribution **without reintroducing a symmetric family**? That is a design decision, not a research one, and it must be posed to the user/GPT before implementation. Then replicate the study for `rush_yards` and `receptions`, which carry the same defect untested.
+**Most important immediate next task:** the dispersion lane's target has **changed**. It is no longer "replace a constant" — the constant was never deployed. It is now **widen and calibrate the Monte Carlo distribution in `run_pricing_v2.py`**, measured by `fair_prob` calibration and Brier against the market on live 2026 data, where production currently scores 0.2800 vs the market's 0.2491. The per-tail quantile work stays useful as a *description* of how floors and ceilings scale, but it is **not** a drop-in replacement and its `Q0` gains must never be quoted as gains over production. Second task: preserve production decision-gate evidence on every live run so weeks 6+ become bet-gradable.
 
 ### NON-NEGOTIABLE USER SCIENCE
 **THE PLAYER SHOULD HAVE THE RULES, NOT THE POSITION HAVE THE PLAYER.** Named-individual projections from identity, injury/state, real opportunity, teammate competition, defense, role, script and market-specific football logic. Positional MAE/RMSE are QA only. **ANOMALIES ARE QUESTIONS, NOT TRENDS.** Maintain promoted Bayesian/ML/State/MC/QB/RB layers; do not scrap prior work.
 
 **NEW, user-stated 2026-10-28 and now evidence-backed:** *"You cannot treat all RBs and all WRs and all QBs and all TEs the same. Positionally sure, as individual players absolutely not."* A generic weight on Drake London and Josh Downs is wrong because their **distributions** differ, not just their means. **Averaged MAE is structurally blind to this** — a model can have every mean right and every floor and ceiling wrong and score identically. Do not use averaged error as the primary metric for a player-level distribution claim; use per-player quantile calibration.
 
-### VALIDATED THIS CHECKPOINT — the first real win
+### ⚠️ READ FIRST — MAJOR CORRECTION, V16
+**Production does NOT price from a constant sigma or a normal CDF.** Full doc:
+`docs/research/PRISM_CORRECTION_PRODUCTION_IS_NOT_CONSTANT_SIGMA_V1.md`.
+
+Real path: `full-slate.yml:573` → `run_pricing_with_full_roster_universe_v3.py` →
+v4/v5/v6 → `...v1.py` → `import scripts.run_pricing_v2 as pricing`, and
+`run_pricing_v2.py:400,410` does `p_over = np.mean(adjusted_outcomes > line)` and
+`model_sd = np.std(adjusted_outcomes)`. **It prices from the empirical Monte Carlo
+distribution.** `run_pricing_v2` imports only `_fair_market_prob` / `_fair_odds` from
+`pricing_v2` and **never references `SIGMA`**. Live W7 board confirms: `model_sd` has
+139 distinct values for `rec_yards` (5.64–33.79), 71 for `rush_yards`, 139 for
+`receptions`. Dispersion **is** player-specific and the distribution is **not** forced
+symmetric.
+
+**This is the rate-scale error repeated one layer over** — a defect located in a module
+the workflow does not call. `tests/test_production_pricing_path_contract.py` (6 tests)
+now pins the real path so it cannot recur. **Before any future claim about "what
+production does", grep the workflow for the entry point it actually runs.**
+
+**What this invalidates:** every `Q0` comparison in all four quantile studies. "42.2% →
+69.9%" is an improvement over a textbook baseline, **not over production**. The
+McLaurin/Wilson "priced identically" claim is **false**.
+`PRISM_PLAYER_DISPERSION_IS_A_CONSTANT_V1` is wrong in its title and premise. All nine
+affected docs carry a correction banner.
+
+**What survives:** the data findings — floor rises 1.7–2.4× slower than ceiling in all
+three markets; centrality→floor `r=+0.620`; per-player volatility weakly persistent
+(`r≈0.25`); the three opponent-side nulls. These were measured from outcomes and say
+nothing about production code.
+
+### LIVE 2026 BACKTEST — weeks 1, 2, 6, 7 (`backtest_2026_live_calibration_v1`)
+**Production's probabilities are severely overconfident.** `fair_prob` calibration,
+1,571 deduped player-market-weeks: predicted 0.061 → **actual 0.447**; predicted 0.844 →
+**actual 0.538**. The realised over-rate is nearly flat (0.45–0.60) across a reported
+0.78-wide range. Brier **model 0.2800 vs market 0.2491**. Overall predicted over-rate
+0.406 vs actual 0.488, so also **biased toward unders**.
+
+**Direction vindicated, mechanism refuted:** distributions too narrow — yes. Because of
+a constant — no. Because **the Monte Carlo is too tight**.
+
+Mean accuracy vs market: overall model MAE 17.53 vs vegas 16.85 (+0.68), closer on
+47.5%. **Beats the market on `pass_yards`** (53.28 vs 55.18, closer 54.1%) — the one
+market with a promoted synthesis. Worst on `rush_rec_yards` (+4.87, closer 40.8%).
+**Improving weekly:** gap +1.24 → +0.66 → +0.57 → **+0.19**; closer 43.8% → **50.9%**.
+
+### OPERATIONAL GAP — fix this on the next live run
+**Bet-level grading is blocked for weeks 6 and 7.**
+`data/market_track_record/PRODUCTION_DECISION_GATES_V1.json` preserves decision-gate
+evidence for **weeks 1–2 only**, so the canonical grader fails closed later — correctly.
+Weeks 3–5 are already permanently lost. **Every live run must preserve gate evidence at
+the same time it archives the board**, or paid boards survive but stay ungradable as a
+betting record.
+
+### SUPERSEDED — was "the first real win" in V15
 **Per-tail quantile fit beats production's constant sigma, on naive data.**
 `PRISM_DIRECT_QUANTILE_{PREREGISTRATION,RESULTS}_V1`, frozen `abe11db5`, scored
 `a2df5060`. Fit 2020–2022, scored **2017–2019 (never inspected)**, 3,992 rows, 184
