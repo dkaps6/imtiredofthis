@@ -271,9 +271,21 @@ lost** to a 7-day retention setting (AGENTS.md §5a).
 **Active, in this order (agreed through #535 comments 6478960995 and 6479098849):**
 **(1) roster/availability EXISTENCE integrity** — Ourlads is the sole existence authority
 (458 → 458 → 458 → 396 → 396; the availability layer never adds a row), so build a union
-existence universe plus a game-day refresh. **(2) team rush-budget reconciliation**, which
-must not run before (1). **(3) Bayesian evidence-dependent shrinkage**, which the auditor
-rules should be evaluated only once the roster/budget contract is coherent.
+existence universe plus a game-day refresh. **(1a) a deterministic identity defect inside (1):**
+`canonicalize_player_name_safe` **does not strip name suffixes**, so nflverse
+`Mike Washington Jr.` (`mikewashingtonjr`) never joins the universe's `Mike Washington`
+(`mikewashington`). 29 of 489 players with 2026 wk1–7 carries/targets (5.9%) keep a suffix
+in their clean key; 4 realised mismatches at W7. **This silently breaks grading joins too**,
+so treat it as a data-integrity fix, not cosmetics.
+**(2) team rush-budget reconciliation**, which must not run before (1).
+**(3) WR/TE existence-ceiling diagnostic — DONE**, see
+`docs/research/PRISM_EXISTENCE_CEILING_IS_SYSTEM_WIDE_V1.md`: the ceiling is **system-wide**
+(absent share 4.16% of targets vs 7.41% of carries) but **materiality is RB-concentrated** —
+the worst rushing absence was a 15-carry lead back, the worst receiving absence 5 targets.
+14/17 absent receivers were `ACT` in an earlier week, so the dominant class is deterministic
+provider omission, not roster uncertainty. **Do not retune target shares from it.**
+**(4) Bayesian evidence-dependent shrinkage**, which the auditor rules should be evaluated
+only once the roster/budget contract is coherent.
 
 **Standing capability gap — NOT a parallel lane, do not open it in competition with the
 above:** we use **no NextGen Stats at all**. One reference repo-wide, Migration 75,

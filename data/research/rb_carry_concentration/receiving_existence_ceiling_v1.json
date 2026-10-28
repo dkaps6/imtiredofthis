@@ -1,0 +1,80 @@
+{
+  "version": "RECEIVING_EXISTENCE_CEILING_V1",
+  "requested_by": "GPT audit #535 comment 6479393261 item C",
+  "season": 2026,
+  "week": 7,
+  "teams": 28,
+  "players_with_targets": 217,
+  "match_breakdown": {
+    "SUFFIX_ONLY_JOIN_GAP": {
+      "players": 4,
+      "targets": 8.0,
+      "receptions": 5.0,
+      "yards": 115.0
+    },
+    "absent": {
+      "players": 17,
+      "targets": 34.0,
+      "receptions": 23.0,
+      "yards": 209.0
+    },
+    "modeled": {
+      "players": 196,
+      "targets": 775.0,
+      "receptions": 529.0,
+      "yards": 6031.0
+    }
+  },
+  "absent_target_share": 0.0416156670746634,
+  "suffix_gap_target_share": 0.009791921664626682,
+  "absent_by_position": {
+    "RB": {
+      "players": 6.0,
+      "targets": 13.0,
+      "receptions": 10.0,
+      "yards": 96.0
+    },
+    "WR": {
+      "players": 5.0,
+      "targets": 11.0,
+      "receptions": 7.0,
+      "yards": 71.0
+    },
+    "TE": {
+      "players": 6.0,
+      "targets": 10.0,
+      "receptions": 6.0,
+      "yards": 42.0
+    }
+  },
+  "absent_by_state": {
+    "PROVIDER_OMISSION_was_active_earlier": {
+      "players": 14.0,
+      "targets": 28.0
+    },
+    "LATE_ADDITION_no_prior_week": {
+      "players": 1.0,
+      "targets": 4.0
+    },
+    "PRACTICE_SQUAD_ELEVATION": {
+      "players": 1.0,
+      "targets": 1.0
+    },
+    "RETURN_FROM_RESERVE": {
+      "players": 1.0,
+      "targets": 1.0
+    }
+  },
+  "team_outside_target_frac": {
+    "mean": 0.04406,
+    "median": 0.0,
+    "p90": 0.09375,
+    "p95": 0.19479,
+    "max": 0.30303,
+    "teams_zero": 15,
+    "teams": 27
+  },
+  "timing_caveat": "weekly roster asset is mutable; labels are evidence of what was knowable, not a contemporaneous Thursday snapshot",
+  "retuned_anything": false,
+  "sportsbook_inputs_used": false
+}
