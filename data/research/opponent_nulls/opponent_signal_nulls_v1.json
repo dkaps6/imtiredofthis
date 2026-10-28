@@ -1,0 +1,73 @@
+{
+  "known_limitation": "a defense is treated as a stable team-season object; weekly personnel/injury change is untested and is a plausible mechanism for the shape null",
+  "null_1_player_matchup_sensitivity": {
+    "cross_season_carry": {
+      "2023->2024": {
+        "n": 44,
+        "r": 0.12608855514817194
+      },
+      "2024->2025": {
+        "n": 50,
+        "r": -0.044420046087926934
+      }
+    },
+    "observed_over_null": 1.0135298895404876,
+    "observed_spread": 51.26069854497899,
+    "permutation_null_ci95": [
+      43.64350793435587,
+      56.99931216466854
+    ],
+    "permutation_null_mean": 50.57640536700844,
+    "permutation_p": 0.395,
+    "players": 254,
+    "verdict": "INDISTINGUISHABLE_FROM_NOISE"
+  },
+  "null_2_defense_exploitable_shape": {
+    "any_window_negative": true,
+    "by_window": {
+      "2023->2024": {
+        "n": 32,
+        "r_level": -0.15617997831949287,
+        "r_shape": 0.04508430381784531
+      },
+      "2023_disjoint_halves": {
+        "n": 32,
+        "r_level": 0.371471736894225,
+        "r_shape": 0.04126499792912045
+      },
+      "2024->2025": {
+        "n": 32,
+        "r_level": 0.19114150619193881,
+        "r_shape": 0.2566860479520296
+      },
+      "2024_disjoint_halves": {
+        "n": 32,
+        "r_level": -0.06102759542535169,
+        "r_shape": -0.2947851961933327
+      },
+      "2025_disjoint_halves": {
+        "n": 32,
+        "r_level": 0.2220270474944372,
+        "r_shape": 0.034434852926824334
+      }
+    },
+    "mean_r_shape": 0.016537001286497398,
+    "verdict": "NOT_PERSISTENT"
+  },
+  "null_3_game_script_plays": {
+    "disjoint_half_persistence_r": 0.12991293002414722,
+    "holdout_team_weeks": 644,
+    "league_constant_mae_plays": 6.73533274179237,
+    "own_prior_beats_constant": false,
+    "own_prior_mae_plays": 6.847299969699038,
+    "realized_plays_sd": 8.552573209587646,
+    "verdict": "NOT_FORECASTABLE"
+  },
+  "seasons": [
+    2023,
+    2024,
+    2025
+  ],
+  "sportsbook_inputs_used": false,
+  "what_survives": "defensive QUALITY in EPA terms is forecastable and is NOT nulled here"
+}
