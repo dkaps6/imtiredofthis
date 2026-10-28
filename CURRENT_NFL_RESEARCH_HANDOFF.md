@@ -251,7 +251,29 @@ lost** to a 7-day retention setting (AGENTS.md §5a).
    merge.**
 
 ### REMAINING AUTHORIZED RESEARCH QUEUE
-**Active:** Bayesian RB rush-share over-shrink (the only live lead). Queued, not approved:
+**Active, in this order (agreed with the auditor, #535 comment 6478960995):**
+**(1) roster/availability EXISTENCE integrity** — Ourlads is the sole existence authority
+(458 → 458 → 458 → 396 → 396; the availability layer never adds a row), so build a union
+existence universe plus a game-day refresh. **(2) team rush-budget reconciliation**, which
+must not run before (1). **(3) Bayesian evidence-dependent shrinkage**, which the auditor
+rules should be evaluated only once the roster/budget contract is coherent.
+
+**Standing capability gap — NOT a parallel lane, do not open it in competition with the
+above:** we use **no NextGen Stats at all**. One reference repo-wide, Migration 75,
+explicitly `production_actionable = False`; zero NGS on the production path.
+`load_nextgen_stats` **works for 2026 weeks 1–7** (rushing/passing 253 rows each, receiving
+617) and carries `expected_rush_yards`, `rush_yards_over_expected`, `efficiency`,
+**`percent_attempts_gte_eight_defenders`**, `avg_separation`, `avg_yac_above_expectation`.
+`PRISM_STRANDED_SIGNAL_DISPERSION_PREREGISTRATION_V1.md` wrongly recorded the 2026 NGS feed
+as unavailable — it conflated NGS with **participation**, which genuinely does fail for
+2026; that doc now carries a correction banner. **Target-week NGS rows are OUTCOMES**, so
+any use must be strictly-prior-weeks-only and walk-forward. Open questions put to the
+auditor (#535 comment 6479259425): is NGS publication timing pregame-safe for a Thursday
+run, and does M75's QB-efficiency null already close RB rushing efficiency and per-player
+box counts? Separately, `nfl_data_py` is a **fallback only** (5 files, every reference an
+`except` branch) behind `nflreadpy` (55 files), and is what pins `pandas<2.0`.
+
+Queued, not approved:
 whether the same over-shrink affects WR/TE target shares; the `_normalise_nonnegative`
 scale-discard as a deliberate ensemble change; preserving decision-gate evidence so weeks
 6+ become bet-gradable; completing the wk08 replay input set so parity becomes possible;
