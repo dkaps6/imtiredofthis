@@ -16,7 +16,22 @@ wrong**. Verified directly:
   (`defenders_in_box`, `defense_man_zone_type`, `defense_personnel`).
 
 So the correct boundary is: **2026 game data is available; the 2026
-personnel/NGS feed is not.** Gate prevalence for box/coverage genuinely cannot
+participation feed is not.**
+
+> ⚠️ **CORRECTION (2026-10-28):** the original wording here said "the 2026
+> personnel/**NGS** feed is not" available. That **conflated two different nflverse
+> endpoints and is wrong about NGS.** `load_participation(seasons=[2026])` does fail
+> (*"Season must be between 2016 and 2025"*), which is why `defenders_in_box`,
+> `defense_man_zone_type` and `defense_personnel` are unavailable — that part stands.
+> But **`load_nextgen_stats` works for 2026 weeks 1–7**: passing 253 rows, rushing 253,
+> receiving 617. The rushing feed carries `expected_rush_yards`,
+> `rush_yards_over_expected`, `efficiency` and **`percent_attempts_gte_eight_defenders`**
+> (a per-player stacked-box measure), and the receiving feed carries `avg_separation`,
+> `avg_cushion` and `avg_yac_above_expectation`. NGS is used **nowhere** in this
+> repository outside Migration 75, which is explicitly marked
+> `production_actionable = False`. Any future use must be strictly-prior-weeks-only:
+> target-week NGS rows are **outcomes**. See issue #535 comment 6479259425.
+> Gate prevalence for box/coverage genuinely cannot
 be measured on 2026. But every *stranded* opponent signal the cleared
 transmission trace identified **is** computable for 2026 weeks 1–7:
 `def_rush_epa`, `def_pass_epa`, `explosive_play_rate_allowed`,
