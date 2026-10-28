@@ -148,13 +148,33 @@ applies to the `PERCENTY_COLS` fix rather than to the guard.
    canonical artifact and should not carry percent-scaled rates — but that is an
    artifact-correctness argument, not the gate fix, and it must not be presented as
    one.
-2. **The gate fix is four entries in `PERCENTY_COLS`.** Not yet written, not merged.
+2. **The gate fix is four entries in `PERCENTY_COLS`. SHIPPED.**
+   `coverage_man_rate`, `coverage_zone_rate`, `middle_open_rate` and
+   `middle_closed_rate` were added to the allowlist at `scripts/make_team_form.py:331`,
+   so Sharp's percents are converted at ingest exactly as the box rates already were.
+   `middle_open_rate` now reaches the gate as a fraction and the gate discriminates
+   (13 of 32) instead of firing for every team. Guarded by
+   `tests/test_make_team_form_percenty_rate_scale.py` (10 tests), including idempotence
+   so a provider that switches to fractions is not re-divided.
 3. Its measured W7 effect is TE-only, −9.09% target share, 51 players, 18 teams,
    under the counterfactual caveats above.
-4. Still open before any merge recommendation: entitlement-stage redistribution, and
-   whether a repaired fixture (or a live no-odds dry run) can establish true baseline
-   parity.
-5. `PRISM_SLOT_ROLE_UNREACHABLE_V1` stays a **separate** finding. Nothing here fixes
+4. **Why that is an improvement, not merely a correctness fix.** Measured on 1,072
+   2025 TE games, player-relative to each TE's own mean, the zone gate's empirical
+   support is an implied multiplier of **1.035** (diff +0.034 ± 0.091 at 95% —
+   **not significant**). WR 0.991 and RB 1.059 are likewise not significant.
+   Production applies **1.265** to TEs when both gates fire. The supported value is
+   ~1.00–1.05, so moving 18 of 28 slate teams from 1.265 to 1.15 reduces the error
+   even though 1.15 remains high.
+5. **Separate open item, better supported than the fix itself:** these multipliers are
+   overstated by roughly **5–8×** against what 2025 supports. The quartile trend by
+   opponent zone rate (0.977 / 0.961 / 1.010 / 1.052) suggests at most a ~5% effect at
+   the extreme. They carry **no documented promotion or validation** — the only
+   references in `docs/` are this research line. Shrinking them toward the supported
+   value is a parameter change with direct empirical backing and requires its own
+   preregistered validation. Deliberately **not** bundled with this fix.
+6. Still open: entitlement-stage redistribution, and whether a repaired fixture (or a
+   live no-odds dry run) can establish true baseline parity.
+7. `PRISM_SLOT_ROLE_UNREACHABLE_V1` stays a **separate** finding. Nothing here fixes
    role routing, and the `middle_open` gate's `slot_target_mult` branch stays dead.
 
 ## 4. What this says about the earlier "19/32 false fires" figure
