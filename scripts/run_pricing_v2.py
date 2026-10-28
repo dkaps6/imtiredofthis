@@ -224,7 +224,7 @@ def price(season: int) -> pd.DataFrame:
             )
 
     sims = simulate(df)
-    mc_dispersion_calibration = load_mc_dispersion_calibration()
+    mc_dispersion_calibration = load_mc_dispersion_calibration(live_pricing=True)
     print(f"[pricing] mc dispersion calibration: state="
           f"{mc_dispersion_calibration.get('state')} "
           f"markets={sorted((mc_dispersion_calibration.get('k') or {}).keys())}")

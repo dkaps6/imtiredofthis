@@ -130,3 +130,26 @@ def test_main_refuses_to_score_without_the_preregistration(monkeypatch):
     monkeypatch.setattr(Path, "exists", lambda self: False)
     with pytest.raises(RuntimeError, match="preregistration missing"):
         Q.main()
+
+
+def test_mc_dispersion_rule3_enforces_no_overshoot():
+    """Regression for the precedence bug GPT audit 6472971619 section 5 found.
+
+    `A and B or A` evaluates as `(A and B) or A` == A, which silently dropped the
+    preregistered no-overshoot condition from rule 3.
+    """
+    src = Path("scripts/research/validate_mc_dispersion_recalibration_v1.py").read_text(encoding="utf-8")
+    assert "no_overshoot = (z_wide >= 1.0 - 1e-9) if z_base > 1.0 else (z_wide <= 1.0 + 1e-9)" in src
+
+    def rule3(z_base, z_wide):
+        closer = abs(z_wide - 1.0) < abs(z_base - 1.0)
+        no_overshoot = (z_wide >= 1.0 - 1e-9) if z_base > 1.0 else (z_wide <= 1.0 + 1e-9)
+        return bool(closer and no_overshoot)
+
+    # baseline ABOVE 1.0: approaching from above passes, dropping below it does not
+    assert rule3(1.767, 1.186) is True
+    assert rule3(1.767, 0.40) is False, "undershoot past 1.0 must be rejected"
+    assert rule3(1.767, 1.90) is False, "moving away from 1.0 must be rejected"
+    # baseline BELOW 1.0: the guarded side flips
+    assert rule3(0.60, 0.90) is True
+    assert rule3(0.60, 1.50) is False, "overshoot past 1.0 must be rejected"

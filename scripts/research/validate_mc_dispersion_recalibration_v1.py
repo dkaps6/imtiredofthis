@@ -219,8 +219,18 @@ def main() -> int:
 
     r1 = wide_m["brier"] < base_m["brier"]
     r2 = wide_m["mean_abs_calibration_gap"] < base_m["mean_abs_calibration_gap"]
-    r3 = abs(z_wide - 1.0) < abs(z_base - 1.0) and z_wide <= 1.0 + 1e-9 or \
-         (abs(z_wide - 1.0) < abs(z_base - 1.0))
+    # Frozen rule 3: move toward 1.0 AND do not overshoot past it.
+    # The first implementation was `A and B or A`, which Python evaluates as
+    # `(A and B) or A` == A, silently dropping the no-overshoot condition.
+    # Frozen rule 3: move toward 1.0 AND do not cross to the other side of it.
+    # Two bugs were found here. First, `A and B or A` evaluates as `(A and B) or A` == A,
+    # which dropped the no-overshoot condition entirely. Second, the replacement hard-coded
+    # `z_wide <= 1.0`, which is backwards when the baseline sits ABOVE 1.0 (it is 1.767):
+    # that permits exactly the overshoot the rule exists to block. The side to guard
+    # depends on which side the baseline starts from.
+    closer = abs(z_wide - 1.0) < abs(z_base - 1.0)
+    no_overshoot = (z_wide >= 1.0 - 1e-9) if z_base > 1.0 else (z_wide <= 1.0 + 1e-9)
+    r3 = bool(closer and no_overshoot)
     worst = float(mc["rel_shift"].max()) if len(mc) else 0.0
     r4 = worst <= MEAN_TOLERANCE
 

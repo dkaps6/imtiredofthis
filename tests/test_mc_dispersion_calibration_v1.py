@@ -86,15 +86,17 @@ def test_out_of_range_k_is_rejected_not_applied(tmp_path):
     p.write_text(json.dumps({"version": M.VERSION, "markets": {
         "rec_yards": {"k": 1.64}, "rush_yards": {"k": 99.0}, "receptions": {"k": -1.0}}}))
     cal = M.load_calibration(p)
-    assert set(cal["k"]) == {"rec_yards"}
+    # no promotion_state in the fixture -> treated as a candidate, so active k is empty
+    assert cal["k"] == {} and set(cal["k_candidate"]) == {"rec_yards"}
     assert set(cal["rejected"]) == {"rush_yards", "receptions"}
 
 
 def test_shipped_artifact_is_loadable_and_in_range():
     cal = M.load_calibration()
-    assert cal["state"] == "current", cal.get("reason")
-    assert cal["k"], "no markets calibrated"
-    for market, k in cal["k"].items():
+    assert cal["state"] in ("current", "candidate_not_promoted"), cal.get("reason")
+    ks = cal["k"] or cal.get("k_candidate") or {}
+    assert ks, "no markets calibrated"
+    for market, k in ks.items():
         assert M.MIN_K <= k <= M.MAX_K, f"{market} k={k} out of range"
     assert not cal.get("rejected"), f"shipped artifact has rejected entries: {cal['rejected']}"
 
@@ -113,3 +115,47 @@ def test_production_pricer_applies_it_before_integer_alignment():
 def test_audit_columns_reach_the_priced_row():
     src = Path("scripts/run_pricing_v2.py").read_text(encoding="utf-8")
     assert "**mc_dispersion_meta," in src, "audit columns are not emitted on the priced row"
+
+
+# --- added after GPT audit 6472971619 ---
+
+def test_candidate_artifact_is_inert_in_production():
+    """Until the parity replay certifies k, the calibration must not change a price."""
+    cal = M.load_calibration(live_pricing=True)
+    assert cal["promotion_state"] == M.CANDIDATE_STATE, "artifact should still be a candidate"
+    assert cal["k"] == {}, "a candidate must expose no active multipliers"
+    assert cal["k_candidate"], "candidate k should still be visible for audit"
+    d = _draws(seed=11)
+    out, meta = M.apply_dispersion_calibration(d, "rec_yards", cal)
+    assert np.array_equal(out, d)
+    assert meta["mc_dispersion_applied"] == 0
+    assert meta["mc_dispersion_state"] == "candidate_not_promoted"
+
+
+def test_promoted_artifact_applies(tmp_path):
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps({"version": M.VERSION, "promotion_state": M.PROMOTED_STATE,
+                             "markets": {"rec_yards": {"k": 1.64}}}))
+    cal = M.load_calibration(p, live_pricing=True)
+    assert cal["k"] == {"rec_yards": 1.64}
+    d = _draws(seed=12)
+    out, meta = M.apply_dispersion_calibration(d, "rec_yards", cal)
+    assert meta["mc_dispersion_applied"] == 1
+    assert out.mean() == pytest.approx(d.mean(), rel=1e-12)
+
+
+def test_promoted_but_unusable_artifact_FAILS_CLOSED_for_live_pricing(tmp_path):
+    """AGENTS.md section 4: a required production artifact must not silently revert."""
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps({"version": M.VERSION, "promotion_state": M.PROMOTED_STATE,
+                             "markets": {"rec_yards": {"k": 99.0}}}))   # all rejected
+    with pytest.raises(M.DispersionCalibrationUnavailable):
+        M.load_calibration(p, live_pricing=True)
+    # research use must still be able to inspect it without raising
+    cal = M.load_calibration(p, live_pricing=False)
+    assert cal["k"] == {} and cal["rejected"]
+
+
+def test_production_pricer_loads_with_live_pricing_true():
+    src = Path("scripts/run_pricing_v2.py").read_text(encoding="utf-8")
+    assert "load_mc_dispersion_calibration(live_pricing=True)" in src

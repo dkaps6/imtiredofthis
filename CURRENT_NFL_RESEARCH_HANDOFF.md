@@ -1,18 +1,18 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-28 — V16 — **CORRECTION: PRODUCTION IS NOT CONSTANT-SIGMA** / LIVE 2026 BACKTEST DONE / CLAUDE ISSUE #535
+## TOP CHECKPOINT — 2026-10-28 — V17 — **PRODUCTION IS EMPIRICAL-MC, NOT CONSTANT-SIGMA** / MC CALIBRATION SHIPPED BUT **INERT PENDING PARITY REPLAY** / CLAUDE ISSUE #535
 
 **Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis. **Current state:** one production fix merged to `main` (`9aa6058c`); next lane identified and not yet started.
 
 **Read in this exact order**:
 1. AGENTS.md (canonical 2026 operating contract, player-first first principle).
-2. **ONLY THIS NEWEST ACTIVE TOP V14**. Do not recursively read prior V2–V13 checkpoints.
+2. **ONLY THIS NEWEST ACTIVE TOP V17**. Do not recursively read prior V2–V16 checkpoints.
 3. `docs/research/PRISM_PLAYER_DISPERSION_IS_A_CONSTANT_V1.md` — the active lane.
 4. `docs/research/PRISM_RATE_SCALE_PATH_ATTRIBUTION_V1.md` — what shipped and why.
 5. Prior deep continuity if needed: `docs/handoffs/NFL_HANDOFF_2026-10-27_V13_RATE_GUARD_PLAYER_ALLOCATION_CONTINUITY.md`; displaced V13 root archived at `docs/handoffs/NFL_HANDOFF_2026-10-28_V13_PRE_V14_ROOT_ARCHIVE.md`.
 6. GitHub Issue https://github.com/dkaps6/imtiredofthis/issues/535 — fetch comments after **6457028486** FIRST. GPT ↔ Claude Code work channel.
 
-**Most important immediate next task:** the dispersion lane's target has **changed**. It is no longer "replace a constant" — the constant was never deployed. It is now **widen and calibrate the Monte Carlo distribution in `run_pricing_v2.py`**, measured by `fair_prob` calibration and Brier against the market on live 2026 data, where production currently scores 0.2800 vs the market's 0.2491. The per-tail quantile work stays useful as a *description* of how floors and ceilings scale, but it is **not** a drop-in replacement and its `Q0` gains must never be quoted as gains over production. Second task: preserve production decision-gate evidence on every live run so weeks 6+ become bet-gradable.
+**Most important immediate next task:** build the **exact production-path baseline-parity replay** for week 7 that GPT audit 6472971619 requires, so `k` can move from `CANDIDATE_PENDING_PARITY_REPLAY` to `PROMOTED`. Parity on archived `model_proj` / `model_sd` / `p_over` must be demonstrated **before** any treatment result is read, and `k` must not be retuned on week 7. Until then the calibration is inert and production remains under-dispersed — that is the accepted cost of not promoting on a counterfactual. Second task: preserve production decision-gate evidence on every live run so weeks 6+ become bet-gradable.
 
 ### NON-NEGOTIABLE USER SCIENCE
 **THE PLAYER SHOULD HAVE THE RULES, NOT THE POSITION HAVE THE PLAYER.** Named-individual projections from identity, injury/state, real opportunity, teammate competition, defense, role, script and market-specific football logic. Positional MAE/RMSE are QA only. **ANOMALIES ARE QUESTIONS, NOT TRENDS.** Maintain promoted Bayesian/ML/State/MC/QB/RB layers; do not scrap prior work.
@@ -111,7 +111,7 @@ tests, explicit user authorisation, and the design answer above.
 - **The previously proposed guard `ab29a096` was OFF-PATH and is NOT the gate fix.** `simulation_rules` imports `load_model_contexts` from `context_bridge` **(v1)**, which reads `team_form.csv` + `cb_coverage_team.csv` and **never** reads `team_context_v3.csv`; `apply_rules_to_metrics` also discards the teams dict (`_, players = load_model_contexts()`) and uses the TeamContext baked into each PlayerContext. The guard landed only as defense-in-depth at the artifact boundary; it divides only when `1.0 < v <= 100.0` so it cannot double-convert. **Do not describe it as the gate fix.**
 
 ### RESEARCH CURRENT STATUS — NEW FINDINGS
-- **THE ACTIVE LANE. Dispersion is a per-market constant.** `scripts/pricing_v2.py:244` → `sigma = SIGMA[market]` (`rec_yards` **26.0**) with a **normal** CDF, so every player's floor and ceiling are equidistant from his mean and **no player property enters dispersion at all**. Cost: realized per-player SD spans **10.0–53.8**; 29 of 121 receivers >30% under-dispersed. McLaurin (mean 58.2, SD 19.0) and Michael Wilson (mean 59.2, SD 51.5) are **1 yard of mean apart, 2.7× apart in dispersion, priced identically**; actual floors 46.6 vs 15.2. Bias is **systematic**: production over-disperses role players (floor −4.3, ceiling +7.8) and **compresses the stars** (floor +6.1, ceiling −4.7). This is the worst place to be wrong because floor/ceiling *are* the over/under.
+- **RETRACTED — do NOT cite.** An earlier checkpoint claimed dispersion is a per-market constant at `pricing_v2.py:244`. **That module is not on the production path.** See the correction block above and `docs/research/PRISM_CORRECTION_PRODUCTION_IS_NOT_CONSTANT_SIGMA_V1.md`. The McLaurin/Wilson "priced identically" illustration is **false** for live boards.
 - **Centrality buys a floor (user hypothesis CONFIRMED).** Floor as × of own mean: 0.295 / 0.432 / 0.554 across centrality terciles. `corr(centrality, floor_ratio)=+0.620`; `corr(centrality, rel. volatility)=−0.656`. London 0.57× vs Downs 0.37× with near-identical ceiling ratios (1.52 vs 1.53).
 - **Honest limit on the fix:** per-player volatility is real but **weak** — positive in 5/5 persistence tests (disjoint halves 2023/2024/2025 + two cross-season pairs) at `r(SD)=+0.15..+0.57`, far below the mean's `r=+0.59..+0.74` and unstable between years. **A player's own measured SD must NOT be used raw** (Wilson's 51.5 is mostly noise on 15 games). What is reliable: SD rises monotonically with the mean (21.7/28.3/35.9) and the mean is strongly persistent → use **projected mean + role centrality**. Relationship is **sublinear** (CV 0.79/0.70/0.58), so `sigma = k·mu` is wrong; needs an intercept.
 - **Matchup multipliers are overstated ~5–8× and carry NO documented promotion.** 1,072 2025 TE games, player-relative to own mean: zone gate implied multiplier **1.035** (diff +0.034 ± 0.091, **not significant**); WR 0.991, RB 1.059, also not significant. Production applies **1.265** to TEs when both gates fire. Quartile trend 0.977/0.961/1.010/1.052 suggests ≤~5% at the extreme. Only `docs/` references are this research line. Shrinking them is better-supported than the shipped fix but needs its own preregistration. **Not bundled.**
@@ -125,14 +125,57 @@ tests, explicit user authorisation, and the design answer above.
 Walker Week-7 exact case **CLEARED, never redo**. Opponent transmission trace cleared. JSN/Kupp/Barner role trace cleared (Kupp's −28% is M38 hierarchy, NOT opponent). 2025 gate prevalence proxy descriptive-only. 2026 PBP exists; 2026 nflverse participation (`defenders_in_box`, `defense_man_zone_type`) **unavailable** — 2025 is the last season inside the participation window. `middle_closed_rate` is consumed by nothing. Real W7 gate state: `wr1_target_mult` = **1.0 on all 396 rows**, `rules_pass_rate` = **0.57 on all 1,412 rows**. **REPLAY BLOCKER** stands: `replay-paid-full-slate-artifact-once.yml` is pinned to an expired Week-5 artifact and restores prebuilt context; do not blindly repoint it. The W7 fixture is a **column subset** (`usecols=keep`) missing `neutral_pace_last5` and `plays_est`, so it **cannot** establish absolute baseline parity — `rules_plays_est` differs from archive by a per-team constant (within-team std exactly 0.0 across 28 teams).
 
 ### NOW-SETTLED DISPERSION FACTS (do not re-derive)
-Production `pricing_v2.py:244` is `sigma = SIGMA[market]` (`rec_yards` **26.0**) with a
-normal CDF; origin predates available git history. Its intervals contain **50%** of
-outcomes against a **60%** target. A single mean-scaled sigma fixes the floor for 77%
-of players but breaks the ceiling for 69% — a symmetric family **cannot** calibrate
-both tails. A lognormal matched on (mean, sigma) gives the right asymmetry direction
-but narrows the central interval and scores worse. **Per-tail direct fitting is the
-answer; sigma-and-a-family is not.** A player's own measured SD must **not** be used
-raw (r≈0.25 persistence).
+Production prices from the **empirical Monte Carlo distribution**
+(`run_pricing_v2.py:400` `p_over = np.mean(adjusted_outcomes > line)`), with
+`model_sd = np.std(adjusted_outcomes)` as a per-player diagnostic. **There is no constant
+sigma and no normal CDF on the production path.**
+
+Those simulated distributions are **too narrow**. On live 2026 boards
+`sd((actual − model_proj) / model_sd)` is **1.20–1.84** by market where a calibrated model
+gives 1.0, and `fair_prob` is correspondingly overconfident: 0.061 → actual **0.447**,
+0.844 → actual **0.538**, Brier **0.2800** vs the market's **0.2491**, and biased toward
+unders (predicted 0.406 vs actual 0.488).
+
+The named-but-unproven cause: `simulation_v2.simulate()` draws outcome noise conditional
+on **point-estimate** `ypt` / `ypc` / `catch_rate` / target share, with no sampling of
+their own estimation uncertainty. The magnitude is established; the mechanism is not.
+
+Data-side findings that survive the correction (measured from outcomes, not code): a
+player's floor rises **1.7–2.4× more slowly** than his ceiling in all three markets;
+centrality → floor-share `r = +0.620` and loads more on the ceiling; per-player volatility
+is weakly persistent (`r ≈ 0.25`, positive 5/5).
+
+### MC DISPERSION CALIBRATION — SHIPPED BUT **INERT**, PENDING PARITY REPLAY
+`b34f85aa` added a mean-preserving dispersion scale to `run_pricing_v2.py`, applied after
+the football mean is aligned and before count alignment. **GPT audit 6472971619 blocked
+promotion of `k`** and the block is accepted: the week-7 validation recalibrated **raw
+`simulation_v2` draws**, not the distribution production actually prices — it bypassed the
+V3/V6/V5/V1 wrapper chain, QB attempt conversion, ensemble mean construction, M89/M90
+synthesis, the `target_mean / mc_proj` mean alignment and `align_prealigned_outcomes`. The
+reported Brier **0.2713 → 0.2555**, gap 0.1692 → 0.0935 and sd(z) 1.767 → 1.186 are a
+**raw-simulator counterfactual**.
+
+`data/mc_dispersion_calibration_v1.json` therefore carries
+`promotion_state = CANDIDATE_PENDING_PARITY_REPLAY`, and the loader **drops every
+multiplier** while it is a candidate: the transform is labelled on each row and changes
+**no price**. Once promoted, a missing or invalid artifact **fails closed** for live
+pricing (`load_calibration(live_pricing=True)`), rather than silently reverting the board
+to the under-dispersed distribution.
+
+Two implementation defects the audit and the tests caught, both fixed with regressions:
+rule 3 was written `A and B or A`, which Python collapses to `A`, dropping the
+no-overshoot condition; the first replacement then hard-coded `z_wide <= 1.0`, which is
+backwards when the baseline sits **above** 1.0 and permits the very overshoot it guards.
+Rule 3 is now side-aware.
+
+**To promote `k`:** build an isolated W7 replay through the exact production distribution
+path up to the point immediately before `p_over`, calibration OFF vs ON as the only
+treatment, and establish **baseline parity first** — archived `model_proj`, `model_sd` and
+`p_over` must reproduce per eligible row, with unreproducible rows accounted for
+explicitly. Same seed, same sims, real wrapper authority, QB synthesis/attempt semantics
+and count alignment included, no paid odds. **If parity cannot be established from the
+archived fixture, fail closed and keep the evidence labelled counterfactual.** Do not
+retune `k` on week 7.
 
 ### MUST-PASS ACCEPTANCE FOR ANY DISPERSION MERGE
 1. **Preregister and freeze before scoring**: the `sigma(projected_mean, centrality)` form, eligibility thresholds, the held-back data, and the decision rule. Commit the preregistration before any result exists.

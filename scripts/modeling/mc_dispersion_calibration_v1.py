@@ -31,17 +31,36 @@ CALIBRATION_PATH = Path("data/mc_dispersion_calibration_v1.json")
 
 # A market with no calibrated k is left untouched at exactly this value.
 NEUTRAL_K = 1.0
+
+# Promotion gate. While the artifact is a CANDIDATE the calibration is inert in
+# production: it is labelled on every row but never changes a price. Flip the artifact's
+# `promotion_state` to "PROMOTED" only after an exact production-path baseline-parity
+# replay certifies k (GPT audit 6472971619, section 3).
+PROMOTED_STATE = "PROMOTED"
+CANDIDATE_STATE = "CANDIDATE_PENDING_PARITY_REPLAY"
+
+# Once promoted, a missing or invalid artifact must FAIL CLOSED rather than silently
+# reverting live pricing to the known under-dispersed distribution (AGENTS.md section 4:
+# required production model artifacts fail closed). While the artifact is a candidate,
+# absence is harmless because the calibration is inert anyway.
+class DispersionCalibrationUnavailable(RuntimeError):
+    """Raised when a PROMOTED calibration cannot be loaded for live pricing."""
 # Guard against a corrupted artifact silently distorting the board.
 MIN_K, MAX_K = 0.5, 4.0
 
 
-def load_calibration(path: Path | None = None) -> dict:
-    """Load k per market. Fail SOFT but VISIBLE: a missing artifact degrades to today's
-    behaviour (k=1.0 everywhere) with an explicit state, rather than failing the slate.
+def load_calibration(path: Path | None = None, *, live_pricing: bool = False) -> dict:
+    """Load k per market.
+
+    `live_pricing=True` is the production call. If the artifact says it is PROMOTED but
+    cannot be loaded or validated, this raises rather than silently reverting the board
+    to the known under-dispersed distribution. A CANDIDATE artifact never raises: the
+    calibration is inert, so its absence changes nothing.
     """
     p = Path(path) if path is not None else CALIBRATION_PATH
     if not p.exists():
         return {"state": "unavailable", "version": VERSION, "k": {},
+                "promotion_state": None,
                 "reason": f"{p.as_posix()} not found"}
     try:
         raw = json.loads(p.read_text(encoding="utf-8"))
@@ -63,9 +82,21 @@ def load_calibration(path: Path | None = None) -> dict:
             rejected[str(market)] = f"k={k} outside [{MIN_K}, {MAX_K}]"
             continue
         out[str(market)] = k
-    return {"state": "current", "version": VERSION, "k": out, "rejected": rejected,
-            "source": p.as_posix(),
-            "derived_from_weeks": (raw.get("derivation") or {}).get("derived_from_weeks")}
+    promotion_state = str(raw.get("promotion_state") or CANDIDATE_STATE)
+    cal = {"state": "current", "version": VERSION, "k": out, "rejected": rejected,
+           "source": p.as_posix(), "promotion_state": promotion_state,
+           "derived_from_weeks": (raw.get("derivation") or {}).get("derived_from_weeks")}
+    if promotion_state != PROMOTED_STATE:
+        # inert: keep the labels, drop the multipliers
+        cal["k_candidate"] = out
+        cal["k"] = {}
+        cal["state"] = "candidate_not_promoted"
+    if live_pricing and promotion_state == PROMOTED_STATE and not out:
+        raise DispersionCalibrationUnavailable(
+            f"{p.as_posix()} is PROMOTED but yielded no usable k "
+            f"(rejected={rejected}); refusing to price with the uncalibrated distribution"
+        )
+    return cal
 
 
 def apply_dispersion_calibration(draws, market: str, calibration: dict | None):
