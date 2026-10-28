@@ -39,6 +39,17 @@ NEUTRAL_K = 1.0
 PROMOTED_STATE = "PROMOTED"
 CANDIDATE_STATE = "CANDIDATE_PENDING_PARITY_REPLAY"
 
+# INDEPENDENT PROMOTION AUTHORITY -- deliberately in code, not in the artifact.
+#
+# Promotion state stored only inside the calibration file cannot make that file
+# required: if the file is missing or unreadable, the loader has nothing left to tell it
+# the calibration was supposed to be there, so it would return "unavailable" and price
+# on silently. This flag is the independent authority. While it is False the calibration
+# is optional and absence is harmless; once it is True, live pricing REQUIRES a complete,
+# readable, correct-version artifact with usable k and fails closed otherwise.
+# Flip to True only together with promotion_state=PROMOTED in the artifact.
+CALIBRATION_REQUIRED_FOR_LIVE_PRICING = False
+
 # Once promoted, a missing or invalid artifact must FAIL CLOSED rather than silently
 # reverting live pricing to the known under-dispersed distribution (AGENTS.md section 4:
 # required production model artifacts fail closed). While the artifact is a candidate,
@@ -47,6 +58,20 @@ class DispersionCalibrationUnavailable(RuntimeError):
     """Raised when a PROMOTED calibration cannot be loaded for live pricing."""
 # Guard against a corrupted artifact silently distorting the board.
 MIN_K, MAX_K = 0.5, 4.0
+
+
+def _maybe_fail_closed(result: dict, live_pricing: bool) -> dict:
+    """Raise if live pricing REQUIRES the calibration and we could not load it.
+
+    The decision uses the in-code authority, because the artifact that would carry
+    `promotion_state` is exactly the thing we failed to read.
+    """
+    if live_pricing and CALIBRATION_REQUIRED_FOR_LIVE_PRICING:
+        raise DispersionCalibrationUnavailable(
+            f"dispersion calibration is required for live pricing but could not be "
+            f"loaded: state={result.get('state')} reason={result.get('reason')}"
+        )
+    return result
 
 
 def load_calibration(path: Path | None = None, *, live_pricing: bool = False) -> dict:
@@ -59,17 +84,23 @@ def load_calibration(path: Path | None = None, *, live_pricing: bool = False) ->
     """
     p = Path(path) if path is not None else CALIBRATION_PATH
     if not p.exists():
-        return {"state": "unavailable", "version": VERSION, "k": {},
-                "promotion_state": None,
-                "reason": f"{p.as_posix()} not found"}
+        return _maybe_fail_closed(
+            {"state": "unavailable", "version": VERSION, "k": {},
+             "promotion_state": None, "reason": f"{p.as_posix()} not found"},
+            live_pricing)
     try:
         raw = json.loads(p.read_text(encoding="utf-8"))
     except Exception as exc:
-        return {"state": "unreadable", "version": VERSION, "k": {},
-                "reason": f"{type(exc).__name__}: {exc}"}
+        return _maybe_fail_closed(
+            {"state": "unreadable", "version": VERSION, "k": {},
+             "promotion_state": None, "reason": f"{type(exc).__name__}: {exc}"},
+            live_pricing)
     if str(raw.get("version")) != VERSION:
-        return {"state": "version_mismatch", "version": VERSION, "k": {},
-                "reason": f"artifact version {raw.get('version')!r} != {VERSION!r}"}
+        return _maybe_fail_closed(
+            {"state": "version_mismatch", "version": VERSION, "k": {},
+             "promotion_state": str(raw.get("promotion_state") or ""),
+             "reason": f"artifact version {raw.get('version')!r} != {VERSION!r}"},
+            live_pricing)
     out: dict[str, float] = {}
     rejected: dict[str, str] = {}
     for market, spec in (raw.get("markets") or {}).items():
@@ -86,14 +117,25 @@ def load_calibration(path: Path | None = None, *, live_pricing: bool = False) ->
     cal = {"state": "current", "version": VERSION, "k": out, "rejected": rejected,
            "source": p.as_posix(), "promotion_state": promotion_state,
            "derived_from_weeks": (raw.get("derivation") or {}).get("derived_from_weeks")}
-    if promotion_state != PROMOTED_STATE:
+    # BOTH authorities must agree before a single price moves. The artifact alone must
+    # not be able to put the calibration live, and the code flag alone must not either.
+    artifact_promoted = promotion_state == PROMOTED_STATE
+    cal["artifact_promoted"] = artifact_promoted
+    cal["code_requires_calibration"] = CALIBRATION_REQUIRED_FOR_LIVE_PRICING
+    if not (artifact_promoted and CALIBRATION_REQUIRED_FOR_LIVE_PRICING):
         # inert: keep the labels, drop the multipliers
         cal["k_candidate"] = out
         cal["k"] = {}
         cal["state"] = "candidate_not_promoted"
-    if live_pricing and promotion_state == PROMOTED_STATE and not out:
+    if live_pricing and artifact_promoted != CALIBRATION_REQUIRED_FOR_LIVE_PRICING:
         raise DispersionCalibrationUnavailable(
-            f"{p.as_posix()} is PROMOTED but yielded no usable k "
+            f"promotion authorities disagree: {p.as_posix()} says "
+            f"{promotion_state!r} but CALIBRATION_REQUIRED_FOR_LIVE_PRICING is "
+            f"{CALIBRATION_REQUIRED_FOR_LIVE_PRICING}; refusing to price until they match"
+        )
+    if live_pricing and CALIBRATION_REQUIRED_FOR_LIVE_PRICING and not out:
+        raise DispersionCalibrationUnavailable(
+            f"{p.as_posix()} is PROMOTED and required but yielded no usable k "
             f"(rejected={rejected}); refusing to price with the uncalibrated distribution"
         )
     return cal

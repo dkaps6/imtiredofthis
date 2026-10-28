@@ -2,7 +2,7 @@
 
 ## TOP CHECKPOINT — 2026-10-28 — V17 — **PRODUCTION IS EMPIRICAL-MC, NOT CONSTANT-SIGMA** / MC CALIBRATION SHIPPED BUT **INERT PENDING PARITY REPLAY** / CLAUDE ISSUE #535
 
-**Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis. **Current state:** one production fix merged to `main` (`9aa6058c`); next lane identified and not yet started.
+**Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis. **Current state:** two production fixes merged (`PERCENTY_COLS` rate-scale, and the MC dispersion transform which is **wired but INERT**). The dispersion `k` is **NOT promoted**: W7 exact-path parity failed closed because the fixture lacks the ML/State prediction columns. Live pricing is therefore unchanged by the calibration.
 
 **Read in this exact order**:
 1. AGENTS.md (canonical 2026 operating contract, player-first first principle).
@@ -72,7 +72,8 @@ Weeks 3–5 are already permanently lost. **Every live run must preserve gate ev
 the same time it archives the board**, or paid boards survive but stay ungradable as a
 betting record.
 
-### SUPERSEDED — was "the first real win" in V15
+### SUPERSEDED / RETRACTED PREMISE — kept only as lineage, do NOT cite as production evidence
+*(was presented as "the first real win" in V15, against a `Q0` baseline production never used)*
 **Per-tail quantile fit beats production's constant sigma, on naive data.**
 `PRISM_DIRECT_QUANTILE_{PREREGISTRATION,RESULTS}_V1`, frozen `abe11db5`, scored
 `a2df5060`. Fit 2020–2022, scored **2017–2019 (never inspected)**, 3,992 rows, 184
@@ -85,12 +86,7 @@ frozen rules.
 - zero crossed quantiles; robust at min-games 6/8/10; Q2 beats Q0 in all three
   contaminated reported seasons with the p80 majority holding in every one.
 
-**The structural finding.** Production's constant sigma implies **both tails move 1:1
-with the mean** and role is irrelevant. Fitted: **floor slope 0.335, ceiling slope
-0.698** — a receiver's floor rises far more slowly than his average, which is exactly
-why production overstates its best players' floors by ~12 yards. And **centrality loads
-on the ceiling 2.5× more than the floor** (+107.3 vs +43.3): being central to an
-offence is mostly an **upside** property.
+**The structural finding — STATED AGAINST A RETRACTED PREMISE.** This section was written when production was believed to price from a constant sigma. **It does not.** What was compared against (`Q0`: constant sigma + normal CDF, both tails moving 1:1 with the mean) is a textbook baseline, **not the deployed system**, so none of the gains below are gains over production. What survives is the measurement itself: in the data, a player's floor rises **1.7–2.4× more slowly** than his ceiling, and role centrality loads more on the ceiling than the floor. See `docs/research/PRISM_CORRECTION_PRODUCTION_IS_NOT_CONSTANT_SIGMA_V1.md`.
 
 **This explains the prior study's centrality null.** There centrality entered through a
 **single sigma**, which cannot lift one tail more than the other. Once tails are

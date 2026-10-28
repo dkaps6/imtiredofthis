@@ -132,7 +132,8 @@ def test_candidate_artifact_is_inert_in_production():
     assert meta["mc_dispersion_state"] == "candidate_not_promoted"
 
 
-def test_promoted_artifact_applies(tmp_path):
+def test_promoted_artifact_applies(tmp_path, monkeypatch):
+    monkeypatch.setattr(M, "CALIBRATION_REQUIRED_FOR_LIVE_PRICING", True)
     p = tmp_path / "c.json"
     p.write_text(json.dumps({"version": M.VERSION, "promotion_state": M.PROMOTED_STATE,
                              "markets": {"rec_yards": {"k": 1.64}}}))
@@ -156,6 +157,88 @@ def test_promoted_but_unusable_artifact_FAILS_CLOSED_for_live_pricing(tmp_path):
     assert cal["k"] == {} and cal["rejected"]
 
 
+def test_a_promoted_artifact_alone_cannot_put_the_calibration_live(tmp_path):
+    """Flipping the file without the code flag must NOT move a price, and must refuse."""
+    assert M.CALIBRATION_REQUIRED_FOR_LIVE_PRICING is False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps({"version": M.VERSION, "promotion_state": M.PROMOTED_STATE,
+                             "markets": {"rec_yards": {"k": 1.64}}}))
+    cal = M.load_calibration(p, live_pricing=False)
+    assert cal["k"] == {}, "artifact alone must not activate k"
+    d = _draws(seed=21)
+    out, meta = M.apply_dispersion_calibration(d, "rec_yards", cal)
+    assert np.array_equal(out, d) and meta["mc_dispersion_applied"] == 0
+    with pytest.raises(M.DispersionCalibrationUnavailable, match="authorities disagree"):
+        M.load_calibration(p, live_pricing=True)
+
+
+def test_both_authorities_agreeing_activates_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(M, "CALIBRATION_REQUIRED_FOR_LIVE_PRICING", True)
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps({"version": M.VERSION, "promotion_state": M.PROMOTED_STATE,
+                             "markets": {"rec_yards": {"k": 1.64}}}))
+    cal = M.load_calibration(p, live_pricing=True)
+    assert cal["k"] == {"rec_yards": 1.64}
+    assert cal["artifact_promoted"] and cal["code_requires_calibration"]
+
+
 def test_production_pricer_loads_with_live_pricing_true():
     src = Path("scripts/run_pricing_v2.py").read_text(encoding="utf-8")
     assert "load_mc_dispersion_calibration(live_pricing=True)" in src
+
+
+# --- GPT audit 6473505789 section 3: promotion authority must be independent ---
+
+def test_promotion_authority_lives_in_code_not_only_in_the_artifact():
+    """A file cannot make itself required: if it is gone, so is its own promotion flag."""
+    assert hasattr(M, "CALIBRATION_REQUIRED_FOR_LIVE_PRICING")
+    assert M.CALIBRATION_REQUIRED_FOR_LIVE_PRICING is False, "must stay False until promoted"
+
+
+@pytest.mark.parametrize("failure", ["missing", "unreadable", "version_mismatch", "all_rejected"])
+def test_required_calibration_fails_closed_on_every_failure_class(tmp_path, monkeypatch, failure):
+    monkeypatch.setattr(M, "CALIBRATION_REQUIRED_FOR_LIVE_PRICING", True)
+    p = tmp_path / "c.json"
+    if failure == "missing":
+        pass
+    elif failure == "unreadable":
+        p.write_text("{ this is not json")
+    elif failure == "version_mismatch":
+        p.write_text(json.dumps({"version": "OLD", "promotion_state": M.PROMOTED_STATE,
+                                 "markets": {"rec_yards": {"k": 1.64}}}))
+    else:
+        p.write_text(json.dumps({"version": M.VERSION, "promotion_state": M.PROMOTED_STATE,
+                                 "markets": {"rec_yards": {"k": 99.0}}}))
+    with pytest.raises(M.DispersionCalibrationUnavailable):
+        M.load_calibration(p, live_pricing=True)
+
+
+@pytest.mark.parametrize("failure", ["missing", "unreadable", "version_mismatch", "all_rejected"])
+def test_the_same_failures_are_harmless_while_the_calibration_is_optional(tmp_path, failure):
+    """With the code authority False, absence must never break a slate."""
+    assert M.CALIBRATION_REQUIRED_FOR_LIVE_PRICING is False
+    p = tmp_path / "c.json"
+    if failure == "unreadable":
+        p.write_text("{ nope")
+    elif failure == "version_mismatch":
+        p.write_text(json.dumps({"version": "OLD", "markets": {}}))
+    elif failure == "all_rejected":
+        p.write_text(json.dumps({"version": M.VERSION, "markets": {"rec_yards": {"k": 99.0}}}))
+    cal = M.load_calibration(p, live_pricing=True)      # must not raise
+    assert cal["k"] == {}
+
+
+def test_code_and_artifact_authorities_must_agree(tmp_path, monkeypatch):
+    """Promoted in code but still a candidate in the artifact is a contradiction."""
+    monkeypatch.setattr(M, "CALIBRATION_REQUIRED_FOR_LIVE_PRICING", True)
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps({"version": M.VERSION, "promotion_state": M.CANDIDATE_STATE,
+                             "markets": {"rec_yards": {"k": 1.64}}}))
+    with pytest.raises(M.DispersionCalibrationUnavailable, match="authorities disagree"):
+        M.load_calibration(p, live_pricing=True)
+
+
+def test_research_callers_never_trip_the_required_gate(tmp_path, monkeypatch):
+    monkeypatch.setattr(M, "CALIBRATION_REQUIRED_FOR_LIVE_PRICING", True)
+    cal = M.load_calibration(tmp_path / "absent.json", live_pricing=False)
+    assert cal["state"] == "unavailable"
