@@ -1,0 +1,64 @@
+{
+  "complete": false,
+  "files": {
+    "data/model_ensemble_diagnostics.csv": {
+      "archived_as": "model_ensemble_diagnostics.csv.gz",
+      "bytes_gz": 359,
+      "bytes_raw": 740,
+      "sha256_raw": "dfb4fdee8edd3a06cad4deecaf9614a576e7dd09f60d2d4cdc924e4cbb9efdc3"
+    },
+    "data/model_ensemble_weights.csv": {
+      "archived_as": "model_ensemble_weights.csv.gz",
+      "bytes_gz": 568,
+      "bytes_raw": 1151,
+      "sha256_raw": "bc525ecdfe5ef792c1655866e823de78667c7efe7f8f51ea1cf3ec98693313e5"
+    },
+    "data/model_ml_diagnostics.csv": {
+      "archived_as": "model_ml_diagnostics.csv.gz",
+      "bytes_gz": 28192,
+      "bytes_raw": 119600,
+      "sha256_raw": "c432783e908483c65fb4015a3d29a9b3b98d03c424ac0caa60878cb7d1d37c85"
+    },
+    "data/model_state_diagnostics.csv": {
+      "archived_as": "model_state_diagnostics.csv.gz",
+      "bytes_gz": 11815,
+      "bytes_raw": 171999,
+      "sha256_raw": "3aa0976f97e5bef2ea0638a2f0b806c95ce945be7780719985c73e1833f5ff58"
+    },
+    "data/player_form_consensus.csv": {
+      "archived_as": "player_form_consensus.csv.gz",
+      "bytes_gz": 50849,
+      "bytes_raw": 201221,
+      "sha256_raw": "132eed8c66ed64397f2992374b4e87002a04f3831cdf68d4f627e4388a6935ff"
+    },
+    "data/qb_promoted_team_context.csv": {
+      "archived_as": "qb_promoted_team_context.csv.gz",
+      "bytes_gz": 4719,
+      "bytes_raw": 12405,
+      "sha256_raw": "3682cf68e014668d434fd57590fd9c8f6e56f90fc49dcece0f8b2d74e8bf7f49"
+    },
+    "data/team_week_map.csv": {
+      "archived_as": "team_week_map.csv.gz",
+      "bytes_gz": 5913,
+      "bytes_raw": 39326,
+      "sha256_raw": "c64d51441908d7c5009e39a82e4ae97ca5521626ea0dc76c0c360990b27d5c6e"
+    },
+    "data/weather_week.csv": {
+      "archived_as": "weather_week.csv.gz",
+      "bytes_gz": 1248,
+      "bytes_raw": 3980,
+      "sha256_raw": "523f7794a507cfeed70c7ea9e135a05bfd31becd85fbfa6a1059b544af0f4dd3"
+    }
+  },
+  "required_column_stripped": {},
+  "required_missing": [
+    "data/metrics_ready.csv",
+    "data/model_rule_simulation_inputs.csv"
+  ],
+  "source_git_sha": "eb109a6a0e73ab3a4ac928976679056efb8f0feb",
+  "source_run_id": "40720545491",
+  "stem": "2026_wk08",
+  "version": "REPLAY_INPUT_SET_V1",
+  "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
+  "week": "8"
+}
