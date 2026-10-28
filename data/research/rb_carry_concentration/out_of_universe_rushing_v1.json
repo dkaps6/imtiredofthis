@@ -1,0 +1,47 @@
+{
+  "version": "OUT_OF_UNIVERSE_RUSHING_V1",
+  "requested_by": "GPT audit #535 comment 6478678129 (AUDIT TARGET 4)",
+  "season": 2026,
+  "week": 7,
+  "teams": 27,
+  "identity_join": "repo canonicalize_player_name_safe on (team, player); universe has no gsis_id",
+  "leakage_note": "completeness judged against the PREGAME 396-row universe only",
+  "actual_rush_att_mean": 27.444,
+  "outside_frac_all": {
+    "mean": 0.0741,
+    "median": 0.0,
+    "p90": 0.2626,
+    "p95": 0.3509,
+    "max": 0.51724
+  },
+  "outside_frac_genuine": {
+    "mean": 0.0,
+    "median": 0.0,
+    "p90": 0.0,
+    "p95": 0.0,
+    "max": 0.0
+  },
+  "teams_zero_outside": 18,
+  "teams_zero_genuine_outside": 27,
+  "empirical_budget_from_genuine": 1.0,
+  "production_hardcoded_cap": 0.95,
+  "outside_classified": {
+    "ABSENT_FROM_PREGAME_UNIVERSE": {
+      "players": 9,
+      "carries": 52.0
+    }
+  },
+  "denominator": {
+    "model_rush_att_mean": 25.011,
+    "actual_rush_att_mean": 27.444,
+    "difference_mean": -2.434,
+    "difference_ci95": [
+      -5.644,
+      0.777
+    ]
+  },
+  "weeks_covered": 1,
+  "weeks_limitation": "only W7 has a preserved leakage-safe pregame universe",
+  "changed_anything": false,
+  "sportsbook_inputs_used": false
+}
