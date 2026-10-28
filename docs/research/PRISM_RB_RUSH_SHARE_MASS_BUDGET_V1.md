@@ -358,3 +358,77 @@ conservation law; its division stays player-specific.
 
 One week, 27–28 teams, one preserved pregame universe. No coefficient, cap or weight
 changed. Betting remains **CLOSED**. No odds fetch.
+
+---
+
+# Addendum 3 — the priors are MARGINAL, not ALLOCATIVE. That is the root of both symptoms.
+
+Measured on the exact production universe. `bayesian_v2.DEFAULTS["rush_share"]` is
+`{QB: 0.14, RB: 0.32, WR: 0.02, TE: 0.00}` and `GROUP_STRENGTH["rush_share"] = 3.0`, applied
+**per player with no team-sum constraint**.
+
+| quantity | value |
+|---|---|
+| modeled RBs per team | 3.32 |
+| modeled QBs per team | 2.68 |
+| **team rush-share sum implied by the PRIORS ALONE** | **mean 1.5414**, min 1.1600, max 1.8200 |
+| **teams whose priors alone exceed 1.0** | **28 / 28** |
+| RB block alone (0.32 × 3.32) | **1.063** |
+| actual post-Bayes post-top-5 sum | 1.2729 |
+| correlation(prior-implied, post-Bayes) | r = **0.526** |
+| RB prior needed for a coherent budget at this depth | **≈0.226**, not 0.32 |
+
+**`RB: 0.32` is a correct *marginal* statement** — a typical featured back takes about 32%
+of his team's carries. **It is incoherent as an *allocation*** once it is applied to every
+one of a team's 3.32 modeled backs. The prior table describes *a player*; it was never
+reconciled as *a team*.
+
+## This unifies every symptom in the lane
+
+1. **Mass inflation.** Shrinking each player toward an incoherent prior with constant
+   weight 3.0 lifts the team sum from PlayerForm's **1.1086** to **1.2729**. The priors
+   themselves imply **1.5414**; truncation to the top five is what lands it at 1.27.
+2. **Shape flattening.** The same constant pull drags the lead back's within-RB share from
+   football's **0.6277** to **0.5173** — the ~9pp gap — because every back is pulled toward
+   the same 0.32 regardless of how much his own evidence says otherwise.
+3. **Every rank biased low.** `_allocate_counts` then crushes the inflated mass back with a
+   **uniform** 0.7574 haircut, which lowers rank 1, rank 2 and rank 3+ simultaneously — the
+   pattern that killed fix A (mass-preserving, so the missing mass was never inside the RB
+   distribution) and fix B (reweighting, so the defect is upstream of all three components).
+
+One cause, three symptoms. **And it is a player-identity defect, not an infrastructure
+one:** the position is projecting the player, exactly as the project's first principle
+forbids.
+
+## Why this can be attacked before the roster work
+
+The auditor sequenced the Bayesian layer third, on the grounds that the budget violation
+pre-exists it. That is true but secondary: pre-Bayes mass is **1.1086**, the priors imply
+**1.5414**, and Bayes is where 1.11 becomes 1.27. The dominant inflater is the prior table.
+
+Crucially, **the 0.95 cap is a uniform multiplicative haircut, so it preserves relative
+shares.** A shape improvement is therefore measurable *through* the broken budget: validate
+on within-team relative share accuracy, which the haircut cannot mask. Mass and shape can
+be fixed in the same change without waiting on roster existence — which remains a real,
+separate defect worth fixing on its own merits.
+
+## The two coupled changes (designed, NOT promoted, NOT yet preregistered)
+
+**(a) Make the shrinkage target allocative instead of marginal.** The prior a player is
+pulled toward should be depth-aware — what share the *k*-th back on a team with *K* modeled
+backs gets — so that the priors for one team sum to a valid budget by construction. The
+football target is already measured: top-1 within-RB share **0.6277** at 3 backs,
+**0.7058** at 2, **0.5625** at 4 (2013–2025, 6,296 team-weeks, ranked by pregame proxy).
+
+**(b) Make the shrinkage weight evidence-precision, not game count.** Replace
+`min(prior_games, CAP)` with a weight reflecting how *informative* a player's own history
+is — inverse variance of his own observations — and drop the cap that credits a 17-game
+veteran with 6 games. This is textbook empirical Bayes (shrinkage ∝ noise/(noise+signal),
+not ∝ 1/n) and it is player-specific by construction: a back with a stable role shrinks
+less than an erratic one at equal game count.
+
+Measured today, the generic position prior is **33.2% mean / 25.0% median / 20.0% floor**
+of a `rush_share` projection and **35.0% / 25.0% / 20.0%** of a `tgt_share` projection. **No
+player, however established, can get it below 20%.**
+
+Nothing changed. No coefficient, prior, cap or weight touched. Betting remains **CLOSED**.
