@@ -1,0 +1,2269 @@
+{
+  "markets": {
+    "rec_yards": {
+      "by_era": {
+        "2016-2019": {
+          "Q0": {
+            "coverage_median": 0.5294117647058824,
+            "frac_well_calibrated": 0.39461883408071746
+          },
+          "Q1": {
+            "coverage_median": 0.6190476190476191,
+            "frac_well_calibrated": 0.6367713004484304
+          },
+          "Q1_p20_improved": 0.8475336322869955,
+          "Q1_p80_improved": 0.5022421524663677,
+          "Q2": {
+            "coverage_median": 0.6206896551724138,
+            "frac_well_calibrated": 0.6636771300448431
+          },
+          "Q2_p20_improved": 0.8430493273542601,
+          "Q2_p80_improved": 0.5426008968609866,
+          "decision": {
+            "H1_JOINT": true,
+            "H1_STRICT": true,
+            "Q1": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 15.760020178532791,
+                "arm": 6.6257028059492935
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "Q2": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 15.760020178532791,
+                "arm": 5.414211084156589
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "preferred_JOINT": "Q1",
+            "preferred_STRICT": "Q1",
+            "rule_3_joint_tolerance": 6.5
+          },
+          "players": 223,
+          "rows": 5442,
+          "seasons": [
+            2016,
+            2019
+          ]
+        },
+        "2020-2022": {
+          "Q0": {
+            "coverage_median": 0.5192592592592593,
+            "frac_well_calibrated": 0.44623655913978494
+          },
+          "Q1": {
+            "coverage_median": 0.6,
+            "frac_well_calibrated": 0.6451612903225806
+          },
+          "Q1_p20_improved": 0.8279569892473119,
+          "Q1_p80_improved": 0.4946236559139785,
+          "Q2": {
+            "coverage_median": 0.6,
+            "frac_well_calibrated": 0.6559139784946236
+          },
+          "Q2_p20_improved": 0.8333333333333334,
+          "Q2_p80_improved": 0.5913978494623656,
+          "decision": {
+            "H1_JOINT": true,
+            "H1_STRICT": true,
+            "Q1": {
+              "SUPPORTED_JOINT": false,
+              "SUPPORTED_STRICT": false,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 16.535695854208466,
+                "arm": 7.291839039557848
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": false,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "Q2": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 16.535695854208466,
+                "arm": 5.719929714321264
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "preferred_JOINT": "Q2",
+            "preferred_STRICT": "Q2",
+            "rule_3_joint_tolerance": 6.5
+          },
+          "players": 186,
+          "rows": 4245,
+          "seasons": [
+            2020,
+            2022
+          ]
+        },
+        "2023-2025": {
+          "Q0": {
+            "coverage_median": 0.5555555555555556,
+            "frac_well_calibrated": 0.44919786096256686
+          },
+          "Q1": {
+            "coverage_median": 0.6,
+            "frac_well_calibrated": 0.6470588235294118
+          },
+          "Q1_p20_improved": 0.8074866310160428,
+          "Q1_p80_improved": 0.5401069518716578,
+          "Q2": {
+            "coverage_median": 0.59375,
+            "frac_well_calibrated": 0.6577540106951871
+          },
+          "Q2_p20_improved": 0.8288770053475936,
+          "Q2_p80_improved": 0.5721925133689839,
+          "decision": {
+            "H1_JOINT": true,
+            "H1_STRICT": true,
+            "Q1": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 15.974405531627822,
+                "arm": 10.344923762109797
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "Q2": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 15.974405531627822,
+                "arm": 7.231993245621961
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "preferred_JOINT": "Q1",
+            "preferred_STRICT": "Q1",
+            "rule_3_joint_tolerance": 6.5
+          },
+          "players": 187,
+          "rows": 4337,
+          "seasons": [
+            2023,
+            2025
+          ]
+        }
+      },
+      "coefficients_by_target_season": {
+        "2016": {
+          "Q1": {
+            "p20": [
+              -4.333333337088529,
+              0.4761904762621535
+            ],
+            "p80": [
+              25.16380819092504,
+              0.9870493525061023
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -8.027294300472075,
+              0.30461632029123,
+              55.665681428069306
+            ],
+            "p80": [
+              19.57482023382939,
+              0.7220030615718154,
+              86.03331505191119
+            ]
+          }
+        },
+        "2017": {
+          "Q1": {
+            "p20": [
+              -3.725369462298686,
+              0.4618226603483039
+            ],
+            "p80": [
+              24.508143350560488,
+              0.9853420190771196
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -7.179991677024244,
+              0.31692436040326766,
+              49.315268880856394
+            ],
+            "p80": [
+              19.29330151839814,
+              0.7042679430511841,
+              88.2026572165064
+            ]
+          }
+        },
+        "2018": {
+          "Q1": {
+            "p20": [
+              -3.635467997310645,
+              0.4581280798247931
+            ],
+            "p80": [
+              23.77310924446636,
+              0.9957983193094805
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -7.240234680883968,
+              0.29148143317200653,
+              55.05632256318073
+            ],
+            "p80": [
+              17.907545461205395,
+              0.7318697780174084,
+              85.47476068676784
+            ]
+          }
+        },
+        "2019": {
+          "Q1": {
+            "p20": [
+              -3.714943639682121,
+              0.4605302006647075
+            ],
+            "p80": [
+              23.969957083309076,
+              0.9914163089981576
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -7.258098847850858,
+              0.31166943236671174,
+              50.74426100686114
+            ],
+            "p80": [
+              17.567797878368168,
+              0.7041390259119371,
+              93.13093898914883
+            ]
+          }
+        },
+        "2020": {
+          "Q1": {
+            "p20": [
+              -3.4794776198809725,
+              0.4570895523110601
+            ],
+            "p80": [
+              24.355716875065887,
+              0.9882032668256542
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -7.124517156786644,
+              0.31335975677348205,
+              50.06374049974127
+            ],
+            "p80": [
+              18.503101553651753,
+              0.7045698882597213,
+              90.72475821965581
+            ]
+          }
+        },
+        "2021": {
+          "Q1": {
+            "p20": [
+              -3.511134660379626,
+              0.46129374304917686
+            ],
+            "p80": [
+              24.311324103473495,
+              0.9939652112139259
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -6.784344823440925,
+              0.32606541712090087,
+              46.31690437885433
+            ],
+            "p80": [
+              18.428544075405576,
+              0.6968537067467833,
+              93.49904882610706
+            ]
+          }
+        },
+        "2022": {
+          "Q1": {
+            "p20": [
+              -3.5671641821548405,
+              0.46268656724805646
+            ],
+            "p80": [
+              24.11587982585828,
+              0.9957081545269307
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -6.893340105230689,
+              0.32016599881396185,
+              47.7621788399955
+            ],
+            "p80": [
+              17.99552117343613,
+              0.6812621225387018,
+              98.38583633587878
+            ]
+          }
+        },
+        "2023": {
+          "Q1": {
+            "p20": [
+              -3.5922009189179622,
+              0.4639788498279827
+            ],
+            "p80": [
+              23.665592261506433,
+              1.0056406124284
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -6.829109738235378,
+              0.3174691965699429,
+              48.21507965437311
+            ],
+            "p80": [
+              17.11766242197801,
+              0.6952084531609684,
+              98.52071397440199
+            ]
+          }
+        },
+        "2024": {
+          "Q1": {
+            "p20": [
+              -3.416015227106633,
+              0.4614409470563353
+            ],
+            "p80": [
+              23.72334293878331,
+              1.0086455331572868
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -6.808948041502072,
+              0.3064069988051096,
+              50.50947450410851
+            ],
+            "p80": [
+              17.228274891287775,
+              0.7034110700289595,
+              96.45558948789778
+            ]
+          }
+        },
+        "2025": {
+          "Q1": {
+            "p20": [
+              -3.646850040335215,
+              0.4685004435000834
+            ],
+            "p80": [
+              23.977099238403888,
+              1.0076335877672098
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -7.193705783254806,
+              0.2938871822313941,
+              55.496503800474905
+            ],
+            "p80": [
+              17.29195302251791,
+              0.6961520355988291,
+              98.86584346078408
+            ]
+          }
+        }
+      },
+      "decision": {
+        "H1_JOINT": true,
+        "H1_STRICT": true,
+        "Q1": {
+          "SUPPORTED_JOINT": false,
+          "SUPPORTED_STRICT": false,
+          "high_tercile_abs_bias_sum": {
+            "Q0": 14.896565419425858,
+            "arm": 4.810407322915367
+          },
+          "rule_1_more_calibrated_players": true,
+          "rule_2_pinball_majority_BOTH_tails": false,
+          "rule_3_joint": true,
+          "rule_3_strict": true,
+          "rule_4_no_crossed_quantiles": true
+        },
+        "Q2": {
+          "SUPPORTED_JOINT": true,
+          "SUPPORTED_STRICT": true,
+          "high_tercile_abs_bias_sum": {
+            "Q0": 14.896565419425858,
+            "arm": 2.7520854671688566
+          },
+          "rule_1_more_calibrated_players": true,
+          "rule_2_pinball_majority_BOTH_tails": true,
+          "rule_3_joint": true,
+          "rule_3_strict": true,
+          "rule_4_no_crossed_quantiles": true
+        },
+        "preferred_JOINT": "Q2",
+        "preferred_STRICT": "Q2",
+        "rule_3_joint_tolerance": 6.5
+      },
+      "diagnostics": [
+        {
+          "market": "rec_yards",
+          "panel_players": 175,
+          "panel_rows": 1418,
+          "season": 2013,
+          "state_counts": {
+            "DNP_INACTIVE": 123,
+            "HEALTHY_FULL": 2795,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 94,
+            "PARTIAL_GAME": 216
+          }
+        },
+        {
+          "market": "rec_yards",
+          "panel_players": 169,
+          "panel_rows": 1421,
+          "season": 2014,
+          "state_counts": {
+            "DNP_INACTIVE": 116,
+            "HEALTHY_FULL": 2896,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 89,
+            "PARTIAL_GAME": 223,
+            "UNRESOLVED_CONTEXT": 10
+          }
+        },
+        {
+          "market": "rec_yards",
+          "panel_players": 186,
+          "panel_rows": 1381,
+          "season": 2015,
+          "state_counts": {
+            "DNP_INACTIVE": 113,
+            "HEALTHY_FULL": 2896,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 70,
+            "PARTIAL_GAME": 239,
+            "UNRESOLVED_CONTEXT": 5
+          }
+        },
+        {
+          "market": "rec_yards",
+          "panel_players": 175,
+          "panel_rows": 1450,
+          "season": 2016,
+          "state_counts": {
+            "DNP_INACTIVE": 102,
+            "HEALTHY_FULL": 2957,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 70,
+            "PARTIAL_GAME": 249,
+            "UNRESOLVED_CONTEXT": 4
+          }
+        },
+        {
+          "market": "rec_yards",
+          "panel_players": 178,
+          "panel_rows": 1356,
+          "season": 2017,
+          "state_counts": {
+            "DNP_INACTIVE": 103,
+            "HEALTHY_FULL": 2983,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 81,
+            "PARTIAL_GAME": 237,
+            "UNRESOLVED_CONTEXT": 4
+          }
+        },
+        {
+          "market": "rec_yards",
+          "panel_players": 186,
+          "panel_rows": 1320,
+          "season": 2018,
+          "state_counts": {
+            "DNP_INACTIVE": 89,
+            "HEALTHY_FULL": 2934,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 69,
+            "PARTIAL_GAME": 250,
+            "UNRESOLVED_CONTEXT": 20
+          }
+        },
+        {
+          "market": "rec_yards",
+          "panel_players": 179,
+          "panel_rows": 1316,
+          "season": 2019,
+          "state_counts": {
+            "DNP_INACTIVE": 94,
+            "HEALTHY_FULL": 2903,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 135,
+            "PARTIAL_GAME": 230,
+            "UNRESOLVED_CONTEXT": 15
+          }
+        },
+        {
+          "market": "rec_yards",
+          "panel_players": 186,
+          "panel_rows": 1362,
+          "season": 2020,
+          "state_counts": {
+            "DNP_INACTIVE": 112,
+            "HEALTHY_FULL": 2974,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 124,
+            "PARTIAL_GAME": 230,
+            "UNRESOLVED_CONTEXT": 9
+          }
+        },
+        {
+          "market": "rec_yards",
+          "panel_players": 187,
+          "panel_rows": 1463,
+          "season": 2021,
+          "state_counts": {
+            "DNP_INACTIVE": 92,
+            "HEALTHY_FULL": 3184,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 114,
+            "PARTIAL_GAME": 285,
+            "UNRESOLVED_CONTEXT": 15
+          }
+        },
+        {
+          "market": "rec_yards",
+          "panel_players": 177,
+          "panel_rows": 1420,
+          "season": 2022,
+          "state_counts": {
+            "DNP_INACTIVE": 91,
+            "HEALTHY_FULL": 3075,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 140,
+            "PARTIAL_GAME": 275,
+            "UNRESOLVED_CONTEXT": 13
+          }
+        },
+        {
+          "market": "rec_yards",
+          "panel_players": 181,
+          "panel_rows": 1449,
+          "season": 2023,
+          "state_counts": {
+            "DNP_INACTIVE": 86,
+            "HEALTHY_FULL": 3140,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 178,
+            "PARTIAL_GAME": 251,
+            "UNRESOLVED_CONTEXT": 9
+          }
+        },
+        {
+          "market": "rec_yards",
+          "panel_players": 182,
+          "panel_rows": 1460,
+          "season": 2024,
+          "state_counts": {
+            "DNP_INACTIVE": 98,
+            "HEALTHY_FULL": 3158,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 175,
+            "PARTIAL_GAME": 225,
+            "UNRESOLVED_CONTEXT": 8
+          }
+        },
+        {
+          "market": "rec_yards",
+          "panel_players": 181,
+          "panel_rows": 1428,
+          "season": 2025,
+          "state_counts": {
+            "DNP_INACTIVE": 149,
+            "HEALTHY_FULL": 3139,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 229,
+            "PARTIAL_GAME": 267,
+            "UNRESOLVED_CONTEXT": 14
+          }
+        }
+      ],
+      "pooled": {
+        "Q0": {
+          "coverage_deciles": [
+            0.3732558139534884,
+            0.4281030444964871,
+            0.46283457656867044,
+            0.5040000000000002,
+            0.5555555555555556,
+            0.6,
+            0.6553593947036569,
+            0.7272727272727273,
+            0.8
+          ],
+          "coverage_iqr": [
+            0.4444444444444444,
+            0.6858552631578947
+          ],
+          "coverage_median": 0.5555555555555556,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.42168674698795183,
+          "interval_width_median": 43.76430414579154
+        },
+        "Q1": {
+          "coverage_deciles": [
+            0.46153846153846156,
+            0.5126954346466541,
+            0.55,
+            0.5877237851662405,
+            0.6111111111111112,
+            0.6333333333333333,
+            0.6666666666666666,
+            0.6938217605248771,
+            0.75
+          ],
+          "coverage_iqr": [
+            0.5322916666666666,
+            0.6775210084033614
+          ],
+          "coverage_median": 0.6111111111111112,
+          "frac_players_pin20_improved": 0.8939759036144578,
+          "frac_players_pin80_improved": 0.4819277108433735,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.6963855421686747,
+          "interval_width_median": 48.02304814186746
+        },
+        "Q2": {
+          "coverage_deciles": [
+            0.46551724137931033,
+            0.5190883190883191,
+            0.55,
+            0.5797757009345794,
+            0.6037735849056604,
+            0.6350332594235033,
+            0.6666666666666666,
+            0.6937971014492755,
+            0.75
+          ],
+          "coverage_iqr": [
+            0.5350474942679331,
+            0.6666666666666666
+          ],
+          "coverage_median": 0.6037735849056604,
+          "frac_players_pin20_improved": 0.8819277108433735,
+          "frac_players_pin80_improved": 0.5662650602409639,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.6987951807228916,
+          "interval_width_median": 47.7747252826622
+        },
+        "bias_by_mean_tercile": {
+          "Q0": {
+            "high": {
+              "ceiling_bias": -4.047392794578827,
+              "floor_bias": 10.84917262484703
+            },
+            "low": {
+              "ceiling_bias": 6.538832800298689,
+              "floor_bias": -5.173672784341769
+            },
+            "mid": {
+              "ceiling_bias": 2.3344951656396242,
+              "floor_bias": 0.8412055126017122
+            }
+          },
+          "Q1": {
+            "high": {
+              "ceiling_bias": -1.9620052509588284,
+              "floor_bias": -2.848402071956538
+            },
+            "low": {
+              "ceiling_bias": 8.740041059976155,
+              "floor_bias": 0.2571584031960984
+            },
+            "mid": {
+              "ceiling_bias": 4.4995772815380874,
+              "floor_bias": -1.1220499414647025
+            }
+          },
+          "Q2": {
+            "high": {
+              "ceiling_bias": -0.78079564671199,
+              "floor_bias": -1.9712898204568665
+            },
+            "low": {
+              "ceiling_bias": 7.948719046069693,
+              "floor_bias": -0.1436000169054231
+            },
+            "mid": {
+              "ceiling_bias": 4.655839870465928,
+              "floor_bias": -0.9475718761112057
+            }
+          }
+        },
+        "min_holdout_games": 8,
+        "players_scored": 415,
+        "rows": 14024
+      },
+      "production_sigma": 26.0,
+      "seasons_scored": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "walk_forward_players": 567,
+      "walk_forward_rows": 14024
+    },
+    "receptions": {
+      "by_era": {
+        "2016-2019": {
+          "Q0": {
+            "coverage_median": 0.5555555555555556,
+            "frac_well_calibrated": 0.5022421524663677
+          },
+          "Q1": {
+            "coverage_median": 0.6,
+            "frac_well_calibrated": 0.695067264573991
+          },
+          "Q1_p20_improved": 0.7802690582959642,
+          "Q1_p80_improved": 0.5336322869955157,
+          "Q2": {
+            "coverage_median": 0.6,
+            "frac_well_calibrated": 0.6860986547085202
+          },
+          "Q2_p20_improved": 0.7757847533632287,
+          "Q2_p80_improved": 0.5919282511210763,
+          "decision": {
+            "H1_JOINT": true,
+            "H1_STRICT": false,
+            "Q1": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": false,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 0.7836770726510228,
+                "arm": 0.5504912941252733
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": false,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "Q2": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": false,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 0.7836770726510228,
+                "arm": 0.5401307149474016
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": false,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "preferred_JOINT": "Q1",
+            "preferred_STRICT": null,
+            "rule_3_joint_tolerance": 0.45
+          },
+          "players": 223,
+          "rows": 5442,
+          "seasons": [
+            2016,
+            2019
+          ]
+        },
+        "2020-2022": {
+          "Q0": {
+            "coverage_median": 0.5358974358974359,
+            "frac_well_calibrated": 0.45161290322580644
+          },
+          "Q1": {
+            "coverage_median": 0.6,
+            "frac_well_calibrated": 0.6290322580645161
+          },
+          "Q1_p20_improved": 0.7849462365591398,
+          "Q1_p80_improved": 0.5806451612903226,
+          "Q2": {
+            "coverage_median": 0.6,
+            "frac_well_calibrated": 0.6021505376344086
+          },
+          "Q2_p20_improved": 0.7741935483870968,
+          "Q2_p80_improved": 0.5591397849462365,
+          "decision": {
+            "H1_JOINT": true,
+            "H1_STRICT": true,
+            "Q1": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 0.9862925913955738,
+                "arm": 0.7279155706655356
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "Q2": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 0.9862925913955738,
+                "arm": 0.7035400710409985
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "preferred_JOINT": "Q1",
+            "preferred_STRICT": "Q1",
+            "rule_3_joint_tolerance": 0.45
+          },
+          "players": 186,
+          "rows": 4245,
+          "seasons": [
+            2020,
+            2022
+          ]
+        },
+        "2023-2025": {
+          "Q0": {
+            "coverage_median": 0.5555555555555556,
+            "frac_well_calibrated": 0.5561497326203209
+          },
+          "Q1": {
+            "coverage_median": 0.6,
+            "frac_well_calibrated": 0.6577540106951871
+          },
+          "Q1_p20_improved": 0.6951871657754011,
+          "Q1_p80_improved": 0.5401069518716578,
+          "Q2": {
+            "coverage_median": 0.6,
+            "frac_well_calibrated": 0.6631016042780749
+          },
+          "Q2_p20_improved": 0.7272727272727273,
+          "Q2_p80_improved": 0.49732620320855614,
+          "decision": {
+            "H1_JOINT": true,
+            "H1_STRICT": true,
+            "Q1": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 0.7056474301052511,
+                "arm": 0.5204898700251455
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "Q2": {
+              "SUPPORTED_JOINT": false,
+              "SUPPORTED_STRICT": false,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 0.7056474301052511,
+                "arm": 0.4128461147514029
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": false,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "preferred_JOINT": "Q1",
+            "preferred_STRICT": "Q1",
+            "rule_3_joint_tolerance": 0.45
+          },
+          "players": 187,
+          "rows": 4337,
+          "seasons": [
+            2023,
+            2025
+          ]
+        }
+      },
+      "coefficients_by_target_season": {
+        "2016": {
+          "Q1": {
+            "p20": [
+              -0.26086956264751193,
+              0.565217390632881
+            ],
+            "p80": [
+              1.9591836733083374,
+              0.8979591835225069
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -0.3822163472938494,
+              0.39284768313138924,
+              3.5866299761714995
+            ],
+            "p80": [
+              1.72686695501051,
+              0.6981999863879935,
+              4.413784391014835
+            ]
+          }
+        },
+        "2017": {
+          "Q1": {
+            "p20": [
+              -0.2222222052967428,
+              0.5555555513216457
+            ],
+            "p80": [
+              1.9677419126727533,
+              0.9032258107062239
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -0.3359369163107118,
+              0.398560163693916,
+              3.324663205353425
+            ],
+            "p80": [
+              1.6768953586062203,
+              0.6869225067079844,
+              5.060421033697597
+            ]
+          }
+        },
+        "2018": {
+          "Q1": {
+            "p20": [
+              -0.18181817805348832,
+              0.5454545443670034
+            ],
+            "p80": [
+              1.8964143485804943,
+              0.9203187225910463
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -0.31477527859897114,
+              0.3904587982324338,
+              3.328770650174948
+            ],
+            "p80": [
+              1.6493266893564549,
+              0.7043133303649676,
+              4.817617449563832
+            ]
+          }
+        },
+        "2019": {
+          "Q1": {
+            "p20": [
+              -0.1999999982260013,
+              0.5499999996101551
+            ],
+            "p80": [
+              1.9345794440018105,
+              0.9112149521485806
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -0.33792312188687623,
+              0.4105045147733756,
+              3.1186088458063206
+            ],
+            "p80": [
+              1.6435125745614716,
+              0.6822242104780656,
+              5.25426780800281
+            ]
+          }
+        },
+        "2020": {
+          "Q1": {
+            "p20": [
+              -0.1818181812949754,
+              0.5454545453121601
+            ],
+            "p80": [
+              1.9534883738428537,
+              0.9069767440451728
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -0.3177129533762265,
+              0.38699595756677063,
+              3.4705902030780145
+            ],
+            "p80": [
+              1.664827449258048,
+              0.6945677409359542,
+              4.953342754369858
+            ]
+          }
+        },
+        "2021": {
+          "Q1": {
+            "p20": [
+              -0.17209302855184638,
+              0.544186046427275
+            ],
+            "p80": [
+              1.9230769223619397,
+              0.9230769231724691
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -0.28619792210362793,
+              0.4139788408483598,
+              2.937728714066164
+            ],
+            "p80": [
+              1.6303681234644873,
+              0.7340647902004582,
+              4.604931092736429
+            ]
+          }
+        },
+        "2022": {
+          "Q1": {
+            "p20": [
+              -0.17073170838333301,
+              0.5435540073862308
+            ],
+            "p80": [
+              1.857142855377915,
+              0.9428571433958977
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -0.26045143444813856,
+              0.42333083263949,
+              2.6482033956576982
+            ],
+            "p80": [
+              1.6436552361241221,
+              0.760838680884659,
+              4.133197332556041
+            ]
+          }
+        },
+        "2023": {
+          "Q1": {
+            "p20": [
+              -0.1538461574768325,
+              0.5384615400470384
+            ],
+            "p80": [
+              1.8983050891243336,
+              0.9322033888471781
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -0.2656042401328818,
+              0.40747846697968426,
+              2.967637946316265
+            ],
+            "p80": [
+              1.6628015406707897,
+              0.7574595771561438,
+              4.121470607068347
+            ]
+          }
+        },
+        "2024": {
+          "Q1": {
+            "p20": [
+              -0.15037594365556653,
+              0.5413533839088198
+            ],
+            "p80": [
+              1.8674698761205717,
+              0.9397590366897435
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -0.24866104585448695,
+              0.41743881828187424,
+              2.7210140803427625
+            ],
+            "p80": [
+              1.6711800699946464,
+              0.7662084454346065,
+              3.9187449778222163
+            ]
+          }
+        },
+        "2025": {
+          "Q1": {
+            "p20": [
+              -0.16157205923120238,
+              0.5502183425564129
+            ],
+            "p80": [
+              1.8440367179522967,
+              0.9541284374224062
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -0.2753374766955995,
+              0.4123372633264506,
+              3.0005115403066296
+            ],
+            "p80": [
+              1.626273554168661,
+              0.764157758087654,
+              4.280256147500454
+            ]
+          }
+        }
+      },
+      "decision": {
+        "H1_JOINT": true,
+        "H1_STRICT": true,
+        "Q1": {
+          "SUPPORTED_JOINT": true,
+          "SUPPORTED_STRICT": true,
+          "high_tercile_abs_bias_sum": {
+            "Q0": 0.8353809504418572,
+            "arm": 0.4595845791400086
+          },
+          "rule_1_more_calibrated_players": true,
+          "rule_2_pinball_majority_BOTH_tails": true,
+          "rule_3_joint": true,
+          "rule_3_strict": true,
+          "rule_4_no_crossed_quantiles": true
+        },
+        "Q2": {
+          "SUPPORTED_JOINT": true,
+          "SUPPORTED_STRICT": true,
+          "high_tercile_abs_bias_sum": {
+            "Q0": 0.8353809504418572,
+            "arm": 0.405543789161561
+          },
+          "rule_1_more_calibrated_players": true,
+          "rule_2_pinball_majority_BOTH_tails": true,
+          "rule_3_joint": true,
+          "rule_3_strict": true,
+          "rule_4_no_crossed_quantiles": true
+        },
+        "preferred_JOINT": "Q1",
+        "preferred_STRICT": "Q1",
+        "rule_3_joint_tolerance": 0.45
+      },
+      "diagnostics": [
+        {
+          "market": "receptions",
+          "panel_players": 175,
+          "panel_rows": 1418,
+          "season": 2013,
+          "state_counts": {
+            "DNP_INACTIVE": 123,
+            "HEALTHY_FULL": 2795,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 94,
+            "PARTIAL_GAME": 216
+          }
+        },
+        {
+          "market": "receptions",
+          "panel_players": 169,
+          "panel_rows": 1421,
+          "season": 2014,
+          "state_counts": {
+            "DNP_INACTIVE": 116,
+            "HEALTHY_FULL": 2896,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 89,
+            "PARTIAL_GAME": 223,
+            "UNRESOLVED_CONTEXT": 10
+          }
+        },
+        {
+          "market": "receptions",
+          "panel_players": 186,
+          "panel_rows": 1381,
+          "season": 2015,
+          "state_counts": {
+            "DNP_INACTIVE": 113,
+            "HEALTHY_FULL": 2896,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 70,
+            "PARTIAL_GAME": 239,
+            "UNRESOLVED_CONTEXT": 5
+          }
+        },
+        {
+          "market": "receptions",
+          "panel_players": 175,
+          "panel_rows": 1450,
+          "season": 2016,
+          "state_counts": {
+            "DNP_INACTIVE": 102,
+            "HEALTHY_FULL": 2957,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 70,
+            "PARTIAL_GAME": 249,
+            "UNRESOLVED_CONTEXT": 4
+          }
+        },
+        {
+          "market": "receptions",
+          "panel_players": 178,
+          "panel_rows": 1356,
+          "season": 2017,
+          "state_counts": {
+            "DNP_INACTIVE": 103,
+            "HEALTHY_FULL": 2983,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 81,
+            "PARTIAL_GAME": 237,
+            "UNRESOLVED_CONTEXT": 4
+          }
+        },
+        {
+          "market": "receptions",
+          "panel_players": 186,
+          "panel_rows": 1320,
+          "season": 2018,
+          "state_counts": {
+            "DNP_INACTIVE": 89,
+            "HEALTHY_FULL": 2934,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 69,
+            "PARTIAL_GAME": 250,
+            "UNRESOLVED_CONTEXT": 20
+          }
+        },
+        {
+          "market": "receptions",
+          "panel_players": 179,
+          "panel_rows": 1316,
+          "season": 2019,
+          "state_counts": {
+            "DNP_INACTIVE": 94,
+            "HEALTHY_FULL": 2903,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 135,
+            "PARTIAL_GAME": 230,
+            "UNRESOLVED_CONTEXT": 15
+          }
+        },
+        {
+          "market": "receptions",
+          "panel_players": 186,
+          "panel_rows": 1362,
+          "season": 2020,
+          "state_counts": {
+            "DNP_INACTIVE": 112,
+            "HEALTHY_FULL": 2974,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 124,
+            "PARTIAL_GAME": 230,
+            "UNRESOLVED_CONTEXT": 9
+          }
+        },
+        {
+          "market": "receptions",
+          "panel_players": 187,
+          "panel_rows": 1463,
+          "season": 2021,
+          "state_counts": {
+            "DNP_INACTIVE": 92,
+            "HEALTHY_FULL": 3184,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 114,
+            "PARTIAL_GAME": 285,
+            "UNRESOLVED_CONTEXT": 15
+          }
+        },
+        {
+          "market": "receptions",
+          "panel_players": 177,
+          "panel_rows": 1420,
+          "season": 2022,
+          "state_counts": {
+            "DNP_INACTIVE": 91,
+            "HEALTHY_FULL": 3075,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 140,
+            "PARTIAL_GAME": 275,
+            "UNRESOLVED_CONTEXT": 13
+          }
+        },
+        {
+          "market": "receptions",
+          "panel_players": 181,
+          "panel_rows": 1449,
+          "season": 2023,
+          "state_counts": {
+            "DNP_INACTIVE": 86,
+            "HEALTHY_FULL": 3140,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 178,
+            "PARTIAL_GAME": 251,
+            "UNRESOLVED_CONTEXT": 9
+          }
+        },
+        {
+          "market": "receptions",
+          "panel_players": 182,
+          "panel_rows": 1460,
+          "season": 2024,
+          "state_counts": {
+            "DNP_INACTIVE": 98,
+            "HEALTHY_FULL": 3158,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 175,
+            "PARTIAL_GAME": 225,
+            "UNRESOLVED_CONTEXT": 8
+          }
+        },
+        {
+          "market": "receptions",
+          "panel_players": 181,
+          "panel_rows": 1428,
+          "season": 2025,
+          "state_counts": {
+            "DNP_INACTIVE": 149,
+            "HEALTHY_FULL": 3139,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 229,
+            "PARTIAL_GAME": 267,
+            "UNRESOLVED_CONTEXT": 14
+          }
+        }
+      ],
+      "pooled": {
+        "Q0": {
+          "coverage_deciles": [
+            0.3932900432900433,
+            0.4507843137254902,
+            0.4888740394253257,
+            0.5294117647058824,
+            0.5675675675675675,
+            0.6,
+            0.6359201773835919,
+            0.7,
+            0.75
+          ],
+          "coverage_iqr": [
+            0.4658914728682171,
+            0.6666666666666666
+          ],
+          "coverage_median": 0.5675675675675675,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.5156626506024097,
+          "interval_width_median": 3.0298364408624914
+        },
+        "Q1": {
+          "coverage_deciles": [
+            0.4666666666666667,
+            0.5204383561643835,
+            0.5555555555555556,
+            0.5847895500725689,
+            0.6,
+            0.625,
+            0.6571759259259259,
+            0.6923076923076923,
+            0.75
+          ],
+          "coverage_iqr": [
+            0.5416666666666666,
+            0.6666666666666666
+          ],
+          "coverage_median": 0.6,
+          "frac_players_pin20_improved": 0.8216867469879519,
+          "frac_players_pin80_improved": 0.5349397590361445,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.691566265060241,
+          "interval_width_median": 3.2564822564663283
+        },
+        "Q2": {
+          "coverage_deciles": [
+            0.4666666666666667,
+            0.5238095238095238,
+            0.5555555555555556,
+            0.5813953488372093,
+            0.6,
+            0.625,
+            0.65,
+            0.6848684210526318,
+            0.75
+          ],
+          "coverage_iqr": [
+            0.5411036036036037,
+            0.6666666666666666
+          ],
+          "coverage_median": 0.6,
+          "frac_players_pin20_improved": 0.8144578313253013,
+          "frac_players_pin80_improved": 0.5445783132530121,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.691566265060241,
+          "interval_width_median": 3.2102737775460257
+        },
+        "bias_by_mean_tercile": {
+          "Q0": {
+            "high": {
+              "ceiling_bias": -0.2631468440757658,
+              "floor_bias": 0.5722341063660914
+            },
+            "low": {
+              "ceiling_bias": 0.37086418648355207,
+              "floor_bias": -0.3884686572566368
+            },
+            "mid": {
+              "ceiling_bias": 0.0609427228215136,
+              "floor_bias": 0.06443961529235588
+            }
+          },
+          "Q1": {
+            "high": {
+              "ceiling_bias": -0.23175175746796406,
+              "floor_bias": -0.22783282167204455
+            },
+            "low": {
+              "ceiling_bias": 0.6016458252045451,
+              "floor_bias": -0.024280713741859222
+            },
+            "mid": {
+              "ceiling_bias": 0.2164185532826724,
+              "floor_bias": -0.0144992373320665
+            }
+          },
+          "Q2": {
+            "high": {
+              "ceiling_bias": -0.21109251119839087,
+              "floor_bias": -0.19445127796317013
+            },
+            "low": {
+              "ceiling_bias": 0.529730136496151,
+              "floor_bias": -0.03469950768025478
+            },
+            "mid": {
+              "ceiling_bias": 0.1844604050596963,
+              "floor_bias": -0.005266349092387158
+            }
+          }
+        },
+        "min_holdout_games": 8,
+        "players_scored": 415,
+        "rows": 14024
+      },
+      "production_sigma": 1.8,
+      "seasons_scored": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "walk_forward_players": 567,
+      "walk_forward_rows": 14024
+    },
+    "rush_yards": {
+      "by_era": {
+        "2016-2019": {
+          "Q0": {
+            "coverage_median": 0.44375,
+            "frac_well_calibrated": 0.36363636363636365
+          },
+          "Q1": {
+            "coverage_median": 0.5972972972972973,
+            "frac_well_calibrated": 0.6515151515151515
+          },
+          "Q1_p20_improved": 0.7424242424242424,
+          "Q1_p80_improved": 0.6363636363636364,
+          "Q2": {
+            "coverage_median": 0.575187969924812,
+            "frac_well_calibrated": 0.696969696969697
+          },
+          "Q2_p20_improved": 0.7878787878787878,
+          "Q2_p80_improved": 0.6363636363636364,
+          "decision": {
+            "H1_JOINT": true,
+            "H1_STRICT": true,
+            "Q1": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 16.82036260668193,
+                "arm": 8.08337637715967
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "Q2": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 16.82036260668193,
+                "arm": 7.56791108049299
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "preferred_JOINT": "Q1",
+            "preferred_STRICT": "Q1",
+            "rule_3_joint_tolerance": 6.0
+          },
+          "players": 66,
+          "rows": 1458,
+          "seasons": [
+            2016,
+            2019
+          ]
+        },
+        "2020-2022": {
+          "Q0": {
+            "coverage_median": 0.4444444444444444,
+            "frac_well_calibrated": 0.3620689655172414
+          },
+          "Q1": {
+            "coverage_median": 0.6,
+            "frac_well_calibrated": 0.5689655172413793
+          },
+          "Q1_p20_improved": 0.8620689655172413,
+          "Q1_p80_improved": 0.603448275862069,
+          "Q2": {
+            "coverage_median": 0.6,
+            "frac_well_calibrated": 0.6379310344827587
+          },
+          "Q2_p20_improved": 0.896551724137931,
+          "Q2_p80_improved": 0.6379310344827587,
+          "decision": {
+            "H1_JOINT": true,
+            "H1_STRICT": true,
+            "Q1": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 19.539022893763274,
+                "arm": 3.47953756730257
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "Q2": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 19.539022893763274,
+                "arm": 3.9767156065652722
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "preferred_JOINT": "Q1",
+            "preferred_STRICT": "Q1",
+            "rule_3_joint_tolerance": 6.0
+          },
+          "players": 58,
+          "rows": 1147,
+          "seasons": [
+            2020,
+            2022
+          ]
+        },
+        "2023-2025": {
+          "Q0": {
+            "coverage_median": 0.5,
+            "frac_well_calibrated": 0.4727272727272727
+          },
+          "Q1": {
+            "coverage_median": 0.625,
+            "frac_well_calibrated": 0.5636363636363636
+          },
+          "Q1_p20_improved": 0.8545454545454545,
+          "Q1_p80_improved": 0.5454545454545454,
+          "Q2": {
+            "coverage_median": 0.6190476190476191,
+            "frac_well_calibrated": 0.6363636363636364
+          },
+          "Q2_p20_improved": 0.8545454545454545,
+          "Q2_p80_improved": 0.509090909090909,
+          "decision": {
+            "H1_JOINT": true,
+            "H1_STRICT": true,
+            "Q1": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 15.924403010722335,
+                "arm": 6.708203025689032
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "Q2": {
+              "SUPPORTED_JOINT": true,
+              "SUPPORTED_STRICT": true,
+              "high_tercile_abs_bias_sum": {
+                "Q0": 15.924403010722335,
+                "arm": 7.03791063113621
+              },
+              "rule_1_more_calibrated_players": true,
+              "rule_2_pinball_majority_BOTH_tails": true,
+              "rule_3_joint": true,
+              "rule_3_strict": true,
+              "rule_4_no_crossed_quantiles": true
+            },
+            "preferred_JOINT": "Q1",
+            "preferred_STRICT": "Q1",
+            "rule_3_joint_tolerance": 6.0
+          },
+          "players": 55,
+          "rows": 1283,
+          "seasons": [
+            2023,
+            2025
+          ]
+        }
+      },
+      "coefficients_by_target_season": {
+        "2016": {
+          "Q1": {
+            "p20": [
+              5.683400791837014,
+              0.43724696407625047
+            ],
+            "p80": [
+              39.16208393022914,
+              0.8393632417473352
+            ]
+          },
+          "Q2": {
+            "p20": [
+              -0.205755850985596,
+              0.36093262301252343,
+              17.069015424010047
+            ],
+            "p80": [
+              38.53808863942375,
+              0.8242806476413144,
+              2.305273893212709
+            ]
+          }
+        },
+        "2017": {
+          "Q1": {
+            "p20": [
+              6.548672562439654,
+              0.43362831865417295
+            ],
+            "p80": [
+              39.16208394081072,
+              0.839363241598068
+            ]
+          },
+          "Q2": {
+            "p20": [
+              3.6149120114467985,
+              0.33932886674854923,
+              14.503894939570134
+            ],
+            "p80": [
+              38.661230261822,
+              0.8251355034720058,
+              2.0780095335140514
+            ]
+          }
+        },
+        "2018": {
+          "Q1": {
+            "p20": [
+              8.186495154760772,
+              0.4051446950305301
+            ],
+            "p80": [
+              44.20057142586612,
+              0.763714285727956
+            ]
+          },
+          "Q2": {
+            "p20": [
+              5.775676781946973,
+              0.2945559705820827,
+              14.19922439897249
+            ],
+            "p80": [
+              42.855419147640504,
+              0.7206533567554638,
+              6.428076277988421
+            ]
+          }
+        },
+        "2019": {
+          "Q1": {
+            "p20": [
+              7.508707612517924,
+              0.41704857924225336
+            ],
+            "p80": [
+              41.22727272679438,
+              0.8181818181835308
+            ]
+          },
+          "Q2": {
+            "p20": [
+              4.286248629210341,
+              0.2523538393994391,
+              20.968212639802
+            ],
+            "p80": [
+              37.93386380156811,
+              0.720370667568709,
+              14.654279210373595
+            ]
+          }
+        },
+        "2020": {
+          "Q1": {
+            "p20": [
+              8.015010013038077,
+              0.40860573708655135
+            ],
+            "p80": [
+              42.13970587300613,
+              0.8088235296021966
+            ]
+          },
+          "Q2": {
+            "p20": [
+              5.196697769739762,
+              0.27501336863478587,
+              17.1938093020795
+            ],
+            "p80": [
+              37.75781452501536,
+              0.671296751702745,
+              20.70850649152817
+            ]
+          }
+        },
+        "2021": {
+          "Q1": {
+            "p20": [
+              7.16873448989835,
+              0.4218362282972692
+            ],
+            "p80": [
+              41.38706256797036,
+              0.8165429479759954
+            ]
+          },
+          "Q2": {
+            "p20": [
+              4.437862319814959,
+              0.31205199092164015,
+              15.153020489078513
+            ],
+            "p80": [
+              37.14232267552069,
+              0.676793990433687,
+              21.076783718001096
+            ]
+          }
+        },
+        "2022": {
+          "Q1": {
+            "p20": [
+              6.570217464540811,
+              0.4312569112756959
+            ],
+            "p80": [
+              41.411023592416655,
+              0.8157480324922788
+            ]
+          },
+          "Q2": {
+            "p20": [
+              4.189801375182016,
+              0.32520179835800933,
+              14.673195297577571
+            ],
+            "p80": [
+              36.99395584792364,
+              0.6934047251240689,
+              19.62547247807008
+            ]
+          }
+        },
+        "2023": {
+          "Q1": {
+            "p20": [
+              7.564081629583222,
+              0.4163265307104998
+            ],
+            "p80": [
+              42.76711430632331,
+              0.7920078612395198
+            ]
+          },
+          "Q2": {
+            "p20": [
+              4.7863787891821055,
+              0.3135766310878906,
+              14.63812323887458
+            ],
+            "p80": [
+              37.33854698193981,
+              0.680062106288875,
+              19.959992830357457
+            ]
+          }
+        },
+        "2024": {
+          "Q1": {
+            "p20": [
+              8.001862209541214,
+              0.4096834260298705
+            ],
+            "p80": [
+              41.84771573243325,
+              0.8003384095911599
+            ]
+          },
+          "Q2": {
+            "p20": [
+              5.464931557568518,
+              0.28215307946732426,
+              16.212517896492812
+            ],
+            "p80": [
+              36.711463590054656,
+              0.6782518397985045,
+              20.059619907330067
+            ]
+          }
+        },
+        "2025": {
+          "Q1": {
+            "p20": [
+              7.493538242211674,
+              0.41914076150439866
+            ],
+            "p80": [
+              40.73504273782984,
+              0.8205128204191887
+            ]
+          },
+          "Q2": {
+            "p20": [
+              4.561835858262478,
+              0.3364427951925276,
+              13.176341520738717
+            ],
+            "p80": [
+              36.11249565144007,
+              0.7014436232552119,
+              19.07078015857754
+            ]
+          }
+        }
+      },
+      "decision": {
+        "H1_JOINT": true,
+        "H1_STRICT": true,
+        "Q1": {
+          "SUPPORTED_JOINT": true,
+          "SUPPORTED_STRICT": true,
+          "high_tercile_abs_bias_sum": {
+            "Q0": 20.695204044314067,
+            "arm": 4.490606458147171
+          },
+          "rule_1_more_calibrated_players": true,
+          "rule_2_pinball_majority_BOTH_tails": true,
+          "rule_3_joint": true,
+          "rule_3_strict": true,
+          "rule_4_no_crossed_quantiles": true
+        },
+        "Q2": {
+          "SUPPORTED_JOINT": true,
+          "SUPPORTED_STRICT": true,
+          "high_tercile_abs_bias_sum": {
+            "Q0": 20.695204044314067,
+            "arm": 3.88296027581196
+          },
+          "rule_1_more_calibrated_players": true,
+          "rule_2_pinball_majority_BOTH_tails": true,
+          "rule_3_joint": true,
+          "rule_3_strict": true,
+          "rule_4_no_crossed_quantiles": true
+        },
+        "preferred_JOINT": "Q1",
+        "preferred_STRICT": "Q1",
+        "rule_3_joint_tolerance": 6.0
+      },
+      "diagnostics": [
+        {
+          "market": "rush_yards",
+          "panel_players": 55,
+          "panel_rows": 395,
+          "season": 2013,
+          "state_counts": {
+            "DNP_INACTIVE": 117,
+            "HEALTHY_FULL": 1195,
+            "PARTIAL_GAME": 127,
+            "UNRESOLVED_CONTEXT": 1
+          }
+        },
+        {
+          "market": "rush_yards",
+          "panel_players": 62,
+          "panel_rows": 372,
+          "season": 2014,
+          "state_counts": {
+            "DNP_INACTIVE": 80,
+            "HEALTHY_FULL": 1244,
+            "PARTIAL_GAME": 158
+          }
+        },
+        {
+          "market": "rush_yards",
+          "panel_players": 54,
+          "panel_rows": 348,
+          "season": 2015,
+          "state_counts": {
+            "DNP_INACTIVE": 100,
+            "HEALTHY_FULL": 1252,
+            "PARTIAL_GAME": 146
+          }
+        },
+        {
+          "market": "rush_yards",
+          "panel_players": 57,
+          "panel_rows": 350,
+          "season": 2016,
+          "state_counts": {
+            "DNP_INACTIVE": 88,
+            "HEALTHY_FULL": 1187,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 14,
+            "PARTIAL_GAME": 144
+          }
+        },
+        {
+          "market": "rush_yards",
+          "panel_players": 57,
+          "panel_rows": 377,
+          "season": 2017,
+          "state_counts": {
+            "DNP_INACTIVE": 73,
+            "HEALTHY_FULL": 1193,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 15,
+            "PARTIAL_GAME": 159,
+            "UNRESOLVED_CONTEXT": 8
+          }
+        },
+        {
+          "market": "rush_yards",
+          "panel_players": 56,
+          "panel_rows": 365,
+          "season": 2018,
+          "state_counts": {
+            "DNP_INACTIVE": 68,
+            "HEALTHY_FULL": 1161,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 12,
+            "PARTIAL_GAME": 154,
+            "UNRESOLVED_CONTEXT": 4
+          }
+        },
+        {
+          "market": "rush_yards",
+          "panel_players": 52,
+          "panel_rows": 366,
+          "season": 2019,
+          "state_counts": {
+            "DNP_INACTIVE": 83,
+            "HEALTHY_FULL": 1199,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 33,
+            "PARTIAL_GAME": 130
+          }
+        },
+        {
+          "market": "rush_yards",
+          "panel_players": 63,
+          "panel_rows": 356,
+          "season": 2020,
+          "state_counts": {
+            "DNP_INACTIVE": 76,
+            "HEALTHY_FULL": 1224,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 49,
+            "PARTIAL_GAME": 121,
+            "UNRESOLVED_CONTEXT": 2
+          }
+        },
+        {
+          "market": "rush_yards",
+          "panel_players": 60,
+          "panel_rows": 379,
+          "season": 2021,
+          "state_counts": {
+            "DNP_INACTIVE": 95,
+            "HEALTHY_FULL": 1227,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 64,
+            "PARTIAL_GAME": 129,
+            "UNRESOLVED_CONTEXT": 6
+          }
+        },
+        {
+          "market": "rush_yards",
+          "panel_players": 58,
+          "panel_rows": 412,
+          "season": 2022,
+          "state_counts": {
+            "DNP_INACTIVE": 98,
+            "HEALTHY_FULL": 1276,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 61,
+            "PARTIAL_GAME": 140,
+            "UNRESOLVED_CONTEXT": 6
+          }
+        },
+        {
+          "market": "rush_yards",
+          "panel_players": 57,
+          "panel_rows": 434,
+          "season": 2023,
+          "state_counts": {
+            "DNP_INACTIVE": 71,
+            "HEALTHY_FULL": 1232,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 43,
+            "PARTIAL_GAME": 125,
+            "UNRESOLVED_CONTEXT": 3
+          }
+        },
+        {
+          "market": "rush_yards",
+          "panel_players": 59,
+          "panel_rows": 412,
+          "season": 2024,
+          "state_counts": {
+            "DNP_INACTIVE": 106,
+            "HEALTHY_FULL": 1251,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 58,
+            "PARTIAL_GAME": 116,
+            "UNRESOLVED_CONTEXT": 5
+          }
+        },
+        {
+          "market": "rush_yards",
+          "panel_players": 57,
+          "panel_rows": 437,
+          "season": 2025,
+          "state_counts": {
+            "DNP_INACTIVE": 121,
+            "HEALTHY_FULL": 1250,
+            "HEALTHY_FULL_SNAPS_UNKNOWN": 93,
+            "PARTIAL_GAME": 102,
+            "UNRESOLVED_CONTEXT": 9
+          }
+        }
+      ],
+      "pooled": {
+        "Q0": {
+          "coverage_deciles": [
+            0.3047357926221336,
+            0.363337250293772,
+            0.4,
+            0.4278571428571428,
+            0.46770833333333334,
+            0.5,
+            0.5294117647058824,
+            0.5803870967741935,
+            0.6565217391304348
+          ],
+          "coverage_iqr": [
+            0.3794642857142857,
+            0.5563725490196079
+          ],
+          "coverage_median": 0.46770833333333334,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.3828125,
+          "interval_width_median": 40.39781921149989
+        },
+        "Q1": {
+          "coverage_deciles": [
+            0.44833333333333336,
+            0.5,
+            0.5454545454545454,
+            0.5833333333333334,
+            0.6073781291172595,
+            0.6272727272727273,
+            0.659625,
+            0.6951690821256038,
+            0.75
+          ],
+          "coverage_iqr": [
+            0.5263157894736842,
+            0.68
+          ],
+          "coverage_median": 0.6073781291172595,
+          "frac_players_pin20_improved": 0.859375,
+          "frac_players_pin80_improved": 0.6484375,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.6484375,
+          "interval_width_median": 55.92958993732657
+        },
+        "Q2": {
+          "coverage_deciles": [
+            0.4781052631578947,
+            0.5,
+            0.5574285714285715,
+            0.5833333333333334,
+            0.6,
+            0.625,
+            0.648489666136725,
+            0.6890688259109312,
+            0.75
+          ],
+          "coverage_iqr": [
+            0.5366586538461539,
+            0.6666666666666666
+          ],
+          "coverage_median": 0.6,
+          "frac_players_pin20_improved": 0.8671875,
+          "frac_players_pin80_improved": 0.6484375,
+          "frac_rows_crossed": 0.0,
+          "frac_well_calibrated": 0.6953125,
+          "interval_width_median": 55.676698794105846
+        },
+        "bias_by_mean_tercile": {
+          "Q0": {
+            "high": {
+              "ceiling_bias": -10.03137703004853,
+              "floor_bias": 10.663827014265538
+            },
+            "low": {
+              "ceiling_bias": -7.6011008785635354,
+              "floor_bias": -6.882641020295977
+            },
+            "mid": {
+              "ceiling_bias": -3.942664543898277,
+              "floor_bias": 5.269040054125652
+            }
+          },
+          "Q1": {
+            "high": {
+              "ceiling_bias": -2.009633177739581,
+              "floor_bias": -2.480973280407591
+            },
+            "low": {
+              "ceiling_bias": 5.983025036793787,
+              "floor_bias": -2.6369538366436047
+            },
+            "mid": {
+              "ceiling_bias": 6.735399356319251,
+              "floor_bias": 0.5165856289590144
+            }
+          },
+          "Q2": {
+            "high": {
+              "ceiling_bias": -1.7397901728003702,
+              "floor_bias": -2.14317010301159
+            },
+            "low": {
+              "ceiling_bias": 5.5893392976723115,
+              "floor_bias": -2.9504490517784534
+            },
+            "mid": {
+              "ceiling_bias": 6.872006719913996,
+              "floor_bias": 0.7478655312533699
+            }
+          }
+        },
+        "min_holdout_games": 8,
+        "players_scored": 128,
+        "rows": 3888
+      },
+      "production_sigma": 24.0,
+      "seasons_scored": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "walk_forward_players": 197,
+      "walk_forward_rows": 3888
+    }
+  },
+  "preregistration": "docs/research/PRISM_WALK_FORWARD_QUANTILE_PREREGISTRATION_V1.md",
+  "sportsbook_inputs_used": false,
+  "walk_forward": {
+    "first_fit_season": 2013,
+    "min_prior_seasons": 3,
+    "target_seasons": [
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  }
+}
