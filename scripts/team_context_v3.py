@@ -57,6 +57,48 @@ GUARDED_PBP_FIELDS = (
 # Useful context that is retained from the legacy merged team-form collection
 # until each provider is independently certified during the provider-readiness
 # phase.  Their provenance intentionally says so rather than overstating trust.
+# Rate-typed fields must reach the rule layer as FRACTIONS. Sharp publishes
+# several of them as percentage points and the canonical boundary had no
+# normalization or range validation at all, so `middle_open_rate` arrived as
+# e.g. 24.4 while `rules_v2.matchup_multipliers` evaluates `middle >= 0.50`
+# expecting a fraction -- firing the gate for every defense. The bye-team
+# coverage fallback below had the same defect for man/zone. One guard at the
+# single point where all sources converge fixes both.
+_RATE_FIELDS = frozenset({
+    "coverage_man_rate", "coverage_zone_rate",
+    "light_box_rate", "heavy_box_rate",
+    "middle_open_rate", "middle_closed_rate",
+    "rz_rate",
+})
+
+
+def _normalize_rate(feature: str, value: float) -> tuple[float, str]:
+    """Coerce a rate-typed field to a fraction, failing closed out of range.
+
+    Returns (value, state_suffix). A percentage-scaled input in (1, 100] is
+    rescaled. Anything still outside [0, 1] becomes NaN rather than being
+    clamped, because silently clamping would hide a provider change behind a
+    plausible-looking number -- the field is labelled unavailable instead, per
+    the fail-closed rule for source/semantic mismatches.
+
+    Exactly 1.0 is left alone: it is a valid fraction and the ambiguity with
+    "100%" cannot be resolved from the value, so the conservative reading wins.
+    """
+    if feature not in _RATE_FIELDS:
+        return value, ""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return value, ""
+    if not np.isfinite(v):
+        return v, ""
+    if 1.0 < v <= 100.0:
+        return v / 100.0, "_percent_rescaled"
+    if v < 0.0 or v > 100.0:
+        return float("nan"), "_out_of_range_failed_closed"
+    return v, ""
+
+
 LEGACY_CONTEXT_FIELDS = (
     "def_rush_epa",
     "neutral_pace_last5",
@@ -276,6 +318,8 @@ def build_team_context_v3(
                 value = _num(tf_row, [target, "man_rate" if "man" in target else "zone_rate"])
                 source = "team_form_legacy_merged"
                 state = "legacy_merged_needs_provider_audit"
+            value, _scale_state = _normalize_rate(target, value)
+            state = f"{state}{_scale_state}"
             rec[target] = value
             provenance_rows.append(
                 _provenance_row(
@@ -302,6 +346,7 @@ def build_team_context_v3(
             if feature == "seconds_per_play_last5":
                 aliases.append("sec_per_play_last5")
             value = _num(tf_row, aliases)
+            value, _scale_state = _normalize_rate(feature, value)
             rec[feature] = value
             provenance_rows.append(
                 _provenance_row(
@@ -311,7 +356,8 @@ def build_team_context_v3(
                     source="team_form_legacy_merged",
                     source_seasons=str(season),
                     history_games=None,
-                    freshness_state="legacy_merged_needs_provider_audit",
+                    freshness_state=(
+                        f"legacy_merged_needs_provider_audit{_scale_state}"),
                     active_season=season,
                     target_week=week,
                 )

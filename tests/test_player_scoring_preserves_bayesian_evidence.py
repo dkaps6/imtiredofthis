@@ -71,6 +71,12 @@ def test_scoring_enrichment_preserves_playerform_prior_current_columns(tmp_path,
     }])
 
     monkeypatch.setattr(scoring, "DATA", tmp_path)
+    # TD_PRIOR_STATUS is bound at import time from DATA, so repointing DATA
+    # alone still writes into the real data/ directory. Patch it too, or the
+    # suite leaves residue in a canonical production path.
+    monkeypatch.setattr(
+        scoring, "TD_PRIOR_STATUS",
+        tmp_path / "player_scoring_td_prior_status.json", raising=False)
     monkeypatch.setattr(
         scoring,
         "_season_scoring",

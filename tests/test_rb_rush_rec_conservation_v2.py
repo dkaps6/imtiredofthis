@@ -2,7 +2,24 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import scripts.modeling.rb_rush_rec_conservation_v2 as _rbc
 from scripts.modeling.rb_rush_rec_conservation_v2 import build_candidate_map
+
+
+@pytest.fixture(autouse=True)
+def _audit_to_tmp(tmp_path, monkeypatch):
+    """Keep the integration audit out of the canonical data/ directory.
+
+    build_candidate_map writes AUDIT_CSV/AUDIT_JSON, which are module-level
+    paths under data/. Without this the suite leaves residue in a production
+    path on every run.
+    """
+    monkeypatch.setattr(
+        _rbc, "AUDIT_CSV",
+        tmp_path / "rb_rush_rec_conservation_v2_integration_audit.csv")
+    monkeypatch.setattr(
+        _rbc, "AUDIT_JSON",
+        tmp_path / "rb_rush_rec_conservation_v2_integration_audit.json")
 from scripts.simulation_v2 import SimulationResult
 
 

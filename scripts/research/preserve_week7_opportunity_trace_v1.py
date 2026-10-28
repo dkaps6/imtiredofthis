@@ -89,6 +89,30 @@ def _is_route_column(col: str) -> bool:
     return (not _denied(n)) and any(k in n for k in _ROUTE_PATTERNS)
 
 
+# Opponent/environment VALUES and the realized rule multipliers. Added because
+# the first Week-7 preservation kept opponent column NAMES and dropped their
+# VALUES, which blocked three separate questions afterwards: box/coverage gate
+# firing frequency, the exact pass_eff_mult, and any check of production's own
+# coverage provenance. It reduced cb_coverage_team.csv -- the CANONICAL coverage
+# artifact, written by build_coverage_v2 and read by team_context_v3 -- to
+# team/season/week, destroying man_rate, zone_rate, coverage_available and
+# coverage_source. The deny-list still runs first, so widening here cannot
+# admit a market column.
+_OPPONENT_PATTERNS = (
+    "coverage_", "man_rate", "zone_rate", "box_rate", "middle_open",
+    "middle_closed", "def_rush", "def_pass", "def_sack", "def_ypa",
+    "explosive", "success_rate", "pressure_rate", "blitz_rate", "stuff_rate",
+    "yards_before_contact", "ypt_allowed", "proe", "neutral_pace", "pace",
+    "_eff_mult", "_target_mult", "volatility_mult", "rules_ypt", "rules_ypc",
+    "rules_ypa", "rules_catch_rate", "rules_pass_rate", "rules_plays",
+)
+
+
+def _is_opponent_column(col: str) -> bool:
+    n = str(col).strip().lower()
+    return (not _denied(n)) and any(k in n for k in _OPPONENT_PATTERNS)
+
+
 def _denied(col: str) -> bool:
     n = str(col).strip().lower()
     if n in _DENY_EXEMPT:
@@ -129,7 +153,8 @@ def extract(root: Path, week: int) -> tuple[dict, dict]:
                                     "error": f"{type(exc).__name__}: {exc}"})
             continue
         cols = [c for c in head.columns
-                if str(c).strip().lower() in wanted or _is_route_column(c)]
+                if str(c).strip().lower() in wanted
+                or _is_route_column(c) or _is_opponent_column(c)]
         keep = [c for c in cols if not _denied(c)]
         # Full column-NAME inventory. Names are metadata, not market data, and
         # without them an explanatory field whose name I guessed wrong is
