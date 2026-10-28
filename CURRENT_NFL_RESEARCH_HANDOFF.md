@@ -145,10 +145,21 @@ Any future RB level claim must show a *decision* improvement, not just a bias im
 closed because the W7 fixture lacks the ML/State prediction columns. **This is now
 unblocked going forward:** the `eb109a6a` archival fix is working and wk08 replay inputs
 are landing (`data/market_track_record/replay_inputs/2026_wk08/`, including
-`model_ml_diagnostics`, `model_state_diagnostics`, `player_form_consensus`). Note the wk08
-manifest still reports `"complete": false` — `metrics_ready` and the rule inputs are
-missing, so a full replay is not yet possible. Promotion still requires baseline parity
-established **before** any treatment result is read, and `k` must not be retuned on W7.
+`model_ml_diagnostics`, `model_state_diagnostics`, `player_form_consensus`).
+
+**The wk08 manifest reports `"complete": false`, and that is CORRECT — do not "fix" it.**
+`required_missing` is `['data/metrics_ready.csv', 'data/model_rule_simulation_inputs.csv']`.
+Both are downstream of sportsbook props, and the wk08 runs were **no-live-odds dry runs**
+(no `boards/2026_wk08.csv`, no `raw_props/2026_wk08.csv`, no `game_odds/2026_wk08.csv`).
+Full Slate uploads `data/**` and `outputs/**`, so those files would have been captured had
+they existed; they do not exist because there were no props to price. The preservation
+script is failing closed and recording the reason, which is the intended behaviour.
+**A replay input set therefore cannot be complete on a no-odds run by construction — the
+set completes on the next LIVE-ODDS run.** That is the event to wait for before attempting
+the parity replay.
+
+Promotion still requires baseline parity established **before** any treatment result is
+read, and `k` must not be retuned on W7.
 
 ### SHIPPED TO PRODUCTION (cumulative, this lane)
 `PERCENTY_COLS` rate-scale fix (`9aa6058c`) — the only behaviour-changing merge. MC
