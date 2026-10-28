@@ -2,7 +2,9 @@
 
 ## TOP CHECKPOINT — 2026-10-28 — V20 — **ROSTER EXISTENCE CEILING CONFIRMED / RUSH-BUDGET ROOT CAUSE PRESERVED / AUDIT TARGET 6 OPEN** / CLAUDE ISSUE #535
 
-**Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.\n\n**Canonical branch at V20 handoff creation:** `main` was `adf82522976b6a2eb731f15507fdc70e5f433aba` immediately before this handoff write. Re-fetch `main` on entry; automation commits may move it.
+**Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.
+
+**Canonical branch at V20 handoff creation:** `main` was `adf82522976b6a2eb731f15507fdc70e5f433aba` immediately before this handoff write. Re-fetch `main` on entry; automation commits may move it.
 
 **Current state:** the RB rushing investigation has now located **two upstream structural defects** that must be solved in sequence: (1) the production football universe treats Ourlads as the sole authority that a player exists, so known/returning/elevated skill players can be structurally unreachable; (2) independently estimated player rush shares are not reconciled into a valid team opportunity budget before Monte Carlo allocation, so the current 0.95 backstop routinely compresses every modeled rusher. The roster/existence defect comes first operationally because reconciling an incomplete roster can make team totals look better while making named-player projections worse. No new coefficient, cap, weight, or projection behavior from this research lane is promoted. Live pricing remains unchanged except for the previously shipped rate-scale fix.
 
