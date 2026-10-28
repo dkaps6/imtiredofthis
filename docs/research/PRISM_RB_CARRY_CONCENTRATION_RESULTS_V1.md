@@ -82,6 +82,50 @@ post-Bayes/post-rules share is under-concentrated (0.5173 against 0.6277). **The
 shrinkage layers overshoot the football target.** That is a sharper statement than
 "the distribution is too flat," and it names where to look.
 
+## 3b. Which layer over-shrinks: the Bayesian one, and the rules layer is innocent
+
+The week-8 replay-input archive (the `eb109a6a` gap fix, now live) plus the W7 trace make
+the shrinkage decomposable layer by layer. Top-1 within-RB share at each stage, W7:
+
+| stage | top-1 share | target | gap |
+|---|---|---|---|
+| PlayerForm `rush_share_prior` | 0.6897 | 0.6658 | **+0.0239** |
+| PlayerForm `rush_share_current` | 0.6775 | 0.6588 | +0.0187 |
+| PlayerForm `rush_share` (blended, pre-Bayes) | 0.6288 | 0.6421 | **−0.0133** |
+| post-Bayes `bayes_rush_share` | 0.5173 | 0.6277 | **−0.1103** |
+| post-rules `rules_rush_share` | 0.5173 | 0.6277 | −0.1103 |
+
+**PlayerForm's blended share is essentially on target** (−0.013, negligible), and the
+trailing components are slightly *over*-concentrated exactly as K1 predicted. The entire
+11pp deficit appears across one step: the empirical-Bayes shrinkage.
+
+Paired on the same 25 teams:
+
+- Bayes shrink **−0.0895, 95% CI [−0.1370, −0.0420]**, top-1 reduced in **21/25** teams;
+- the rules layer is **bit-identical to Bayes on every team** (delta +0.0000) — it does
+  not touch rush shares at all, so the WR hierarchy work has no RB analogue here.
+
+Controlling for the one confound — the RB subset size changes across layers for 9 of 25
+teams, and more backs mechanically lowers top-1 — and restricting to the **16 teams whose
+back count did not change**:
+
+- pre 0.6436 → post 0.5502, paired shrink **−0.0933, 95% CI [−0.1292, −0.0575]**,
+  reduced in **15/16** teams.
+
+So it is not a back-count artifact. **`apply_bayesian_to_metrics` over-shrinks RB rush
+shares by ~9pp, and `apply_rules_to_metrics` passes that through unchanged.**
+
+Week 8's archived `player_form_consensus` confirms the input side is still near target on
+the current slate (top-1 0.6148 vs 0.6444, gap −0.0297), so this is a standing property of
+the layer rather than a one-week accident.
+
+**This relocates the fix.** Sharpening inside the simulation corrects a symptom one layer
+downstream of the cause. The better change is to stop the Bayesian layer from
+over-shrinking a back whose role is well established — which is a *player-identity*
+correction (how much evidence does this specific back have?), not a positional rule, and
+is therefore the version of this fix that belongs in this project. The simulation-side
+transform stays inert as a fallback.
+
 ## 4. Prize sizing — and why a mass-preserving fix is not sufficient
 
 γ = **1.75** applied to production's share vector reproduces the prior-season target
