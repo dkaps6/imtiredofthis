@@ -1,6 +1,6 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-28 — V14 — RATE-SCALE FIX SHIPPED TO MAIN / DISPERSION CONSTANT IS THE NEW LANE / CLAUDE ISSUE #535
+## TOP CHECKPOINT — 2026-10-28 — V15 — FIRST VALIDATED WIN: PER-TAIL QUANTILES BEAT THE CONSTANT SIGMA / INTEGRATION DESIGN OPEN / CLAUDE ISSUE #535
 
 **Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis. **Current state:** one production fix merged to `main` (`9aa6058c`); next lane identified and not yet started.
 
@@ -12,14 +12,48 @@
 5. Prior deep continuity if needed: `docs/handoffs/NFL_HANDOFF_2026-10-27_V13_RATE_GUARD_PLAYER_ALLOCATION_CONTINUITY.md`; displaced V13 root archived at `docs/handoffs/NFL_HANDOFF_2026-10-28_V13_PRE_V14_ROOT_ARCHIVE.md`.
 6. GitHub Issue https://github.com/dkaps6/imtiredofthis/issues/535 — fetch comments after **6457028486** FIRST. GPT ↔ Claude Code work channel.
 
-**Most important immediate next task:** preregister and build `sigma(projected_mean, centrality)` to replace the per-market dispersion constant, scored by **per-player quantile calibration** reported as a distribution across players, never averaged. Nothing else is queued ahead of it.
+**Most important immediate next task:** answer the **integration design question** before any code moves — a per-tail interval gives p20/p80, but `pricing_v2._prob_over` needs a probability for an **arbitrary** sportsbook line, so how are two fitted quantiles turned into a full distribution **without reintroducing a symmetric family**? That is a design decision, not a research one, and it must be posed to the user/GPT before implementation. Then replicate the study for `rush_yards` and `receptions`, which carry the same defect untested.
 
 ### NON-NEGOTIABLE USER SCIENCE
 **THE PLAYER SHOULD HAVE THE RULES, NOT THE POSITION HAVE THE PLAYER.** Named-individual projections from identity, injury/state, real opportunity, teammate competition, defense, role, script and market-specific football logic. Positional MAE/RMSE are QA only. **ANOMALIES ARE QUESTIONS, NOT TRENDS.** Maintain promoted Bayesian/ML/State/MC/QB/RB layers; do not scrap prior work.
 
 **NEW, user-stated 2026-10-28 and now evidence-backed:** *"You cannot treat all RBs and all WRs and all QBs and all TEs the same. Positionally sure, as individual players absolutely not."* A generic weight on Drake London and Josh Downs is wrong because their **distributions** differ, not just their means. **Averaged MAE is structurally blind to this** — a model can have every mean right and every floor and ceiling wrong and score identically. Do not use averaged error as the primary metric for a player-level distribution claim; use per-player quantile calibration.
 
-### SHIPPED THIS CHECKPOINT
+### VALIDATED THIS CHECKPOINT — the first real win
+**Per-tail quantile fit beats production's constant sigma, on naive data.**
+`PRISM_DIRECT_QUANTILE_{PREREGISTRATION,RESULTS}_V1`, frozen `abe11db5`, scored
+`a2df5060`. Fit 2020–2022, scored **2017–2019 (never inspected)**, 3,992 rows, 184
+players. Arm **Q2** (per-tail fit on projected mean + role centrality) passes all four
+frozen rules.
+
+- well-calibrated players **38.6% → 59.8%**; coverage median **0.520 → 0.597** (target 0.60);
+- players improved: p20 **83.7%**, p80 **59.8%** — a majority at **both** tails;
+- high-mean floor bias **+11.7 → −4.7** with the ceiling **not** paying for it (−3.1 → +0.2);
+- zero crossed quantiles; robust at min-games 6/8/10; Q2 beats Q0 in all three
+  contaminated reported seasons with the p80 majority holding in every one.
+
+**The structural finding.** Production's constant sigma implies **both tails move 1:1
+with the mean** and role is irrelevant. Fitted: **floor slope 0.335, ceiling slope
+0.698** — a receiver's floor rises far more slowly than his average, which is exactly
+why production overstates its best players' floors by ~12 yards. And **centrality loads
+on the ceiling 2.5× more than the floor** (+107.3 vs +43.3): being central to an
+offence is mostly an **upside** property.
+
+**This explains the prior study's centrality null.** There centrality entered through a
+**single sigma**, which cannot lift one tail more than the other. Once tails are
+independent its effect is tail-specific. That null was an artefact of functional form,
+**not** evidence against role — do not cite it as such.
+
+**Recorded so nobody repeats the mistake:** Q1 (mean only) scores **higher** on the
+headline (63.6% vs 59.8%) at every threshold and is **not supported**, because it
+improves the ceiling for only 45.7% of players — the exact failure mode of the
+preceding study. Reading the coverage column alone picks Q1 and repeats it. Rule 2
+existed to prevent that and did.
+
+**NO production change is authorised.** Integration needs its own change, its own
+tests, explicit user authorisation, and the design answer above.
+
+### SHIPPED EARLIER THIS SESSION
 - **`PERCENTY_COLS` rate-scale fix MERGED to main `9aa6058c`.** `scripts/make_team_form.py:331` now includes `coverage_man_rate`, `coverage_zone_rate`, `middle_open_rate`, `middle_closed_rate`, so Sharp percents convert at ingest as the box rates already did. `middle_open` gate now discriminates (13/32) instead of firing for every team. 10 tests incl. idempotence. Suite 892 passed; the single `test_full_slate_main_push_defaults_to_no_credit_mode` failure is **pre-existing** (confirmed failing on main before the merge).
 - **The previously proposed guard `ab29a096` was OFF-PATH and is NOT the gate fix.** `simulation_rules` imports `load_model_contexts` from `context_bridge` **(v1)**, which reads `team_form.csv` + `cb_coverage_team.csv` and **never** reads `team_context_v3.csv`; `apply_rules_to_metrics` also discards the teams dict (`_, players = load_model_contexts()`) and uses the TeamContext baked into each PlayerContext. The guard landed only as defense-in-depth at the artifact boundary; it divides only when `1.0 < v <= 100.0` so it cannot double-convert. **Do not describe it as the gate fix.**
 
@@ -37,7 +71,17 @@
 ### STILL TRUE FROM PRIOR CHECKPOINTS — DO NOT REDO
 Walker Week-7 exact case **CLEARED, never redo**. Opponent transmission trace cleared. JSN/Kupp/Barner role trace cleared (Kupp's −28% is M38 hierarchy, NOT opponent). 2025 gate prevalence proxy descriptive-only. 2026 PBP exists; 2026 nflverse participation (`defenders_in_box`, `defense_man_zone_type`) **unavailable** — 2025 is the last season inside the participation window. `middle_closed_rate` is consumed by nothing. Real W7 gate state: `wr1_target_mult` = **1.0 on all 396 rows**, `rules_pass_rate` = **0.57 on all 1,412 rows**. **REPLAY BLOCKER** stands: `replay-paid-full-slate-artifact-once.yml` is pinned to an expired Week-5 artifact and restores prebuilt context; do not blindly repoint it. The W7 fixture is a **column subset** (`usecols=keep`) missing `neutral_pace_last5` and `plays_est`, so it **cannot** establish absolute baseline parity — `rules_plays_est` differs from archive by a per-team constant (within-team std exactly 0.0 across 28 teams).
 
-### MUST-PASS ACCEPTANCE FOR THE DISPERSION LANE
+### NOW-SETTLED DISPERSION FACTS (do not re-derive)
+Production `pricing_v2.py:244` is `sigma = SIGMA[market]` (`rec_yards` **26.0**) with a
+normal CDF; origin predates available git history. Its intervals contain **50%** of
+outcomes against a **60%** target. A single mean-scaled sigma fixes the floor for 77%
+of players but breaks the ceiling for 69% — a symmetric family **cannot** calibrate
+both tails. A lognormal matched on (mean, sigma) gives the right asymmetry direction
+but narrows the central interval and scores worse. **Per-tail direct fitting is the
+answer; sigma-and-a-family is not.** A player's own measured SD must **not** be used
+raw (r≈0.25 persistence).
+
+### MUST-PASS ACCEPTANCE FOR ANY DISPERSION MERGE
 1. **Preregister and freeze before scoring**: the `sigma(projected_mean, centrality)` form, eligibility thresholds, the held-back data, and the decision rule. Commit the preregistration before any result exists.
 2. **Per-player quantile calibration is the primary metric** — does each player's 20th/80th percentile contain his outcomes at the right rate — reported as a **distribution across players**. Averaged MAE is explicitly disallowed as the primary read.
 3. **Do not use a player's own measured SD raw.** Only `r≈0.25` of that spread is signal; shrink toward the group or derive from the persistent parts (projected mean, centrality).
