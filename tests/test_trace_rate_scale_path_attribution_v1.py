@@ -15,12 +15,24 @@ import pytest
 from scripts.research import trace_rate_scale_path_attribution_v1 as T
 
 
-def test_source_contract_holds_on_current_tree():
-    out = T.assert_source_contract()
-    assert out["simulation_rules_uses_context_bridge_v1"] is True
-    assert out["apply_rules_to_metrics_discards_teams_dict"] is True
-    assert out["context_bridge_v1_reads_team_context_v3"] is False
-    assert out["percenty_cols_still_missing"]
+def test_contract_now_refuses_because_the_root_cause_IS_FIXED():
+    """PERCENTY_COLS was repaired, so this trace must refuse to run.
+
+    It documented a live defect. Once the defect is gone the trace's effect sizes
+    describe a repaired build, and continuing to report them as current would be
+    stale. The guard firing here is the fix landing, not a regression.
+    """
+    with pytest.raises(RuntimeError, match="has been fixed"):
+        T.assert_source_contract()
+
+
+def test_path_attribution_facts_still_hold_after_the_fix():
+    """The path finding is independent of the scale fix and must survive it."""
+    sim = Path("scripts/modeling/simulation_rules.py").read_text(encoding="utf-8")
+    cb1 = Path("scripts/modeling/context_bridge.py").read_text(encoding="utf-8")
+    assert "from scripts.modeling.context_bridge import load_model_contexts" in sim
+    assert "_, players = load_model_contexts()" in sim
+    assert "team_context_v3" not in cb1
 
 
 def test_contract_fails_closed_if_rules_stage_switches_bridge(monkeypatch):
@@ -154,6 +166,7 @@ def test_coverage_fallback_reach_reports_whether_false_fires_can_land():
 
 
 def test_main_refuses_a_non_te_effect(monkeypatch):
+    monkeypatch.setattr(T, "assert_source_contract", lambda: {})
     """The TE-only claim must be an assertion, not a description of one run."""
     monkeypatch.setattr(T, "effect_size", lambda *a, **k: {
         "rows_moved": 5, "rows_total": 100, "positions_moved": ["TE", "WR"],
@@ -167,6 +180,7 @@ def test_main_refuses_a_non_te_effect(monkeypatch):
 
 
 def test_main_refuses_an_unexpected_multiplier(monkeypatch):
+    monkeypatch.setattr(T, "assert_source_contract", lambda: {})
     monkeypatch.setattr(T, "effect_size", lambda *a, **k: {
         "rows_moved": 5, "rows_total": 100, "positions_moved": ["TE"],
         "distinct_relative_multipliers": [0.75], "teams_moved": 1, "players_moved": 1,

@@ -332,6 +332,14 @@ PERCENTY_COLS = {
     "light_box_rate", "heavy_box_rate", "neutral_db_rate", "neutral_db_rate_last_5",
     "blitz_rate", "sub_package_rate", "motion_rate", "play_action_rate",
     "shotgun_rate", "no_huddle_rate",
+    # Sharp supplies these as percents like the box rates above, but they were
+    # omitted here, so they reached rules_v2.matchup_multipliers unconverted and
+    # were compared against FRACTION thresholds (zone >= 0.60, man >= 0.50,
+    # middle >= 0.50). middle_open_rate arrived as 24.0-64.6 and the gate fired
+    # for all 32 teams rather than 13 -- a constant, not a discriminator.
+    # See docs/research/PRISM_RATE_SCALE_PATH_ATTRIBUTION_V1.md.
+    "coverage_man_rate", "coverage_zone_rate",
+    "middle_open_rate", "middle_closed_rate",
 }
 
 
