@@ -1,0 +1,42 @@
+{
+  "season": 2026,
+  "week": 7,
+  "assembly": {
+    "placed": 64,
+    "non_data_fixture_files_skipped": [],
+    "props_source": "data/market_track_record/raw_props/2026_wk07.csv"
+  },
+  "audit_requirement": "GPT 6472971619 section 4: baseline parity before treatment",
+  "input_preflight": {
+    "usable": false,
+    "missing_files": [],
+    "column_incomplete": {
+      "data/model_ml_diagnostics.csv": {
+        "missing_columns": [
+          "ml_available",
+          "ml_method",
+          "ml_pass_yards",
+          "ml_rush_yards",
+          "ml_rec_yards",
+          "ml_receptions"
+        ],
+        "columns_present": 6
+      },
+      "data/model_state_diagnostics.csv": {
+        "missing_columns": [
+          "state_available",
+          "state_method"
+        ],
+        "columns_present": 6
+      }
+    },
+    "reason": "the archived fixture is a column subset: the preservation denylist stripped market-named columns, including the ML and State prediction columns, so ensemble_proj -> target_mean -> the priced distribution's location cannot be reproduced"
+  },
+  "PARITY_ESTABLISHED": false,
+  "disposition": "FAILED_CLOSED_FIXTURE_INCOMPLETE_PARITY_NOT_ESTABLISHABLE",
+  "consequence": "The MC dispersion calibration stays CANDIDATE_PENDING_PARITY_REPLAY and inert. The earlier week-7 numbers (Brier 0.2713 -> 0.2555) remain a raw-simulator counterfactual and must not be cited as production evidence.",
+  "what_would_unblock": [
+    "a Full Slate run that archives model_ml_diagnostics.csv and model_state_diagnostics.csv WITH their prediction columns, alongside the board -- the same durability gap as the decision-gate evidence",
+    "or a prospective week priced twice (calibration off, then on) from the same inputs, which needs no historical fixture at all"
+  ]
+}
