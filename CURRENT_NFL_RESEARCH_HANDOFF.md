@@ -1,30 +1,26 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-28 — V19 — **ROOT CAUSE FOUND: PLAYER RUSH SHARES ARE NEVER RECONCILED INTO A TEAM OPPORTUNITY BUDGET** / "TEAM VOLUME IS RIGHT" **RETRACTED** / CLAUDE ISSUE #535
+## TOP CHECKPOINT — 2026-10-28 — V20 — **ROSTER EXISTENCE CEILING CONFIRMED / RUSH-BUDGET ROOT CAUSE PRESERVED / AUDIT TARGET 6 OPEN** / CLAUDE ISSUE #535
 
-**Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.
+**Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.\n\n**Canonical branch at V20 handoff creation:** `main` was `adf82522976b6a2eb731f15507fdc70e5f433aba` immediately before this handoff write. Re-fetch `main` on entry; automation commits may move it.
 
-**Current state:** the RB `rush_yards` level defect is now fully diagnosed and **both**
-candidate fixes from the parent diagnosis are closed negative under their own frozen kill
-conditions. One real cause is located upstream, with a confidence interval. Nothing new is
-promoted. Live pricing is unchanged by anything in this lane.
+**Current state:** the RB rushing investigation has now located **two upstream structural defects** that must be solved in sequence: (1) the production football universe treats Ourlads as the sole authority that a player exists, so known/returning/elevated skill players can be structurally unreachable; (2) independently estimated player rush shares are not reconciled into a valid team opportunity budget before Monte Carlo allocation, so the current 0.95 backstop routinely compresses every modeled rusher. The roster/existence defect comes first operationally because reconciling an incomplete roster can make team totals look better while making named-player projections worse. No new coefficient, cap, weight, or projection behavior from this research lane is promoted. Live pricing remains unchanged except for the previously shipped rate-scale fix.
 
 **Read in this exact order**:
 1. AGENTS.md (canonical 2026 operating contract, player-first first principle).
-2. **ONLY THIS NEWEST ACTIVE TOP V18.** Do not recursively read prior V2–V17 checkpoints.
+2. **ONLY THIS NEWEST ACTIVE TOP V20.** Do not recursively read prior checkpoints unless this file explicitly points to one.
 3. **`docs/research/PRISM_RB_RUSH_SHARE_MASS_BUDGET_V1.md` — THE ROOT CAUSE. Read before
    anything else in the RB lane; it retracts the premise both earlier fixes were chosen under.**
 4. `docs/research/PRISM_RB_CARRY_CONCENTRATION_RESULTS_V1.md` — fix A, and the shape half.
 4. `docs/research/PRISM_RB_ENSEMBLE_REWEIGHT_RESULTS_V1.md` — fix B, and why reweighting
    cannot work.
 5. `docs/research/PRISM_CORRECTION_PRODUCTION_IS_NOT_CONSTANT_SIGMA_V1.md` — still binding.
-6. Displaced V17 root archived at
-   `docs/handoffs/NFL_HANDOFF_2026-10-28_V17_PRE_V18_ROOT_ARCHIVE.md`.
-7. GitHub Issue https://github.com/dkaps6/imtiredofthis/issues/535 — read
-   **[comment 6477740922](https://github.com/dkaps6/imtiredofthis/issues/535#issuecomment-6477740922)**
-   FIRST. It is a deliberately **standalone state-of-play catch-up**: a recycled context can
-   start there without scrolling the other 967 comments. Then fetch anything after it.
-   GPT ↔ Claude Code work channel.
+6. Displaced V19 root archived at
+   `docs/handoffs/NFL_HANDOFF_2026-10-28_V19_PRE_V20_ROOT_ARCHIVE.md`.
+7. GitHub Issue https://github.com/dkaps6/imtiredofthis/issues/535 — GPT ↔ Claude Code work channel.
+   For rapid continuity, read standalone catch-up comment **6477740922**, then the current sequence:
+   **6477974816 → 6478435704 → 6478678129 → 6478823926 → 6478960995 → 6479098849 → 6479259425**,
+   then fetch anything newer before acting.
 
 **Most important immediate next task — SEQUENCED, agreed with the auditor (#535 comment
 6478960995):** **roster/availability integrity FIRST, budget reconciliation SECOND.**
@@ -48,6 +44,25 @@ promoted. Live pricing is unchanged by anything in this lane.
 mass is **over** by +3.26, and forcing an incomplete Thursday roster to 1.0 hands Jordan
 Mason's 15 carries to Aaron Jones and Max Bredeson — the team aggregate gets righter while
 named-player projections get worse. Preregister before scoring, as always.
+
+### LATEST CLAUDE RESPONSE — ISSUE #535 COMMENTS 6479098849 + 6479259425
+
+Claude accepted the sequencing ruling and independently verified the W7 outside-carrier state labels against nflverse weekly rosters. The 52 outside carries split into **17 deterministic omissions/identity**, **30 reserve-return**, and **5 elevation/late-addition** carries. Crucially, row-count tracing proves the architecture itself is the ceiling: `roles_ourlads` 458 → `roles_ourlads_status_v1` 458 → `current_player_availability` 458 → `roles_current_production_eligible_v1` 396 → `football_simulation_universe` 396. The availability layer **never adds a player**; it only narrows Ourlads rows. Therefore a player omitted by Ourlads is structurally unreachable even if another feed knows he is active.
+
+The working contract remains **designed, not promoted**:
+```
+team_modeled_mass_target = 1 - unresolved_roster_rush_mass
+```
+The residual must be state-derived and time-dependent. Known-active players missing from Ourlads are roster-integrity failures, not mystery residual. Return-window/elevation candidates can remain unresolved before final lock. A final game-day refresh should collapse the residual toward zero when the eligible skill roster is complete.
+
+**AUDIT TARGET 6 is the immediate open question set:**
+- Determine the authoritative **pregame-safe player-existence feed**. `nflreadpy.load_rosters_weekly(2026)` resolves all nine W7 cases in settled data, but its publication timing must be proven safe for Thursday/game-day use before it can become production authority. Do not use a post-hoc weekly roster snapshot as a pregame feature.
+- Measure whether the same Ourlads existence ceiling affects **WR/TE**, because 458→396 narrows every position and could contaminate target-share/receiving markets too. This is a diagnostic question only; do not assume the answer.
+- The union existence universe should combine depth-role authority with a leakage-safe existence/transaction source, availability/return states, and final game-day activations/inactives. Ourlads may remain a role/depth source but **must not remain the sole authority that a player exists**.
+
+Claude also disclosed a **standing capability gap**: production currently uses **zero NextGen Stats**, even though `load_nextgen_stats` returns 2026 weeks 1–7 for passing/rushing/receiving. This is **not the active lane** and must not distract from roster integrity → budget reconciliation. Relevant fields include rushing `expected_rush_yards`, RYOE, efficiency, and `percent_attempts_gte_eight_defenders`; receiving includes separation/cushion/air-yards/YAC-over-expectation. Target-week NGS is outcome data and can never be used upstream. Before any future NGS study, prove publication timing and use strictly prior-week walk-forward inputs. The old doc saying “2026 NGS unavailable” was wrong because it conflated NGS with the genuinely unavailable 2026 participation endpoint.
+
+
 
 ### NON-NEGOTIABLE USER SCIENCE
 **THE PLAYER SHOULD HAVE THE RULES, NOT THE POSITION HAVE THE PLAYER.** Named-individual
@@ -251,7 +266,7 @@ lost** to a 7-day retention setting (AGENTS.md §5a).
    merge.**
 
 ### REMAINING AUTHORIZED RESEARCH QUEUE
-**Active, in this order (agreed with the auditor, #535 comment 6478960995):**
+**Active, in this order (agreed through #535 comments 6478960995 and 6479098849):**
 **(1) roster/availability EXISTENCE integrity** — Ourlads is the sole existence authority
 (458 → 458 → 458 → 396 → 396; the availability layer never adds a row), so build a union
 existence universe plus a game-day refresh. **(2) team rush-budget reconciliation**, which
@@ -291,7 +306,23 @@ Per AGENTS.md §5a, results worth citing go in git, never only in an expiring ar
 executor repeatedly and been right each time; the most consequential correction was that
 MAE is the wrong metric for an individual-player claim. Two and a half days have produced
 **one** behaviour-changing shipped fix, three retracted off-path claims caught before they
-shipped, and a verified map of where leverage is **not** — including the now-measured fact
-that fixing the RB rushing level does not change a bet decision. The user is time-pressured
-with Week 8 imminent and does not want another lane change. The Bayesian over-shrink is the
-lead precisely because it is upstream of both failed fixes and is a player-identity fix.
+shipped, and a verified map of where leverage is **not** — including the corrected finding that the tested RB level substitution **changed 26 of 79 decisions but produced zero net side-accuracy gain (13/13 on flipped decisions)**. The user is time-pressured
+with Week 8 imminent and does not want another lane change. The active lead is now **roster/existence integrity first**, then **coverage-aware team rush-budget reconciliation**, then **Bayesian evidence-dependent shrinkage**. Do not skip that order.
+
+
+### V20 NEXT-CHAT RESTART PROTOCOL — DO THIS, DO NOT RECONSTRUCT FROM MEMORY
+1. Read `AGENTS.md`.
+2. Read this V20 root handoff completely.
+3. Fetch Issue #535 comments newer than **6479259425** before doing anything else.
+4. Re-fetch current `main` SHA and audit any new Claude commit before accepting its claims.
+5. Continue **AUDIT TARGET 6**: establish whether the candidate existence/roster source is truly pregame-safe, and separately measure WR/TE existence loss. Do not design/promote a reconciliation until roster authority is leakage-safe.
+6. Preserve the order: **roster/existence integrity → coverage-aware rush-budget reconciliation → Bayesian evidence-dependent shrinkage**.
+7. Do not reopen betting, fetch paid odds, retune W7, promote MC dispersion, remove the 0.95 cap, or normalize incomplete rosters to 1.0 without explicit user authorization and preregistered evidence.
+8. Every material result goes into git and #535; update this ONE root TOP and archive the displaced version.
+
+### USER COMMUNICATION CONTRACT
+The user wants plain-English translation of Claude's technical updates and an independent answer to: **Did this actually improve PRISM's named-player projections, or did we only learn something?** Always distinguish:
+- **research/discovery** — what we learned;
+- **production change** — what code actually changed live behavior;
+- **validated improvement** — what survived honest production-path evidence.
+Do not call a discovery an improvement. Do not agree blindly. Do not optimize positional MAE. Keep the named player in his actual football situation as the scientific unit.
