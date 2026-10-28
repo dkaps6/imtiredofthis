@@ -13,8 +13,10 @@ Two results matter more than the candidate comparison:
 1. **The ensemble machinery structurally cannot express the fix.** NNLS, given recent
    data, asks to scale `mc_proj` up by **1.52×**. `_normalise_nonnegative` divides that
    away and returns `(1.0, 0, 0)` — keeping MC's −16 bias at full strength.
-2. **Fixing the level buys zero decision improvement.** Pure ML lands the bias at
-   **+0.26** (from −8.54) and side accuracy does not move at all: **42/79 → 42/79**.
+2. **Fixing the level changed 26 of 79 decisions and produced zero NET decision gain.**
+   Pure ML lands the bias at **+0.26** (from −8.54); the 26 flipped sides split 13/13, so
+   aggregate hits stay **42/79 → 42/79**. (Wording corrected per GPT audit 6477974816: an
+   earlier draft said "changes no decision", which is false — it changes 26.)
 
 ## 1. Candidates on weeks 6–7 (`rush_yards`, fit n=89, test n=79)
 
@@ -62,7 +64,7 @@ blend is a strict convex combination with no intercept, **the ensemble has no me
 correct a component's level drift except by reweighting toward a less-biased component.**
 That is a code-level limitation, not a weights problem, and no choice of weights fixes it.
 
-## 3. The finding that matters most for betting: the level is not the decision
+## 3. The level change moves 26 decisions and nets zero
 
 C2 nails the level and changes nothing that would be acted on.
 
@@ -75,9 +77,18 @@ C2 also picks OVER on **58/79** rows while actuals went over on only **37/79**. 
 unbiased *mean* is not a calibrated *side*, because the line is close to efficient
 (vegas MAE **22.78** still beats our best candidate's 23.66).
 
-**On this evidence, correcting the RB rushing level does not improve a single bet
-decision.** That is the honest answer to "will this make Sunday better", and it is
-independent of which candidate is chosen.
+**On this evidence, correcting the RB rushing level produced no NET decision gain** — it
+moved 26 of 79 side calls and won exactly half of them. That is the honest answer to
+"will this make Sunday better" for *this* substitution, and it is independent of which
+candidate is chosen.
+
+**It does NOT mean a more correct player projection is valueless, and it does not make
+side accuracy the definition of model correctness.** PRISM's objective is named-player
+projection quality (AGENTS.md first principle); side accuracy is a *downstream* decision
+metric. An earlier draft of this document over-extended from "no net gain here" to "every
+RB level fix must be judged on side accuracy" — that inverts the project's objective and
+is withdrawn, per GPT audit 6477974816. At n=79 with a 13/13 split this is also an
+underpowered test.
 
 ## 4. `rush_rec_yards` (secondary, not a promotion candidate)
 

@@ -1,5 +1,17 @@
 # PRISM — RB rushing yards: the gap is Monte Carlo LEVEL, and ML already has it right
 
+> ⚠️ **SUPERSEDED MECHANISM — read `PRISM_RB_RUSH_SHARE_MASS_BUDGET_V1.md` first.**
+> This document's claim **"team RB carry volume is right: 22.59 simulated vs 23.11 actual
+> (bias −0.52)" is RETRACTED.** Measured on the exact production simulation universe by
+> running the real `simulate()`, realized RB carries are **19.77/team vs 23.15 actual,
+> bias −3.38 [−6.36, −0.53]**. Team rush mass is **low**, not right.
+>
+> That false premise is why this document pointed at *allocation* rather than *mass*, and
+> why both fixes it proposed were doomed: raw player rush shares sum to **1.2729** per
+> team, `_allocate_counts` caps at 0.95 and so applies a uniform **0.7574** haircut to
+> every modeled player on all 28/28 teams. The component bias table, the vegas-benchmarked
+> excess bias, and the per-rank shortfalls below remain valid.
+
 **Live 2026 data, weeks 1/2/6/7, n=173 RB `rush_yards` rows graded against actuals.**
 All component columns come from the archived boards; no fixture, no replay needed.
 

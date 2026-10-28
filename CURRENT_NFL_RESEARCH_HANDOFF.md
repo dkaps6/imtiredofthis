@@ -1,6 +1,6 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-28 — V18 — **RB RUSHING: FIXES A AND B BOTH CLOSED NEGATIVE** / CAUSE LOCATED AT THE **BAYESIAN SHRINKAGE LAYER** / CLAUDE ISSUE #535
+## TOP CHECKPOINT — 2026-10-28 — V19 — **ROOT CAUSE FOUND: PLAYER RUSH SHARES ARE NEVER RECONCILED INTO A TEAM OPPORTUNITY BUDGET** / "TEAM VOLUME IS RIGHT" **RETRACTED** / CLAUDE ISSUE #535
 
 **Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.
 
@@ -12,7 +12,9 @@ promoted. Live pricing is unchanged by anything in this lane.
 **Read in this exact order**:
 1. AGENTS.md (canonical 2026 operating contract, player-first first principle).
 2. **ONLY THIS NEWEST ACTIVE TOP V18.** Do not recursively read prior V2–V17 checkpoints.
-3. `docs/research/PRISM_RB_CARRY_CONCENTRATION_RESULTS_V1.md` — fix A, and the live lead.
+3. **`docs/research/PRISM_RB_RUSH_SHARE_MASS_BUDGET_V1.md` — THE ROOT CAUSE. Read before
+   anything else in the RB lane; it retracts the premise both earlier fixes were chosen under.**
+4. `docs/research/PRISM_RB_CARRY_CONCENTRATION_RESULTS_V1.md` — fix A, and the shape half.
 4. `docs/research/PRISM_RB_ENSEMBLE_REWEIGHT_RESULTS_V1.md` — fix B, and why reweighting
    cannot work.
 5. `docs/research/PRISM_CORRECTION_PRODUCTION_IS_NOT_CONSTANT_SIGMA_V1.md` — still binding.
@@ -24,9 +26,13 @@ promoted. Live pricing is unchanged by anything in this lane.
    start there without scrolling the other 967 comments. Then fetch anything after it.
    GPT ↔ Claude Code work channel.
 
-**Most important immediate next task:** the **Bayesian RB rush-share over-shrink**. It is
-the only live lead and it is a player-identity correction, which is what the user has been
-asking for all along. Preregister before scoring, as always.
+**Most important immediate next task:** reproduce the **team rush-share mass budget**
+measurement on a prospective live-odds universe, then design the reconciliation. Raw
+`rules_rush_share` sums to **1.2729** per team (28/28 teams over the 0.95 cap), so
+`_allocate_counts` applies a uniform **0.7574** haircut and RB carries land at **19.77 vs
+23.15 actual (−3.38)**. Do NOT simply remove the cap — pre-cap mass is **over** by +3.26.
+The defect is that per-player shares are never reconciled as a team allocation.
+Preregister before scoring, as always.
 
 ### NON-NEGOTIABLE USER SCIENCE
 **THE PLAYER SHOULD HAVE THE RULES, NOT THE POSITION HAVE THE PLAYER.** Named-individual
@@ -76,6 +82,43 @@ Live 2026 rows, weeks 1/2/6/7, n=182 non-QB `rush_yards` with actuals:
 Excess bias vs market on identical rows **−6.03 [−8.03, −4.03]** — significant and
 selection-immune. Bias by within-team model rank is negative at **every** rank: rank 1
 **−22.34 [−29.04, −15.64]**, rank 2 −5.21 [−10.62, +0.21], rank 3+ −5.13.
+
+### ⚠️ ROOT CAUSE — and the FOURTH retraction, which overturned the lane's premise
+
+**RETRACTED:** the parent diagnosis's *"team RB carry volume is right: 22.59 simulated vs
+23.11 actual (bias −0.52)"*. Measured on the **exact production simulation universe**
+(`week7_trace__data__football_simulation_universe.csv` — 396 rows, 28 teams, 0 duplicates,
+the frame `_full_roster_simulate` passes to `canonical_simulate`) by **running the real
+`simulate()`**: realized RB carries **19.77/team vs 23.15 actual, bias −3.38
+[−6.36, −0.53]**. An independent analytic estimate agrees at 19.70. **Team rush mass is
+LOW, not right.** The old 22.59 almost certainly came from the priced `metrics_ready`
+population — the same off-path error as the other three retractions.
+
+That false premise is why the lane chased *allocation* instead of *mass*, and why both
+fixes were doomed from the start.
+
+**The mechanism** (proposed by GPT audit 6477974816 AUDIT TARGET 2; confirmed here):
+`rules_rush_share` is estimated per player **independently**, with no team-sum constraint.
+
+| quantity | value |
+|---|---|
+| teams over the 0.95 cap | **28 / 28** |
+| raw team rush-share sum | mean **1.2729**, max **1.6877** |
+| cap multiplier applied to every modeled player | mean **0.7574**, min 0.5629 |
+| RB carries pre-cap → post-cap | 26.60 → **19.77** (−6.83 = −28.03 yd/team) |
+
+The two errors do not cancel: raw shares over-allocate by **+3.26** carries, the cap
+over-corrects to **−3.38**. Yards lost to compression by rank — **rank 1 13.18, rank 2
+7.88, rank 3+ 5.28** — against observed shortfalls of −22.34 / −5.21 / −5.13. A uniform
+multiplicative haircut lowers **every** rank at once, which is exactly the pattern that
+killed fix A (mass-preserving, so the missing mass was never inside the RB distribution)
+and fix B (reweighting, so the defect is upstream of all three components).
+
+**Do NOT just remove the cap** — pre-cap mass is over by +3.26, so that overshoots. The
+defect is the missing reconciliation step. **This unifies with the Bayesian finding:**
+`bayesian_v2._posterior_mean` shrinks each player toward a position prior independently,
+which both **inflates total mass** and **flattens relative shape** (the ~9pp concentration
+gap). One structural defect, two symptoms.
 
 ### FIX A — CLOSED NEGATIVE (K1 fired), BUT IT LOCATED THE CAUSE
 γ fitted on raw trailing shares, nflverse 2013–2025, 6,296 team-weeks = **0.76**, not >1
@@ -133,12 +176,18 @@ component.
 convex combination with no intercept, so **the ensemble cannot correct level drift except
 by reweighting.** `rush_rec_yards` the same (sum 1.3357). 6 characterization tests pin it.
 
-**THE MOST IMPORTANT RESULT IN THIS CHECKPOINT:** fixing the level **changes no decision**.
-C0 and C2 pick different sides on **26 of 79** rows and split them **13/13** — a dead heat.
-Hits are **42/79 for C0, C2 and C3 alike** (verified row by row; the identical figure is a
-real coin-flip coincidence, not a bug). C2 picks OVER on 58/79 while actuals went over on
-37/79 — **an unbiased mean is not a calibrated side**, because the line is near-efficient.
-Any future RB level claim must show a *decision* improvement, not just a bias improvement.
+**Decision effect, wording corrected per GPT audit 6477974816:** fixing the level **changed
+26 of 79 decisions and produced zero NET gain** — the flipped sides split **13/13**, so hits
+stay **42/79 for C0, C2 and C3 alike** (verified row by row; a real coin-flip coincidence,
+not a bug). C2 picks OVER on 58/79 while actuals went over on 37/79 — an unbiased mean is
+not a calibrated side. **"Changes no decision" was false and is withdrawn.**
+
+**Also withdrawn:** the stronger inference that every RB level fix must therefore be judged
+primarily on side accuracy. That inverts the project's objective. PRISM optimizes
+named-player projection quality (AGENTS.md first principle); side accuracy is a *downstream*
+decision metric, reported but not definitional. At n=79 with a 13/13 split this is also an
+underpowered test — it shows no evidence of betting gain from that substitution, not that a
+more correct player projection is valueless.
 
 ### MC DISPERSION CALIBRATION — STILL SHIPPED BUT **INERT**
 `k` remains `CANDIDATE_PENDING_PARITY_REPLAY`, NOT promoted. W7 exact-path parity failed

@@ -1,0 +1,25 @@
+{
+  "version": "RUSH_SHARE_MASS_COMPRESSION_DECOMPOSITION_V1",
+  "requested_by": "GPT audit issue #535 comment 6477974816 (AUDIT TARGET 2)",
+  "population": "data/research/week7_opportunity_trace/week7_trace__data__football_simulation_universe.csv",
+  "teams": 28,
+  "cap": 0.95,
+  "teams_compressed": 28,
+  "raw_share_sum_mean": 1.2729,
+  "cap_multiplier_mean": 0.7574,
+  "rb_carries_lost_per_team": 6.829,
+  "rb_yards_lost_per_team": 28.03,
+  "team_rb_carry_bias_post_cap": -3.444,
+  "team_rb_carry_bias_post_cap_ci95": [
+    -6.363,
+    -0.526
+  ],
+  "team_rb_carry_bias_pre_cap": 3.262,
+  "per_rank_yards_lost": {
+    "1": 13.18,
+    "2": 7.88,
+    "3+": 5.28
+  },
+  "changed_any_coefficient_or_cap": false,
+  "sportsbook_inputs_used": false
+}
