@@ -136,6 +136,34 @@ jobs:
             fi
           done
 
+      - name: Preserve the REPLAY INPUT SET
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          # Fourth instance of one gap: weeks 3-5 boards expired at retention 7;
+          # decision-gate evidence missing for weeks 6-7; the week-7 explanatory
+          # trace has the ML/State prediction columns stripped so the production
+          # pricing path cannot be replayed; and run 40551229604's artifact has
+          # those columns but no pricing boundary. The archive and the trace each
+          # hold half of what a replay needs.
+          #
+          # This preserves the other half: the model-side inputs, ungzipped size
+          # ~5MB, ~350KB gzipped per slate. Deliberately NOT denylist-stripped --
+          # a replay needs what production actually consumed, and the paid
+          # boundary is already archived beside it. The directory README says so.
+          #
+          # Soft-fails like the explanatory step: the paid boundary is the
+          # archive's first duty. But a stripped required column warns loudly,
+          # on the run that causes it rather than months later.
+          python scripts/operations/preserve_replay_input_set_v1.py \
+            --artifact-dir /tmp/fs_artifact \
+            --out-dir data/market_track_record/replay_inputs \
+            --stem "${ARCH_STEM}" \
+            --run-id "${SOURCE_RUN_ID}" \
+            --git-sha "${GITHUB_SHA}" \
+            --week "${ARCH_WEEK}" || \
+            echo "::warning::replay-input preservation FAILED for ${ARCH_STEM}; the paid boundary is unaffected"
+
       - name: Preserve the PRE-SPORTSBOOK explanatory state
         run: |
           set -euo pipefail
