@@ -15,21 +15,21 @@
     },
     "data/model_ml_diagnostics.csv": {
       "archived_as": "model_ml_diagnostics.csv.gz",
-      "bytes_gz": 28289,
-      "bytes_raw": 119585,
-      "sha256_raw": "c03bb187529d4e606f23a67e41f9afcdf0a56dd54e444f2284980229b46522c3"
+      "bytes_gz": 26329,
+      "bytes_raw": 111302,
+      "sha256_raw": "4c85c7c0db42426e0e0b19132bb4f9c2f0e773f7d85af0d783785f83117603c1"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
-      "bytes_gz": 11805,
-      "bytes_raw": 172607,
-      "sha256_raw": "4efb3031611b2f7d508a3efafc65014d9c9a51e6be098365c4b359e8af9a1357"
+      "bytes_gz": 11106,
+      "bytes_raw": 160291,
+      "sha256_raw": "506410ebb58a899467bc877a1f40f574853c78749f8887fdb77f312a178194d0"
     },
     "data/player_form_consensus.csv": {
       "archived_as": "player_form_consensus.csv.gz",
-      "bytes_gz": 50844,
-      "bytes_raw": 201283,
-      "sha256_raw": "cd2d4cebfba4fb44f682adee77ee3d3c209473b7da065d684039d22a19b6331b"
+      "bytes_gz": 47253,
+      "bytes_raw": 187230,
+      "sha256_raw": "7e1b34d13d0560c110a9556b3e69e4a818ed0d94ac3e67fd8ca893007f4192b2"
     },
     "data/qb_promoted_team_context.csv": {
       "archived_as": "qb_promoted_team_context.csv.gz",
@@ -45,9 +45,9 @@
     },
     "data/weather_week.csv": {
       "archived_as": "weather_week.csv.gz",
-      "bytes_gz": 1253,
-      "bytes_raw": 3938,
-      "sha256_raw": "c55b7f6f20afa76943308b2fd8fa4c4159f5f23ad90ace398fa9702ee01b86ea"
+      "bytes_gz": 1250,
+      "bytes_raw": 3948,
+      "sha256_raw": "bda3061e67f7fca181a7b54d389d5e84d285fcb03f9bea8830663051ddbe4a12"
     }
   },
   "required_column_stripped": {},
@@ -55,8 +55,8 @@
     "data/metrics_ready.csv",
     "data/model_rule_simulation_inputs.csv"
   ],
-  "source_git_sha": "5fcf8a73579c691313927241c62d03b29b68ae9e",
-  "source_run_id": "40963341695",
+  "source_git_sha": "bd5a8fe2fa578b289fa3424a57671c9f4f7d96a5",
+  "source_run_id": "41022357490",
   "stem": "2026_wk08",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
