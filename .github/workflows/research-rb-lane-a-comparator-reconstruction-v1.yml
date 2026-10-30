@@ -1,0 +1,783 @@
+name: RB Lane A Comparator Reconstruction V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'scripts/backtest/rb_lane_a_comparator_reconstruction_v1.py'
+      - 'tests/test_rb_lane_a_comparator_reconstruction_v1.py'
+      - 'scripts/backtest/rb_lane_a_m91_parity_diagnostic_v1.py'
+      - 'tests/test_rb_lane_a_m91_parity_diagnostic_v1.py'
+      - '.github/workflows/research-rb-lane-a-comparator-reconstruction-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  # Canonical historical M91 artifact for 2024, built by the exact invocation
+  # in backtest-rb-m95q-expanded-historical-stable-workhorse.yml's
+  # build-m91-rotation job (build_historical_inputs.py -> enrich_historical_
+  # defense.py -> validate_historical_inputs.py -> historical_player_logs_
+  # m95q.py -> build_historical_injuries.py -> build_historical_weather.py ->
+  # walk_forward.py --iterations 2000). Rotation 1's (test=2024) parity check
+  # only holds if this job's own rebuild mirrors that exact sequence -- a
+  # first attempt that used a different invocation (merged multi-season
+  # window, generic player-logs builder, no injuries/weather, iterations=5000)
+  # produced a 40-80 yard "parity failure" that was actually an invalid
+  # comparison, not a reconstruction defect (see Issue #535 comment
+  # 5702639446, citing this repo's own precedent at commit 780087b1).
+  CANONICAL_2024_RUN_ID: '35032590321'
+
+jobs:
+  helper-contract-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest nflreadpy
+      - name: Compile + unit test (network-free contract tests only)
+        run: |
+          python -m py_compile scripts/backtest/rb_lane_a_comparator_reconstruction_v1.py
+          python -m pytest tests/test_rb_lane_a_comparator_reconstruction_v1.py -v
+
+  build-component-predictions:
+    # Exact-invocation M91 reconstruction, per GPT-5.6's adjudication (Issue
+    # #535 comment 5702639446): the first attempt at this job used a merged
+    # multi-season history window, the generic historical_player_logs.py,
+    # skipped defense enrichment/input validation, omitted injuries/weather,
+    # and used iterations=5000 -- none of which match the canonical M91
+    # invocation (.github/workflows/backtest-rb-m95q-expanded-historical-
+    # stable-workhorse.yml, build-m91-rotation job), so the resulting parity
+    # diff was not a valid comparison. This step-for-step mirrors that job.
+    needs: helper-contract-tests
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      matrix:
+        include:
+          - rotation: 1
+            test_season: 2024
+            prior_season: 2023
+          - rotation: 2
+            test_season: 2025
+            prior_season: 2024
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install M91 dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Rebuild exact M91-invocation temporal rotation
+        env:
+          SEASON: ${{ matrix.test_season }}
+          PRIOR: ${{ matrix.prior_season }}
+        run: |
+          set -euo pipefail
+          WEEKS='1-18'
+          D="/tmp/rb_lane_a_m91/${SEASON}"
+          mkdir -p "$D"
+          echo "Lane-A M91 rebuild season=$SEASON prior=$PRIOR regular_weeks=$WEEKS"
+          python scripts/backtest/build_historical_inputs.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --out-dir "$D"
+          python scripts/backtest/enrich_historical_defense.py \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --seasons "$PRIOR,$SEASON" \
+            --audit "$D/historical_defense_enrichment_audit.csv" \
+            --observations "$D/historical_defense_observations.csv"
+          python scripts/backtest/validate_historical_inputs.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
+            --data-dir "$D" --report "$D/historical_input_validation.csv"
+          python scripts/backtest/historical_player_logs_m95q.py \
+            --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" \
+            --out "$D/player_game_logs_history.csv"
+          python scripts/backtest/build_historical_injuries.py \
+            --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+          python scripts/backtest/build_historical_weather.py \
+            --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+          python scripts/backtest/walk_forward.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
+            --player-logs "$D/player_game_logs_history.csv" \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --schedule "$D/schedule_history.csv" \
+            --universe-dir "$D/pregame_universe" \
+            --injuries "$D/injuries_history.csv" \
+            --weather "$D/weather_history.csv" \
+            --out "$D/component_predictions.csv" \
+            --iterations 2000
+          test -s "$D/component_predictions.csv"
+          cp "$D/component_predictions.csv" "/tmp/component_predictions_${SEASON}.csv"
+
+      - name: Show output summary
+        if: always()
+        run: |
+          wc -l "/tmp/component_predictions_${{ matrix.test_season }}.csv" 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-lane-a-component-predictions-rotation-${{ matrix.rotation }}
+          path: /tmp/component_predictions_${{ matrix.test_season }}.csv
+          if-no-files-found: error
+          retention-days: 30
+
+      # Rotation 1 only: preserve the intermediate historical-input files so
+      # the mc_proj-drift diagnostic (Issue #535 comment 5703860966) can
+      # re-simulate an affected week with a modified universe, without
+      # rebuilding the whole historical pipeline a second time.
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.rotation == 1
+        with:
+          name: rb-lane-a-m91-historical-inputs-rotation-1
+          path: |
+            /tmp/rb_lane_a_m91/2024/player_game_logs_history.csv
+            /tmp/rb_lane_a_m91/2024/team_weekly_history.csv
+            /tmp/rb_lane_a_m91/2024/schedule_history.csv
+            /tmp/rb_lane_a_m91/2024/injuries_history.csv
+            /tmp/rb_lane_a_m91/2024/weather_history.csv
+            /tmp/rb_lane_a_m91/2024/pregame_universe/**
+          if-no-files-found: error
+          retention-days: 30
+
+  reconstruct-and-check-parity:
+    needs: build-component-predictions
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download fresh rotation builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rb-lane-a-component-predictions-rotation-*
+          path: evidence/rb_lane_a_component_predictions
+          merge-multiple: true
+
+      - name: Download canonical 2024 artifact for Rotation-1 parity check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/canonical_2024
+          gh run download "$CANONICAL_2024_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "m95q-m91-2024" --dir evidence/canonical_2024
+          test -s evidence/canonical_2024/component_predictions.csv
+
+      - name: Reconstruct promotion comparator + run parity checks
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from scripts.backtest.rb_lane_a_comparator_reconstruction_v1 import (
+              build_promotion_comparator,
+              compare_component_predictions_parity,
+              verify_frozen_parent_blobs,
+          )
+
+          report = {"blob_check": verify_frozen_parent_blobs()}
+
+          fresh_2024 = pd.read_csv("evidence/rb_lane_a_component_predictions/component_predictions_2024.csv")
+          canonical_2024 = pd.read_csv("evidence/canonical_2024/component_predictions.csv")
+          report["rotation_1_parity"] = compare_component_predictions_parity(fresh_2024, canonical_2024)
+          report["rotation_1_promotion_comparator_rows"] = int(
+              len(build_promotion_comparator(fresh_2024, rotation=1))
+          )
+
+          fresh_2025 = pd.read_csv("evidence/rb_lane_a_component_predictions/component_predictions_2025.csv")
+          report["rotation_2_parity"] = {
+              "disposition": "NO_PRIOR_CANONICAL_ARTIFACT",
+              "reason": (
+                  "No prior CI run of this exact M91 invocation exists for season "
+                  "2025 anywhere in this repo -- this build (same helper-script "
+                  "sequence, single-prior-season scope, injuries+weather, "
+                  "iterations=2000 as the canonical M91 rebuild) establishes the "
+                  "first canonical artifact for that season. Not a cross-run value "
+                  "parity proof; documented honestly as such, not silently upgraded "
+                  "to a PASS."
+              ),
+              "rows": int(len(fresh_2025)),
+          }
+          report["rotation_2_promotion_comparator_rows"] = int(
+              len(build_promotion_comparator(fresh_2025, rotation=2))
+          )
+
+          with open("evidence/rb_lane_a_comparator_reconstruction_report.json", "w") as f:
+              json.dump(report, f, indent=2, default=str)
+          print(json.dumps(report, indent=2, default=str))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-lane-a-comparator-reconstruction-report
+          path: evidence/rb_lane_a_comparator_reconstruction_report.json
+          if-no-files-found: error
+          retention-days: 30
+
+  diagnose-mc-proj-drift:
+    # GPT-5.6's four-step diagnostic protocol (Issue #535 comment
+    # 5703860966) for the residual mc_proj-only parity delta on Rotation 1
+    # after the exact-invocation fix. Comparator-integrity diagnostic only --
+    # no candidate output, no candidate-vs-outcome comparison.
+    needs: build-component-predictions
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Download fresh Rotation-1 build
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-lane-a-component-predictions-rotation-1
+          path: evidence/rb_lane_a_component_predictions
+
+      - name: Download Rotation-1 historical-input intermediates
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-lane-a-m91-historical-inputs-rotation-1
+          path: evidence/rb_lane_a_m91_inputs
+
+      - name: Download canonical 2024 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/canonical_2024
+          gh run download "$CANONICAL_2024_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "m95q-m91-2024" --dir evidence/canonical_2024
+          test -s evidence/canonical_2024/component_predictions.csv
+
+      - name: Run steps 1-2 (isolate fresh-only rows, compare MC trace columns)
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from scripts.backtest.rb_lane_a_m91_parity_diagnostic_v1 import (
+              compare_trace_columns_by_week,
+              find_fresh_only_rows,
+          )
+
+          fresh = pd.read_csv("evidence/rb_lane_a_component_predictions/component_predictions_2024.csv")
+          canonical = pd.read_csv("evidence/canonical_2024/component_predictions.csv")
+
+          extra = find_fresh_only_rows(fresh, canonical)
+          extra.to_csv("evidence/rb_lane_a_fresh_only_rows.csv", index=False)
+
+          affected_weeks = sorted(int(w) for w in extra["week"].unique())
+          trace = compare_trace_columns_by_week(fresh, canonical)
+
+          report = {
+              "fresh_only_row_count": int(len(extra)),
+              "affected_weeks": affected_weeks,
+              "fresh_only_by_week_team_player": extra.groupby(
+                  ["week", "team", "player", "player_clean_key"]
+              ).size().reset_index(name="market_rows").to_dict(orient="records"),
+              "trace_column_max_abs_delta_by_week": trace,
+          }
+          with open("evidence/rb_lane_a_mc_proj_drift_step1_2.json", "w") as f:
+              json.dump(report, f, indent=2, default=str)
+          print(json.dumps(report, indent=2, default=str))
+          PY
+
+      - name: Run step 3 falsification (resimulate affected week excluding the fresh-only player)
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          from scripts.backtest.rb_lane_a_m91_parity_diagnostic_v1 import (
+              compare_common_universe_mc_proj,
+              rerun_week_excluding_players,
+          )
+
+          fresh = pd.read_csv("evidence/rb_lane_a_component_predictions/component_predictions_2024.csv")
+          canonical = pd.read_csv("evidence/canonical_2024/component_predictions.csv")
+          extra = pd.read_csv("evidence/rb_lane_a_fresh_only_rows.csv")
+
+          inputs_dir = Path("evidence/rb_lane_a_m91_inputs")
+          player_logs = pd.read_csv(inputs_dir / "player_game_logs_history.csv")
+          team_weekly = pd.read_csv(inputs_dir / "team_weekly_history.csv")
+          schedule = pd.read_csv(inputs_dir / "schedule_history.csv")
+          universe_dir = inputs_dir / "pregame_universe"
+
+          results = []
+          affected_weeks = sorted(int(w) for w in extra["week"].unique())
+          for week in affected_weeks:
+              week_extra = extra.loc[extra.week == week]
+              exclude_names = sorted(week_extra["player"].unique())
+              resim = rerun_week_excluding_players(
+                  season=2024,
+                  week=week,
+                  prior_season=2023,
+                  player_logs=player_logs,
+                  team_weekly=team_weekly,
+                  schedule=schedule,
+                  universe_dir=universe_dir,
+                  injuries_path=inputs_dir / "injuries_history.csv",
+                  weather_path=inputs_dir / "weather_history.csv",
+                  exclude_player_names=exclude_names,
+                  iterations=2000,
+              )
+              result = compare_common_universe_mc_proj(resim, canonical, week)
+              result["excluded_players"] = exclude_names
+              results.append(result)
+              print(json.dumps(result, indent=2, default=str))
+
+          with open("evidence/rb_lane_a_mc_proj_drift_step3.json", "w") as f:
+              json.dump(results, f, indent=2, default=str)
+          PY
+
+      - name: Run membership-inference A/B (GPT-5.6 correction, comment 5704073674)
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          from scripts.backtest.rb_lane_a_m91_parity_diagnostic_v1 import (
+              build_deterministic_trace,
+              compare_deterministic_trace_arm,
+          )
+
+          canonical = pd.read_csv("evidence/canonical_2024/component_predictions.csv")
+          extra = pd.read_csv("evidence/rb_lane_a_fresh_only_rows.csv")
+
+          inputs_dir = Path("evidence/rb_lane_a_m91_inputs")
+          player_logs = pd.read_csv(inputs_dir / "player_game_logs_history.csv")
+          team_weekly = pd.read_csv(inputs_dir / "team_weekly_history.csv")
+          schedule = pd.read_csv(inputs_dir / "schedule_history.csv")
+          injuries_history = pd.read_csv(inputs_dir / "injuries_history.csv")
+          weather_history = pd.read_csv(inputs_dir / "weather_history.csv")
+          universe_dir = inputs_dir / "pregame_universe"
+
+          def exact_week(frame, season, week):
+              x = frame.copy()
+              x.columns = [str(c).strip().lower() for c in x.columns]
+              s = pd.to_numeric(x["season"], errors="coerce")
+              w = pd.to_numeric(x["week"], errors="coerce")
+              x = x.loc[s.eq(int(season)) & w.eq(int(week))].copy()
+              return x.drop(columns=["season", "week"], errors="ignore")
+
+          results = []
+          affected_weeks = sorted(int(w) for w in extra["week"].unique())
+          for week in affected_weeks:
+              week_extra = extra.loc[extra.week == week]
+              contested_names = sorted(week_extra["player"].unique())
+              contested_keys = sorted(week_extra["player_clean_key"].unique())
+              team = sorted(week_extra["team"].unique())[0]
+
+              universe_path = universe_dir / f"2024_week_{week:02d}.csv"
+              universe_included = pd.read_csv(universe_path)
+              universe_excluded = universe_included.loc[
+                  ~universe_included["player"].isin(contested_names)
+              ].copy()
+
+              injuries = exact_week(injuries_history, 2024, week)
+              weather = exact_week(weather_history, 2024, week)
+
+              arm_included = build_deterministic_trace(
+                  player_logs=player_logs, team_weekly=team_weekly,
+                  pregame_universe=universe_included, schedule=schedule,
+                  season=2024, week=week, prior_season=2023,
+                  injuries=injuries, weather=weather,
+              )
+              arm_excluded = build_deterministic_trace(
+                  player_logs=player_logs, team_weekly=team_weekly,
+                  pregame_universe=universe_excluded, schedule=schedule,
+                  season=2024, week=week, prior_season=2023,
+                  injuries=injuries, weather=weather,
+              )
+
+              for key in contested_keys:
+                  included_report = compare_deterministic_trace_arm(
+                      arm_included, canonical, week=week, team=team,
+                      exclude_player_clean_key=key,
+                  )
+                  excluded_report = compare_deterministic_trace_arm(
+                      arm_excluded, canonical, week=week, team=team,
+                      exclude_player_clean_key=key,
+                  )
+                  results.append({
+                      "week": week, "team": team, "contested_player_clean_key": key,
+                      "arm_included_deltas": included_report,
+                      "arm_excluded_deltas": excluded_report,
+                  })
+                  print(json.dumps(results[-1], indent=2, default=str))
+
+          # Documents fresh's own actual-join lineage for the contested
+          # identity, per GPT-5.6's ask #5. We only have canonical's final
+          # scored output (not its raw player-log inputs), so this can show
+          # fresh's own source resolution only -- not directly diff it
+          # against canonical's build inputs. Flagged as a limitation, not
+          # papered over.
+          pl = player_logs.copy()
+          pl.columns = [str(c).strip().lower() for c in pl.columns]
+          from scripts.backtest.component_predictions import _key
+          pl_key = pl.get("player_clean_key", pl.get("player", pd.Series(dtype=str))).map(_key)
+          lineage_rows = []
+          for key in sorted(extra["player_clean_key"].unique()):
+              rows = pl.loc[pl_key.eq(key) & pd.to_numeric(pl.get("season"), errors="coerce").eq(2024)]
+              for _, r in rows.iterrows():
+                  lineage_rows.append({
+                      "player_clean_key": key,
+                      "season": r.get("season"), "week": r.get("week"),
+                      "team": r.get("team"), "player": r.get("player"),
+                      "rush_yards": r.get("rush_yards"), "rec_yards": r.get("rec_yards"),
+                      "targets": r.get("targets"), "rushes": r.get("rushes"),
+                  })
+
+          report = {
+              "membership_inference_results": results,
+              "fresh_actual_join_lineage_for_contested_identity": lineage_rows,
+              "lineage_limitation": (
+                  "Only fresh's own player_game_logs_history.csv is available here; "
+                  "canonical's raw pre-simulation inputs were not preserved by the "
+                  "original M91 run, so this cannot directly diff fresh vs canonical "
+                  "join-key resolution -- only document fresh's own resolved rows."
+              ),
+          }
+          with open("evidence/rb_lane_a_membership_inference_ab.json", "w") as f:
+              json.dump(report, f, indent=2, default=str)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-lane-a-mc-proj-drift-diagnostic
+          path: |
+            evidence/rb_lane_a_fresh_only_rows.csv
+            evidence/rb_lane_a_mc_proj_drift_step1_2.json
+            evidence/rb_lane_a_mc_proj_drift_step3.json
+            evidence/rb_lane_a_membership_inference_ab.json
+          if-no-files-found: error
+          retention-days: 30
+
+  same-job-authority-reconstruction:
+    # Amendment 6 (Issue #535 comment 5704381940): replaces the promotion
+    # comparator's cross-run parity requirement against run 35032590321,
+    # which turned out to itself be a reconstruction of an expired original
+    # artifact, not a legitimate permanent authority. Builds the historical-
+    # input snapshot ONCE, then runs walk_forward.py TWICE from that
+    # identical snapshot in this same job, and requires row identity plus
+    # <=1e-6 mc_proj/ml_proj/state_proj agreement between the two builds.
+    # Build A becomes the single canonical component-prediction source for
+    # both the promotion comparator and the Lane-A candidate itself.
+    needs: helper-contract-tests
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      matrix:
+        include:
+          - rotation: 1
+            test_season: 2024
+            prior_season: 2023
+          - rotation: 2
+            test_season: 2025
+            prior_season: 2024
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Build historical-input snapshot ONCE (frozen for both builds)
+        env:
+          SEASON: ${{ matrix.test_season }}
+          PRIOR: ${{ matrix.prior_season }}
+        run: |
+          set -euo pipefail
+          WEEKS='1-18'
+          D="/tmp/rb_lane_a_same_job/${SEASON}"
+          mkdir -p "$D"
+          echo "Amendment 6 same-job snapshot season=$SEASON prior=$PRIOR regular_weeks=$WEEKS"
+          python scripts/backtest/build_historical_inputs.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --out-dir "$D"
+          python scripts/backtest/enrich_historical_defense.py \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --seasons "$PRIOR,$SEASON" \
+            --audit "$D/historical_defense_enrichment_audit.csv" \
+            --observations "$D/historical_defense_observations.csv"
+          python scripts/backtest/validate_historical_inputs.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
+            --data-dir "$D" --report "$D/historical_input_validation.csv"
+          python scripts/backtest/historical_player_logs_m95q.py \
+            --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" \
+            --out "$D/player_game_logs_history.csv"
+          python scripts/backtest/build_historical_injuries.py \
+            --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+          python scripts/backtest/build_historical_weather.py \
+            --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+
+      - name: Run walk_forward.py TWICE from the identical frozen snapshot (build A, build B)
+        env:
+          SEASON: ${{ matrix.test_season }}
+          PRIOR: ${{ matrix.prior_season }}
+        run: |
+          set -euo pipefail
+          WEEKS='1-18'
+          D="/tmp/rb_lane_a_same_job/${SEASON}"
+          for ARM in a b; do
+            echo "=== build $ARM ==="
+            python scripts/backtest/walk_forward.py \
+              --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
+              --player-logs "$D/player_game_logs_history.csv" \
+              --team-weekly "$D/team_weekly_history.csv" \
+              --schedule "$D/schedule_history.csv" \
+              --universe-dir "$D/pregame_universe" \
+              --injuries "$D/injuries_history.csv" \
+              --weather "$D/weather_history.csv" \
+              --out "$D/component_predictions_build_${ARM}.csv" \
+              --iterations 2000
+            test -s "$D/component_predictions_build_${ARM}.csv"
+          done
+
+      - name: Compute Amendment-6 evidence (input manifest, code SHAs, versions) and disposition
+        env:
+          SEASON: ${{ matrix.test_season }}
+          ROTATION: ${{ matrix.rotation }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import platform
+          import sys
+          from pathlib import Path
+
+          import numpy
+          import pandas as pd
+
+          from scripts.backtest.rb_lane_a_comparator_reconstruction_v1 import (
+              blob_sha_of,
+              build_input_manifest,
+              same_job_double_build_disposition,
+          )
+
+          season = os.environ["SEASON"]
+          rotation = int(os.environ["ROTATION"])
+          d = Path(f"/tmp/rb_lane_a_same_job/{season}")
+          universe_dir = d / "pregame_universe"
+
+          manifest_paths = {
+              "player_game_logs_history": d / "player_game_logs_history.csv",
+              "team_weekly_history": d / "team_weekly_history.csv",
+              "schedule_history": d / "schedule_history.csv",
+              "injuries_history": d / "injuries_history.csv",
+              "weather_history": d / "weather_history.csv",
+          }
+          for universe_file in sorted(universe_dir.glob("*.csv")):
+              manifest_paths[f"pregame_universe/{universe_file.name}"] = universe_file
+
+          repo_root = Path(".").resolve()
+          evidence = {
+              "rotation": rotation,
+              "test_season": int(season),
+              "input_manifest_sha256": build_input_manifest(manifest_paths),
+              "code_sha": {
+                  "simulation_v2": blob_sha_of(repo_root, "scripts/simulation_v2.py"),
+                  "walk_forward": blob_sha_of(repo_root, "scripts/backtest/walk_forward.py"),
+                  "component_predictions": blob_sha_of(repo_root, "scripts/backtest/component_predictions.py"),
+              },
+              "environment": {
+                  "python": sys.version,
+                  "platform": platform.platform(),
+                  "numpy": numpy.__version__,
+                  "pandas": pd.__version__,
+              },
+              "seed_policy": "42 + week",
+              "iterations": 2000,
+          }
+
+          build_a = pd.read_csv(d / "component_predictions_build_a.csv")
+          build_b = pd.read_csv(d / "component_predictions_build_b.csv")
+          evidence["same_job_double_build"] = same_job_double_build_disposition(build_a, build_b)
+
+          out_path = Path(f"evidence/rb_lane_a_same_job_authority_rotation_{rotation}.json")
+          out_path.parent.mkdir(parents=True, exist_ok=True)
+          with open(out_path, "w") as f:
+              json.dump(evidence, f, indent=2, default=str)
+          print(json.dumps(evidence, indent=2, default=str))
+
+          if evidence["same_job_double_build"]["disposition"] != "SAME_JOB_AUTHORITY_RECONSTRUCTION_PASS":
+              raise SystemExit(
+                  f"Amendment 6 same-job authority contract FAILED for rotation {rotation}: "
+                  f"{evidence['same_job_double_build']}"
+              )
+          PY
+
+      - name: Copy build A as the single canonical component-prediction source (Amendment 6 point 6)
+        if: always()
+        env:
+          SEASON: ${{ matrix.test_season }}
+        run: |
+          D="/tmp/rb_lane_a_same_job/${SEASON}"
+          mkdir -p evidence/rb_lane_a_same_job_canonical
+          cp "$D/component_predictions_build_a.csv" \
+            "evidence/rb_lane_a_same_job_canonical/component_predictions_${SEASON}.csv"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-lane-a-same-job-authority-rotation-${{ matrix.rotation }}
+          path: |
+            evidence/rb_lane_a_same_job_authority_rotation_${{ matrix.rotation }}.json
+            evidence/rb_lane_a_same_job_canonical/component_predictions_${{ matrix.test_season }}.csv
+          if-no-files-found: error
+          retention-days: 30
+
+  mechanism-comparator-reconstruction:
+    # Amendment 7: mechanism comparator (P3/STACK2) authority-exact
+    # reconstruction, Rotation 2 (2024-fit/2025-eval) only -- no canonical
+    # 2023-fit/2024-eval STACK2 casebook exists (Issue #535 comment
+    # 5704854605). Mirrors the exact invocation of
+    # backtest-rb-stack2-enriched-allocation.yml's own canonical run
+    # (33538770934): download the same three frozen-parent artifacts by the
+    # same run IDs, run evaluate_rb_stack2_enriched_allocation.py unchanged,
+    # and prove the fresh rebuild reproduces the canonical casebook's
+    # already-frozen arch_enriched_opp_stack_eff_yards column (the plan's
+    # mechanism-comparator formula, enriched_att * stack_implied_ypc).
+    needs: helper-contract-tests
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      M94C_RUN_ID: '33353485070'
+      STACK1_RUN_ID: '33535308110'
+      RB_MARKET_RUN_ID: '33499129109'
+      MECHANISM_CANONICAL_RUN_ID: '33538770934'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scikit-learn
+
+      - name: Verify STACK2 script is byte-identical to the canonical run's code
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.backtest.rb_lane_a_comparator_reconstruction_v1 import (
+              MECHANISM_COMPARATOR_SCRIPT_BLOB,
+              blob_sha_of,
+          )
+          actual = blob_sha_of(Path("."), "scripts/backtest/evaluate_rb_stack2_enriched_allocation.py")
+          if actual != MECHANISM_COMPARATOR_SCRIPT_BLOB:
+              raise SystemExit(
+                  f"evaluate_rb_stack2_enriched_allocation.py blob drifted from the "
+                  f"canonical run's code: expected {MECHANISM_COMPARATOR_SCRIPT_BLOB}, got {actual}"
+              )
+          print("STACK2 script blob matches canonical run's code:", actual)
+          PY
+
+      - name: Download frozen-parent artifacts (exact same run IDs as the canonical STACK2 run)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p data/backtests/rb_stack2/m94c data/backtests/rb_stack2/stack1 data/backtests/rb_stack2/market
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_stack2/m94c
+          gh run download "$STACK1_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack1-production-equivalent-baseline --dir data/backtests/rb_stack2/stack1
+          gh run download "$RB_MARKET_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-market-benchmark-2025 --dir data/backtests/rb_stack2/market
+          test -s data/backtests/rb_stack2/m94c/m94c_2025_rb_trace.csv
+          test -s data/backtests/rb_stack2/stack1/results/stack1_2025_rb_trace.csv || test -s data/backtests/rb_stack2/stack1/stack1_2025_rb_trace.csv
+          test -s data/backtests/rb_stack2/market/rb_market_casebook.csv
+
+      - name: Rebuild STACK2 casebook (exact same invocation as the canonical run)
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/rb_stack2/results
+          python scripts/backtest/evaluate_rb_stack2_enriched_allocation.py \
+            --m94c-root data/backtests/rb_stack2/m94c \
+            --stack1-root data/backtests/rb_stack2/stack1 \
+            --market-root data/backtests/rb_stack2/market \
+            --out-dir data/backtests/rb_stack2/results
+          test -s data/backtests/rb_stack2/results/stack2_2025_casebook.csv
+
+      - name: Download canonical STACK2 casebook
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/canonical_stack2
+          gh run download "$MECHANISM_CANONICAL_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "rb-stack2-enriched-allocation-integration" --dir evidence/canonical_stack2
+          test -s evidence/canonical_stack2/stack2_2025_casebook.csv
+
+      - name: Run mechanism-comparator authority-exact reconstruction parity check
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from scripts.backtest.rb_lane_a_comparator_reconstruction_v1 import (
+              compare_mechanism_comparator_parity,
+          )
+
+          fresh = pd.read_csv("data/backtests/rb_stack2/results/stack2_2025_casebook.csv")
+          canonical = pd.read_csv("evidence/canonical_stack2/stack2_2025_casebook.csv")
+
+          report = {
+              "rotation": 2,
+              "test_season": 2025,
+              "mechanism_parity": compare_mechanism_comparator_parity(fresh, canonical),
+              "rotation_1_disposition": (
+                  "NOT_CONSTRUCTIBLE_NO_CASEBOOK -- no canonical 2023-fit/2024-eval "
+                  "STACK2 casebook exists anywhere in this repo's history "
+                  "(Amendment 7, Issue #535 comment 5704854605). Non-blocking: "
+                  "mechanism_diagnostic never gates the QUALIFIED disposition."
+              ),
+          }
+          with open("evidence/rb_lane_a_mechanism_comparator_reconstruction_report.json", "w") as f:
+              json.dump(report, f, indent=2, default=str)
+          print(json.dumps(report, indent=2, default=str))
+
+          if report["mechanism_parity"]["disposition"] != "MECHANISM_AUTHORITY_RECONSTRUCTION_PASS":
+              raise SystemExit(
+                  f"Amendment 7 mechanism-comparator reconstruction FAILED: {report['mechanism_parity']}"
+              )
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-lane-a-mechanism-comparator-reconstruction
+          path: |
+            evidence/rb_lane_a_mechanism_comparator_reconstruction_report.json
+            data/backtests/rb_stack2/results/stack2_2025_casebook.csv
+          if-no-files-found: error
+          retention-days: 30
