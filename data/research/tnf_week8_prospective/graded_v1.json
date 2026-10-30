@@ -1,0 +1,23 @@
+{
+  "version": "TNF_WEEK8_PROSPECTIVE_GRADE_V1",
+  "card": "docs/research/PRISM_TNF_WEEK8_PROSPECTIVE_PREDICTIONS_V1.md",
+  "game": "CAR @ GB",
+  "season": 2026,
+  "week": 8,
+  "source_run_id": "40953584718",
+  "predictions": {
+    "P4_GB": false,
+    "P3_GB": true,
+    "P4_CAR": true,
+    "P3_CAR": true,
+    "P5_Jacobs": true,
+    "P5_Hubbard": true
+  },
+  "signs_hit": 3,
+  "signs_total": 4,
+  "interpretation": "uninformative; change nothing",
+  "model_mean_abs_err": 14.527503089745833,
+  "market_mean_abs_err": 14.363636363636363,
+  "n_is_one_game_not_evidence": true,
+  "changes_any_promotion_state": false
+}
