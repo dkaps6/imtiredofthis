@@ -35,7 +35,7 @@
       "archived_as": "qb_promoted_team_context.csv.gz",
       "bytes_gz": 4719,
       "bytes_raw": 12405,
-      "sha256_raw": "55d8320e675d1cf6ca446b3d18e3e613541c6498fe3bcb8b650f70b933360b6d"
+      "sha256_raw": "3682cf68e014668d434fd57590fd9c8f6e56f90fc49dcece0f8b2d74e8bf7f49"
     },
     "data/team_week_map.csv": {
       "archived_as": "team_week_map.csv.gz",
@@ -55,8 +55,8 @@
     "data/metrics_ready.csv",
     "data/model_rule_simulation_inputs.csv"
   ],
-  "source_git_sha": "54043a70c833febd5bd743318a5f0d324545864e",
-  "source_run_id": "41294235647",
+  "source_git_sha": "05d28d52cc26ffc6fc769388914b9be9d6cf9937",
+  "source_run_id": "41302258639",
   "stem": "2026_wk08",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
