@@ -45,9 +45,9 @@
     },
     "data/weather_week.csv": {
       "archived_as": "weather_week.csv.gz",
-      "bytes_gz": 923,
-      "bytes_raw": 2882,
-      "sha256_raw": "d1b5947fc842e135a87e3b686f5502e664b848b6628a0fc65fc92e66d3be0074"
+      "bytes_gz": 868,
+      "bytes_raw": 2793,
+      "sha256_raw": "4cd713f5cbe65c39b11da702c0b130eb9f19a4390903a8bdf7605e6332f3a583"
     }
   },
   "required_column_stripped": {},
@@ -55,8 +55,8 @@
     "data/metrics_ready.csv",
     "data/model_rule_simulation_inputs.csv"
   ],
-  "source_git_sha": "586f0feaf7e501254facdc681e8ea2bc5f1cf453",
-  "source_run_id": "41285549168",
+  "source_git_sha": "d1787be33d226b155a0a28b35a3a6c959db063da",
+  "source_run_id": "41286997720",
   "stem": "2026_wk08",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
