@@ -15,10 +15,12 @@ Max Melton,ARI,2026,8,nflverse
 Walter Nolen,ARI,2026,8,nflverse
 Jeremiyah Love,ARI,2026,8,nflverse
 Carson Beck,ARI,2026,8,nflverse
+Jake Matthews,ATL,2026,8,nflverse
 Za'Darius Smith,ATL,2026,8,nflverse
 Samson Ebukam,ATL,2026,8,nflverse
 Olamide Zaccheaus,ATL,2026,8,nflverse
 Jawaan Taylor,ATL,2026,8,nflverse
+Chris Lindstrom,ATL,2026,8,nflverse
 LaCale London,ATL,2026,8,nflverse
 C.J. Henderson,ATL,2026,8,nflverse
 A.J. Terrell,ATL,2026,8,nflverse
@@ -49,6 +51,7 @@ Adam Randall,BAL,2026,8,nflverse
 DJ Moore,BUF,2026,8,nflverse
 Bradley Chubb,BUF,2026,8,nflverse
 Ed Oliver,BUF,2026,8,nflverse
+Greg Gaines,BUF,2026,8,nflverse
 Spencer Brown,BUF,2026,8,nflverse
 Dee Alford,BUF,2026,8,nflverse
 Tyrell Shavers,BUF,2026,8,nflverse
@@ -69,11 +72,13 @@ Torricelli Simpkins III,CAR,2026,8,nflverse
 T.J. Edwards,CHI,2026,8,nflverse
 Jack Sanborn,CHI,2026,8,nflverse
 D'Marco Jackson,CHI,2026,8,nflverse
+Colston Loveland,CHI,2026,8,nflverse
 Kyle Monangai,CHI,2026,8,nflverse
 Malik Muhammad,CHI,2026,8,nflverse
 Jonathan Allen,CIN,2026,8,nflverse
 B.J. Hill,CIN,2026,8,nflverse
 Joe Giles-Harris,CIN,2026,8,nflverse
+Dexter Lawrence,CIN,2026,8,nflverse
 Kyle Dugger,CIN,2026,8,nflverse
 Ja'Marr Chase,CIN,2026,8,nflverse
 Jordan Battle,CIN,2026,8,nflverse
@@ -88,6 +93,7 @@ Dylan Sampson,CLE,2026,8,nflverse
 Carson Schwesinger,CLE,2026,8,nflverse
 Mason Graham,CLE,2026,8,nflverse
 Jonathan Bullard,DAL,2026,8,nflverse
+Kenny Clark,DAL,2026,8,nflverse
 P.J. Locke,DAL,2026,8,nflverse
 Quinnen Williams,DAL,2026,8,nflverse
 Tyler Smith,DAL,2026,8,nflverse
@@ -114,6 +120,7 @@ Penei Sewell,DET,2026,8,nflverse
 Amon-Ra St. Brown,DET,2026,8,nflverse
 Aidan Hutchinson,DET,2026,8,nflverse
 Kerby Joseph,DET,2026,8,nflverse
+Roger McCreary,DET,2026,8,nflverse
 Jacob Saylors,DET,2026,8,nflverse
 Jahmyr Gibbs,DET,2026,8,nflverse
 Ennis Rakestraw Jr.,DET,2026,8,nflverse
@@ -140,6 +147,7 @@ CJ Allen,IND,2026,8,nflverse
 Bryce Boettcher,IND,2026,8,nflverse
 Jakobi Meyers,JAX,2026,8,nflverse
 Jahlani Tavai,JAX,2026,8,nflverse
+Josh Hines-Allen,JAX,2026,8,nflverse
 Ross Matiscik,JAX,2026,8,nflverse
 Montaric Brown,JAX,2026,8,nflverse
 Antonio Johnson,JAX,2026,8,nflverse
@@ -156,13 +164,19 @@ Creed Humphrey,KC,2026,8,nflverse
 Rashee Rice,KC,2026,8,nflverse
 Omarr Norman-Lott,KC,2026,8,nflverse
 Kahlil Benson,KC,2026,8,nflverse
+R Mason Thomas,KC,2026,8,nflverse
 Mansoor Delane,KC,2026,8,nflverse
+Aaron Donald,LAR,2026,8,nflverse
 Joe Cardona,LAR,2026,8,nflverse
 Coleman Shelton,LAR,2026,8,nflverse
 Colby Parkinson,LAR,2026,8,nflverse
+Alaric Jackson,LAR,2026,8,nflverse
 Trent McDuffie,LAR,2026,8,nflverse
 Nate Landman,LAR,2026,8,nflverse
 Desjuan Johnson,LAR,2026,8,nflverse
+Puka Nacua,LAR,2026,8,nflverse
+Byron Young,LAR,2026,8,nflverse
+Jordan Whittington,LAR,2026,8,nflverse
 Khalil Mack,LAC,2026,8,nflverse
 Donte Jackson,LAC,2026,8,nflverse
 Derwin James,LAC,2026,8,nflverse
@@ -175,6 +189,7 @@ Brenen Thompson,LAC,2026,8,nflverse
 Foley Fatukasi,LV,2026,8,nflverse
 Ian Thomas,LV,2026,8,nflverse
 Kwity Paye,LV,2026,8,nflverse
+Eric Stokes,LV,2026,8,nflverse
 Patrick Johnson,LV,2026,8,nflverse
 Quay Walker,LV,2026,8,nflverse
 Brock Bowers,LV,2026,8,nflverse
@@ -195,8 +210,11 @@ Dante Trader Jr.,MIA,2026,8,nflverse
 Kadyn Proctor,MIA,2026,8,nflverse
 Will Kacmarek,MIA,2026,8,nflverse
 Michael Taaffe,MIA,2026,8,nflverse
+Harrison Smith,MIN,2026,8,nflverse
 Aaron Jones,MIN,2026,8,nflverse
 Brian O'Neill,MIN,2026,8,nflverse
+Christian Darrisaw,MIN,2026,8,nflverse
+Jay Ward,MIN,2026,8,nflverse
 Gavin Bartholomew,MIN,2026,8,nflverse
 Joe Huber,MIN,2026,8,nflverse
 DaQuan Jones,NE,2026,8,nflverse
@@ -249,6 +267,26 @@ Brandin Echols,PIT,2026,8,nflverse
 Ben Skowronek,PIT,2026,8,nflverse
 Darnell Washington,PIT,2026,8,nflverse
 Doneiko Slaughter,PIT,2026,8,nflverse
+DeMarcus Lawrence,SEA,2026,8,nflverse
+Leonard Williams,SEA,2026,8,nflverse
+Quenton Nelson,SEA,2026,8,nflverse
+Uchenna Nwosu,SEA,2026,8,nflverse
+Drew Lock,SEA,2026,8,nflverse
+Chazz Surratt,SEA,2026,8,nflverse
+Rashid Shaheed,SEA,2026,8,nflverse
+Velus Jones Jr.,SEA,2026,8,nflverse
+Charles Cross,SEA,2026,8,nflverse
+Brady Russell,SEA,2026,8,nflverse
+Jaxon Smith-Njigba,SEA,2026,8,nflverse
+Brandon Pili,SEA,2026,8,nflverse
+Patrick O'Connell,SEA,2026,8,nflverse
+Drake Thomas,SEA,2026,8,nflverse
+Anthony Bradford,SEA,2026,8,nflverse
+Zach Charbonnet,SEA,2026,8,nflverse
+Byron Murphy II,SEA,2026,8,nflverse
+Tyrice Knight,SEA,2026,8,nflverse
+Connor O'Toole,SEA,2026,8,nflverse
+Jadarian Price,SEA,2026,8,nflverse
 A'Shawn Robinson,TB,2026,8,nflverse
 Chris Godwin Jr.,TB,2026,8,nflverse
 Baker Mayfield,TB,2026,8,nflverse
@@ -263,17 +301,21 @@ John Franklin-Myers,TEN,2026,8,nflverse
 Calvin Ridley,TEN,2026,8,nflverse
 Tony Pollard,TEN,2026,8,nflverse
 Tommy Townsend,TEN,2026,8,nflverse
+Jaylon Jones,TEN,2026,8,nflverse
 Tyjae Spears,TEN,2026,8,nflverse
 Dorian Mausi,TEN,2026,8,nflverse
 Carnell Tate,TEN,2026,8,nflverse
 Stefon Diggs,WAS,2026,8,nflverse
 Marcus Mariota,WAS,2026,8,nflverse
 Fabian Moreau,WAS,2026,8,nflverse
+Deatrich Wise,WAS,2026,8,nflverse
+Daron Payne,WAS,2026,8,nflverse
 Nick Allegretti,WAS,2026,8,nflverse
 Charles Omenihu,WAS,2026,8,nflverse
 Javon Kinlaw,WAS,2026,8,nflverse
 John Bates,WAS,2026,8,nflverse
 Treylon Burks,WAS,2026,8,nflverse
+Luke McCaffrey,WAS,2026,8,nflverse
 Colson Yankoff,WAS,2026,8,nflverse
 Jer'Zhan Newton,WAS,2026,8,nflverse
 Jayden Daniels,WAS,2026,8,nflverse
