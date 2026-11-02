@@ -1,72 +1,143 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-10-28 — V20 — **ROSTER EXISTENCE CEILING CONFIRMED / RUSH-BUDGET ROOT CAUSE PRESERVED / AUDIT TARGET 6 OPEN** / CLAUDE ISSUE #535
+## TOP CHECKPOINT — 2026-11-02 — V21 — **LIVE SIDE-GRADING CORRECTED / MODEL HAS A DIRECTIONAL EDGE / CONFIDENCE DOES NOT DISCRIMINATE / ELITE-WR UNDER-PROJECTION OPENED** / CLAUDE ISSUE #535
 
 **Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.
 
-**Parallel Week 8 Sunday betting-selector research (Nov 1 ~07:43 EST; no change to active V20 science):** NEWEST RUN08 `docs/research/evidence/2026-11-01_week8_sunday_tickets/WEEK8_RUN08_20261101_0743_EST_MORNING_OFFICIAL_STATUS_PRICE_FLOOR_RECONSTRUCTION.md` supersedes RUN07 for pregame ticket construction; RUN01–07 remain archived for player-science lineage. **BINDING USER FLOOR** SAFE actual combined FanDuel >=+250 (a $25 wager returns >=$87.50 gross); true LOTTERY $10 returns >=$2,500 gross (250x), not $300; **no fixed leg counts**. RUN08 reconstructs five conditional slips and a revised 16-leg fun $1m exhibition with concrete player/threshold and model/football reasoning; ALL remain **UNPRICED/UNLOCKED**, because no official combined FanDuel SGP+ quotes and early 1pm inactives not available before ~11:30am. Particularly: official NFL Oct31 17:25 ET injury report still lists BUF DJ Moore and Dalton Kincaid QUESTIONABLE, in contradiction to a third-party PrizePicks summary calling them no designation. Official NFL is authoritative; Coleman/Shakir cannot assume either teammate out. Original Godwin alias correction and Ferguson role-decline veto remain binding from RUN07. JT FD public Nov1 04:40 EST 40+ rush -225, 50+ -122, main 51+ -113; Warren 3+ receptions -148 is cross-book consensus (not verified FanDuel); no multiplication of unrelated book prices as payable ticket. The old three-leg Safe was not price-qualified and is retired. Revised four-leg Safe candidate Warren3+/JT40+/Shakir30+/Strange2+ may still miss the +250 floor and MUST be quoted before it can be called Safe. Lottery eleven-leg candidate is **UNSOLVED** until actual combined payout >=250x and football gates pass. Do not spend OddsAPI credits, modify model code, or place bets. Keep hourly work active until full card with truthful quote/availability status is delivered; do not disable merely for publishing conditional drafts.
-
-**Canonical branch at V20 handoff creation:** `main` was `adf82522976b6a2eb731f15507fdc70e5f433aba` immediately before this handoff write. Re-fetch `main` on entry; automation commits may move it.
-
-**Current state:** the RB rushing investigation has now located **two upstream structural defects** that must be solved in sequence: (1) the production football universe treats Ourlads as the sole authority that a player exists, so known/returning/elevated skill players can be structurally unreachable; (2) independently estimated player rush shares are not reconciled into a valid team opportunity budget before Monte Carlo allocation, so the current 0.95 backstop routinely compresses every modeled rusher. The roster/existence defect comes first operationally because reconciling an incomplete roster can make team totals look better while making named-player projections worse. No new coefficient, cap, weight, or projection behavior from this research lane is promoted. Live pricing remains unchanged except for the previously shipped rate-scale fix.
+**Supersedes V20 in place.** Displaced V20 root archived at
+`docs/handoffs/NFL_HANDOFF_2026-10-28_V20_PRE_V21_ROOT_ARCHIVE.md`. The V20 RB/roster lane is
+**unchanged and still open** — see "STILL OPEN FROM V20" below. This checkpoint adds a new,
+independent finding about live market grading and opens one new player-level lead.
 
 **Read in this exact order**:
-1. AGENTS.md (canonical 2026 operating contract, player-first first principle).
-2. **ONLY THIS NEWEST ACTIVE TOP V20.** Do not recursively read prior checkpoints unless this file explicitly points to one.
-3. **`docs/research/PRISM_RB_RUSH_SHARE_MASS_BUDGET_V1.md` — THE ROOT CAUSE. Read before
-   anything else in the RB lane; it retracts the premise both earlier fixes were chosen under.**
-4. `docs/research/PRISM_RB_CARRY_CONCENTRATION_RESULTS_V1.md` — fix A, and the shape half.
-4. `docs/research/PRISM_RB_ENSEMBLE_REWEIGHT_RESULTS_V1.md` — fix B, and why reweighting
-   cannot work.
-5. `docs/research/PRISM_CORRECTION_PRODUCTION_IS_NOT_CONSTANT_SIGMA_V1.md` — still binding.
-6. Displaced V19 root archived at
-   `docs/handoffs/NFL_HANDOFF_2026-10-28_V19_PRE_V20_ROOT_ARCHIVE.md`.
-7. GitHub Issue https://github.com/dkaps6/imtiredofthis/issues/535 — GPT ↔ Claude Code work channel.
-   For rapid continuity, read standalone catch-up comment **6477740922**, then the current sequence:
-   **6477974816 → 6478435704 → 6478678129 → 6478823926 → 6478960995 → 6479098849 → 6479259425**,
-   then fetch anything newer before acting.
+1. `AGENTS.md` (canonical 2026 operating contract, player-first first principle).
+2. **ONLY THIS NEWEST ACTIVE TOP V21.** Do not recursively read prior checkpoints unless this
+   file explicitly points to one.
+3. **`docs/research/PRISM_LIVE_SIDE_GRADING_CORRECTION_V1.md` — NEW. Read before touching any
+   live-market or betting-adjacent measurement. It retracts a 2026-11-01 result.**
+4. `docs/research/PRISM_RB_RUSH_SHARE_MASS_BUDGET_V1.md` — the RB root cause, still binding.
+5. The still-binding correction sections further down this file (V16 constant-sigma, the V18
+   off-path retraction, the RB diagnosis table). Do not re-derive them.
+6. GitHub Issue https://github.com/dkaps6/imtiredofthis/issues/535 — GPT ↔ Claude work channel.
+   Fetch everything newer than comment 6479259425 before acting.
 
-**Most important immediate next task — SEQUENCED, agreed with the auditor (#535 comment
-6478960995):** **roster/availability integrity FIRST, budget reconciliation SECOND.**
+---
 
-1. **Ourlads is the SOLE authority on player *existence*.** Verified by row counts through
-   the W7 chain: `roles_ourlads` 458 → `roles_ourlads_status_v1` 458 →
-   `current_player_availability` 458 → `roles_current_production_eligible_v1` **396** →
-   `football_simulation_universe` **396**. The availability/injury layer **never adds a
-   row** — it only narrows. A player Ourlads omits is structurally unreachable whatever the
-   injury or inactives feeds say. Velus Jones Jr. was `ACT` for **four consecutive weeks**
-   and still never entered the universe. Fix: a **union** existence universe (depth chart ∪
-   official active/transaction feed ∪ designated-for-return ∪ relevant elevation candidates
-   ∪ inactives), plus a **final game-day roster refresh** before authoritative projections.
-2. **Then** reconcile the rush vector to `team_modeled_mass_target = 1 −
-   unresolved_roster_rush_mass`, with the residual **state-derived**, never a universal
-   0.05. Raw `rules_rush_share` sums to **1.2729** per team (28/28 over the 0.95 cap), so
-   `_allocate_counts` applies a uniform **0.7574** haircut and RB carries land at **19.77
-   vs 23.15 actual (−3.38)**.
+### WHAT CHANGED AT V21 — A MEASUREMENT ERROR, AND WHAT IT HID
 
-**Do NOT reconcile before the roster is fixed, and do NOT simply remove the cap.** Pre-cap
-mass is **over** by +3.26, and forcing an incomplete Thursday roster to 1.0 hands Jordan
-Mason's 15 carries to Aaron Jones and Max Bredeson — the team aggregate gets righter while
-named-player projections get worse. Preregister before scoring, as always.
+**The defect.** The `side` column in
+`data/research/live_2026/backtest_2026_live_calibration_v1_rows.csv` is a **board listing
+orientation, not the model's pick**. It agrees with `sign(model_proj − vegas_line)` in only
+**622/1571 = 39.6%** of rows; in **930** rows it reads `over` while the projection sits below
+the line.
 
-### LATEST CLAUDE RESPONSE — ISSUE #535 COMMENTS 6479098849 + 6479259425
+A 2026-11-01 study graded by that column, reported a pooled **48.31%** with a CI excluding
+breakeven, and concluded the model had no side-picking edge. **That conclusion is withdrawn.**
+It measured the wrong direction.
 
-Claude accepted the sequencing ruling and independently verified the W7 outside-carrier state labels against nflverse weekly rosters. The 52 outside carries split into **17 deterministic omissions/identity**, **30 reserve-return**, and **5 elevation/late-addition** carries. Crucially, row-count tracing proves the architecture itself is the ceiling: `roles_ourlads` 458 → `roles_ourlads_status_v1` 458 → `current_player_availability` 458 → `roles_current_production_eligible_v1` 396 → `football_simulation_universe` 396. The availability layer **never adds a player**; it only narrows Ourlads rows. Therefore a player omitted by Ourlads is structurally unreachable even if another feed knows he is active.
+**Always derive the pick as `'over' if model_proj > vegas_line else 'under'`.** Never trust a
+`side` column without checking it against the projection first.
 
-The working contract remains **designed, not promoted**:
-```
-team_modeled_mass_target = 1 - unresolved_roster_rush_mass
-```
-The residual must be state-derived and time-dependent. Known-active players missing from Ourlads are roster-integrity failures, not mystery residual. Return-window/elevation candidates can remain unresolved before final lock. A final game-day refresh should collapse the residual toward zero when the eligible skill roster is complete.
+**The corrected result.** Model directional picks, 1,571 graded live rows, weeks 1/2/6/7:
 
-**AUDIT TARGET 6 is the immediate open question set:**
-- Determine the authoritative **pregame-safe player-existence feed**. `nflreadpy.load_rosters_weekly(2026)` resolves all nine W7 cases in settled data, but its publication timing must be proven safe for Thursday/game-day use before it can become production authority. Do not use a post-hoc weekly roster snapshot as a pregame feature.
-- Measure whether the same Ourlads existence ceiling affects **WR/TE**, because 458→396 narrows every position and could contaminate target-share/receiving markets too. This is a diagnostic question only; do not assume the answer.
-- The union existence universe should combine depth-role authority with a leakage-safe existence/transaction source, availability/return states, and final game-day activations/inactives. Ourlads may remain a role/depth source but **must not remain the sole authority that a player exists**.
+| scope | record | hit | 95% CI |
+|---|---|---|---|
+| all | 832/1571 | **52.96%** | [50.5%, 55.4%] |
 
-Claude also disclosed a **standing capability gap**: production currently uses **zero NextGen Stats**, even though `load_nextgen_stats` returns 2026 weeks 1–7 for passing/rushing/receiving. This is **not the active lane** and must not distract from roster integrity → budget reconciliation. Relevant fields include rushing `expected_rush_yards`, RYOE, efficiency, and `percent_attempts_gte_eight_defenders`; receiving includes separation/cushion/air-yards/YAC-over-expectation. Target-week NGS is outcome data and can never be used upstream. Before any future NGS study, prove publication timing and use strictly prior-week walk-forward inputs. The old doc saying “2026 NGS unavailable” was wrong because it conflated NGS with the genuinely unavailable 2026 participation endpoint.
+Breakeven at −110 is 52.4%. By week: **W1 51.4% → W2 50.7% → W6 53.9% → W7 56.3%.** Monotone
+across the observed blocks, but four weeks only and no single week's CI excludes breakeven —
+a live hypothesis, **not** an established result. Weeks 3–5 are permanently lost (AGENTS.md §5a).
 
+**Market cell is the structure that discriminates:**
 
+| cell | record | hit |
+|---|---|---|
+| `pass_yards` OVER | 38/62 | **61.3%** |
+| `rush_yards` UNDER | 101/171 | **59.1%** |
+| `receptions` OVER | 94/170 | 55.3% |
+| `rush_yards` OVER | 55/113 | **48.7%** |
+
+`rush_yards` OVER sitting below breakeven is the **mirror of the V20 RB mass-deflation root
+cause**: the model under-projects RB rushing volume, so its rush OVERs are manufactured by a
+known defect while its rush UNDERs ride it. These two lanes are the same defect seen from two
+directions — treat them as one problem.
+
+**Model confidence is worthless as a ranking key.** Realized accuracy is flat at ~49–57%
+across *every* confidence band: rows the model calls **88.3%** realize **53.7%**; rows it calls
+52.4% realize 52.8%. `edge_pct` deciles show no monotone relationship either (top decile 55.1%,
+CI [47.3%, 62.6%]). **The distribution's location carries signal; its width does not.** Do not
+use `model_proj`/`model_sd` probability or `edge_pct` as a betting probability or ranking key.
+
+---
+
+### NEW PLAYER-LEVEL LEAD — ELITE RECEIVERS ARE UNDER-PROJECTED
+
+On the committed Week 8 board, model `receptions` projections vs sportsbook alt ladders:
+
+| player | model proj | market alt | implied |
+|---|---|---|---|
+| Ja'Marr Chase | **4.49** | 4+ @ −1800 | 94.7% |
+| Justin Jefferson | **4.12** | 4+ @ −800 | 88.9% |
+
+A market pricing 4+ receptions at 94.7% implies a mean well above 6. A ~2-reception gap on two
+alpha receivers is **model error, not edge**. This is the receiving-side analogue of the
+existence-ceiling / WR-hierarchy compression already open in the RB lane, and it is the most
+valuable item in this checkpoint for the research lane: player-level, falsifiable, structural.
+
+**Per-player side records are NOT a usable signal.** 88 players have n≥8; median 52.8%; only
+**4 of 88** clear a 95% Wilson lower bound above 52.4%, against ~2 expected **by chance**. Do
+not build a per-player prior on four weeks. The negative tail is mildly usable only because it
+corroborates a known defect: Kenneth Walker III **4/16**, Sam Darnold **0/4**.
+
+---
+
+### IMMEDIATE NEXT ACTION — A FREE PROSPECTIVE TEST IS AVAILABLE
+
+`data/market_track_record/boards/2026_wk08.csv` (2,820 rows) is committed and its games are
+complete. Grade it with the **corrected** direction. This:
+
+1. extends the series to five weeks and gives the W1→W7 uptrend its first out-of-sample test;
+2. tests `pass_yards OVER` 61.3% and `rush_yards UNDER` 59.1% on rows frozen before kickoff —
+   the strongest evidence this lane can produce;
+3. costs nothing, because the board is already in git.
+
+**Preregister before scoring:** hypothesis is `pass OVER > 52.4%` and `rush UNDER > 52.4%` on
+W8; naive control is "all model picks pooled"; kill condition is either cell landing below
+breakeven on n≥40.
+
+---
+
+### STILL OPEN FROM V20 — UNCHANGED, STILL SEQUENCED
+
+The V20 lane is **not superseded by the above**, only joined by it. The sequence stands:
+
+**(1) roster/availability EXISTENCE integrity → (2) coverage-aware team rush-budget
+reconciliation → (3) Bayesian evidence-dependent shrinkage.** Do not skip that order.
+
+- **Ourlads is the sole authority that a player exists** on the production football path. W7
+  lineage: `roles_ourlads` 458 → `roles_ourlads_status_v1` 458 → `current_player_availability`
+  458 → `roles_current_production_eligible_v1` **396** → `football_simulation_universe` **396**.
+  The availability layer **never adds a row**; it only narrows. A player Ourlads omits is
+  structurally unreachable.
+- **Rush mass is not reconciled to a team budget.** Post-top-5 `rules_rush_share` sums to
+  **1.2729** per team (28/28 over the 0.95 cap); `_allocate_counts` applies a uniform **0.7574**
+  haircut; simulated RB carries land at **19.77/team vs 23.15 actual, bias −3.38**.
+  Working contract, **designed not promoted**:
+  `team_modeled_mass_target = 1 − unresolved_roster_rush_mass`, residual state-derived, never a
+  universal 0.05. **Do not remove the cap and do not normalize an incomplete roster to 1.0.**
+- **AUDIT TARGET 6 remains open:** find a genuinely **pregame-safe** player-existence feed
+  (`nflreadpy.load_rosters_weekly(2026)` resolves the W7 cases in settled data but its
+  publication timing is unproven for Thursday/game-day use); measure whether the same existence
+  ceiling contaminates **WR/TE** target shares — note §"NEW PLAYER-LEVEL LEAD" above is now a
+  concrete reason to suspect it does.
+- **Standing capability gap:** production uses **zero NextGen Stats** though
+  `load_nextgen_stats` returns 2026 weeks 1–7. Not the active lane. Target-week NGS is outcome
+  data and can never be used upstream.
+
+### PROMOTED AT V21
+
+**Nothing.** V21 corrects a measurement and records what the corrected measurement shows. No
+coefficient, weight, feature, artifact schema, or pricing path changed.
 
 ### NON-NEGOTIABLE USER SCIENCE
 **THE PLAYER SHOULD HAVE THE RULES, NOT THE POSITION HAVE THE PLAYER.** Named-individual
