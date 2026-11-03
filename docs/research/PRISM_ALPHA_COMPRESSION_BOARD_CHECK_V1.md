@@ -125,3 +125,51 @@ the allocator finding, the true-rate finding and the pricing finding.
 A fix must be preregistered with **both** objectives scored, and must beat the §3 null. No
 sportsbook data entered any model computation; this document uses market lines for **grading
 only**, per AGENTS.md §3.
+
+---
+
+# ADDENDUM V1a — §5's BETTING RULE IS WITHDRAWN (LOOKAHEAD IN THE TIERING)
+
+**Added:** 2026-11-03, same day, before any part of §5 was acted on.
+
+§1–§5 tiered players by their **season-long** level — target share computed from all of W1–W8,
+**including the week being graded.** A player who had a big game was therefore sorted into the
+top tier *for that same week*, enriching the top tier with players who had just gone off. That
+biases every "unders lose at the top" figure.
+
+Re-tiering with **prior weeks only** (the player's level from weeks strictly before the graded
+week) reverses the conclusion:
+
+| | contaminated tiering | **pregame-only tiering** |
+|---|---|---|
+| top-tier + model says UNDER | 46.80% (n=1030) | **56.62% (n=1194)** |
+| the rest of the board | 54.65% | 51.80% |
+| WR `rec_yards` top-tier unders | — | **57.52%** (n=226) |
+| WR `receptions` top-tier unders | — | 51.46% (n=206) |
+
+**§5 is withdrawn in full. Do not suppress alpha unders.** On a clean pregame split that
+category is the **best** cell on the board, not the worst. Win rate by pregame tier and side:
+
+| pregame tier | n under | UNDER win% | n over | OVER win% |
+|---|---|---|---|---|
+| Q1 low | 546 | 55.31% | 960 | 49.17% |
+| Q2 | 682 | 53.67% | 714 | **55.74%** |
+| Q3 | 940 | 51.91% | 508 | **44.88%** |
+| **Q4 top** | **1194** | **56.62%** | 202 | 51.49% |
+
+Overall 52.80% (n=5746). The one losing cell is **Q3 overs at 44.88%**, which no prior document
+identified and which this correction found only because the tiering was redone.
+
+**This is the same class of error as grading on the `side` column and as quoting a CI that
+covered the wrong quantity: a number that looked actionable because its construction leaked the
+answer.** It is the second betting recommendation withdrawn in this session. The rule going
+forward: **any tier, filter or threshold used for a betting decision must be computed from
+information available before kickoff, and that must be stated explicitly in the document that
+proposes it.**
+
+## What survives
+
+**The compression finding is unaffected**, because `model_proj − vegas_line` contains no
+outcome. Re-tiered pregame-only, **10 of 10 role × market cells still show it**, monotone in
+every one. §2's weekly stability, §4's separation of model defect from season regime, and §3's
+falsification of the multiplicative fix all stand. Only the betting rule in §5 is withdrawn.
