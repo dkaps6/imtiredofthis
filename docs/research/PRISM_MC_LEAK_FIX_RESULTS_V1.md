@@ -117,3 +117,66 @@ Residual question worth its own study: E1 leaves 0.1494 of mass still leaking. W
 availability signal (snap counts — available weekly, confirmed in
 `PRISM_SNAP_SIGNAL_AND_NOISE_FLOOR_V1.md` §1 — or official inactives) closes the remainder is
 open, and connects directly to V20/V21 **AUDIT TARGET 6**.
+
+---
+
+## 7. QUALIFICATION (added 2026-11-03, same day) — the headline number oversells itself
+
+Prompted by the question *"are individual player projections actually getting better, or are we
+still aggregating?"* — a named-player read of the E1 result materially qualifies §1 and §2.
+**This section is part of the result, not a footnote.**
+
+### 7a. M1 is diluted by players who never play
+
+**124 of 308 evaluated players (40%) were never targeted in either week.** M1 counts each of
+them equally with Jaxon Smith-Njigba. E1's easiest win — correctly zeroing players who were
+never going to catch anything — therefore carries a large part of the headline.
+
+| population | n | C1 | E1 | gain | breadth |
+|---|---|---|---|---|---|
+| all players (**as published in §1**) | 308 | 0.04603 | 0.03051 | **+0.01552** | **75%** |
+| **excluding never-targeted** | 184 | 0.05436 | 0.04203 | **+0.01233** | **62%** |
+| targeted, ≥5% share | 124 | 0.06308 | 0.04751 | — | — |
+
+**The gain survives** (CI [+0.00751, +0.01713] still clears 0) **but breadth falls from 75% to
+62%** — barely above the G2 threshold of 60%. E1 passes honestly; it passes far more narrowly
+than §1 reads.
+
+### 7b. The effect is tier-dependent, and one real tier gets WORSE
+
+| actual-share tier | n | C1 bias | E1 bias | mean gain | % improved |
+|---|---|---|---|---|---|
+| 0 (never targeted) | 124 | +0.0337 | +0.0134 | +0.0203 | **94%** |
+| <5% | 60 | +0.0353 | +0.0219 | +0.0056 | 60% |
+| **5–12%** | **49** | **−0.0052** | **+0.0018** | **−0.0080** | **31%** |
+| 12–20% | 46 | −0.0599 | −0.0298 | +0.0208 | 80% |
+| 20%+ | 29 | −0.1357 | −0.0821 | **+0.0472** | **93%** |
+
+**C1 was already nearly unbiased for the 5–12% tier (−0.0052) and E1 over-corrects it to
++0.0018.** Only 31% of that tier improves. Named regressions are exactly that population —
+**Cade Otton, Mark Andrews, Sam LaPorta, Cooper Kupp, Josh Jacobs, Zach Charbonnet**: tight ends
+and pass-catching backs with moderate, variable roles.
+
+The mechanism is the renormalisation, not the availability signal. A full-time tight end who
+draws three targets a game has `A_j = 1.0`, identical to an alpha receiver, so E1 does not
+distinguish them — it simply redistributes the freed mass proportional to share, which hands
+the mid-tier more than it should get.
+
+### 7c. What this changes
+
+- **§1 and §2 stand as computed** — the gates were preregistered and E1 cleared them.
+- **The magnitude in §2 must be cited from the 184-player figure (+0.01233, 62% breadth), not
+  the 308-player one.**
+- **The flagged implementation in §6 must not proceed without addressing the 5–12% tier.**
+  Shipping E1 as-is would knowingly degrade a identifiable group of real contributors — which is
+  the failure G3 and G5 were written to prevent, arriving in a form neither gate tested for.
+
+### 7d. The standing methodological lesson
+
+A metric can be *player-level in construction* — each player counted once, bootstrapped by
+player — and still be an **aggregate that conceals which players move and in which direction.**
+Both the alpha-tier study (B1 won by conditioning on level) and this one (E1 fails for one tier)
+point the same way: **corrections conditioned on player role or tier beat universal ones**, and
+a single number over players cannot reveal that. Future studies in this lane should report the
+tier table alongside M1 by default.
+
