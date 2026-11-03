@@ -169,3 +169,55 @@ A pass licenses **one** follow-up: implementation in `scripts/modeling/bayesian_
 version flag, default off; the full production validation suite; and **prospective grading before
 any live use.** Promotion requires both objectives, all eight gates, and a committed artifact —
 not an Actions run id (AGENTS.md §5a).
+
+---
+
+# AMENDMENT V1a — §0 MISDESCRIBED THE SHRINKAGE TARGET
+
+**Added:** 2026-11-03, **before any arm was computed.** Correcting the record, not the design.
+
+§0 wrote the shrinkage target as `values = [DEFAULTS[metric][pos]]`. **That is wrong.**
+`_posterior_mean` receives `group_mean` from `_weighted_group_mean`, which is the
+**prior-season-games-weighted mean of that position group's own players on the current slate**:
+
+```python
+mask = df["bayes_position_group"].eq(pos) & pv.notna() & pg.gt(0)
+if mask.any(): return float(np.average(pv.loc[mask], weights=pg.loc[mask]))
+if pv.notna().any(): return float(pv.loc[mask].median())
+return float(DEFAULTS[metric][pos])        # last-resort fallback ONLY
+```
+
+So `DEFAULTS` (the 0.16 WR constant) is a **third-choice fallback**, not the normal target. The
+arithmetic example in §0 — "a −0.0225 pull against 0.16" — is therefore **withdrawn**; the true
+pull is toward the empirical position-group mean, whose value is measured and reported with the
+results rather than assumed here.
+
+**The defect under test is unchanged and so is every arm.** Shrinking a named player toward a
+*position-group* number with a weight that never decays, while capping his own history, is the
+same mechanism whether that number is hardcoded or empirical — it is still the position holding
+the player. If anything the empirical target is **more** compressive than the constant, because
+it is weighted by `prior_games` across every player in the group, including backups, which pulls
+it below the starter population it is applied to. That is now an explicit quantity to report.
+
+**No gate, arm, metric or kill condition changes.** G5's positive control and the A4/A5 contrast
+are unaffected.
+
+## Known limitation of this run, stated in advance
+
+`data/player_form_consensus.csv` is pipeline-generated and **not committed**, so
+`build_bayesian_baseline` cannot be driven from a clean checkout. Player prior/current evidence
+is therefore **reconstructed from nflverse weekly stats**, the same underlying source PlayerForm
+consumes.
+
+More importantly: **Objective S cannot be evaluated on production MC.** Regenerating
+`model_proj` for five arms across eight weeks requires the full simulation and pricing stack.
+Objective S will instead be scored on a **reduced-form projector** (`share × team volume ×
+efficiency`), which **must first be validated** against the committed boards' own `model_proj`,
+and that validation reported. **If the reduced form does not reproduce production's level and
+compression gradient, Objective S is reported as NOT EVALUATED and no arm may be promoted** —
+G4 is a required gate and an unmeasured gate is a failed one, per §4's rule that no arm promotes
+on one objective alone.
+
+`route_rate` and `yprr` are excluded: production sets `routes = NaN` for every player
+(`player_form_v2.py:135`), so both metrics are inert in the live stack and testing them would
+measure a path that does not run.
