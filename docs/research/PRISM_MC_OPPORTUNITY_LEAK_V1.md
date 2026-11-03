@@ -127,3 +127,53 @@ mass while harming a third of named players is not an improvement.
 Note for whoever picks this up: three separate hypotheses were tested and rejected before
 reaching this (prior weighting, ensemble reweighting, additive offset). All three were attempts
 to correct this leak from downstream of it.
+
+---
+
+## 7. CONFIRMED ON WEEK 8 (added 2026-11-03)
+
+`§6` called for replication on a second week before anything is built on this. Done — the W8
+production universe is committed at
+`data/market_track_record/explanatory/2026_wk08_trace__data__football_simulation_universe.csv`
+(403 rows, 28 teams), and Week 8 is complete. Identical measurement, no methodology changes:
+
+| | **Week 7** | **Week 8** |
+|---|---|---|
+| team sum of `tgt_share` | 1.5097 | **1.5067** |
+| teams over the 0.95 cap | 28/28 | **28/28** |
+| universe players per team | 14.1 | 14.4 |
+| players targeted per team | 7.0 (49%) | 6.7 (47%) |
+| allocated to targeted players | 0.6473 | 0.6148 |
+| **allocated to ZERO-target players** | **0.3027** | **0.3352** |
+| **shortfall to players who played** | **−29.3%** | **−35.0%** |
+
+**The leak replicates and is marginally worse in Week 8.**
+
+### Week 8 isolates the mechanism more cleanly than Week 7
+
+| per-player, targeted players only | W7 | W8 |
+|---|---|---|
+| raw estimate vs actual | **+25.5%** | **+2.9%** |
+| **allocated vs actual** | **−20.5%** | **−35.0%** |
+
+In Week 8 the per-player share estimates are **nearly unbiased (+2.9%)** — and the allocated
+values are still **−35.0%** wrong.
+
+That separates the two faults from §2 and shows which one is load-bearing:
+
+- **Fault (a), inflated estimates, is nearly absent in W8** yet the leak is undiminished.
+- **Fault (b), the oversized universe, is sufficient on its own.** The 6.7 targeted players
+  carry well-calibrated shares; the other 7.7 universe players per team carry roughly 0.5 of
+  additional share mass, pushing the team sum to 1.5067, and the normalisation then divides
+  every genuine receiver by ~1.586.
+
+**The estimator is not the problem. The universe composition is.** A correction aimed at
+share estimation — which is what the prior-weighting, ensemble-reweighting and offset studies
+all were — cannot reach this, which is consistent with all three having failed.
+
+### Status unchanged
+
+Still a diagnosis. **No fix is proposed and nothing is promoted.** The three candidate
+directions in §5 remain untested, and the player-level gate requirement stands: an
+availability-aware allocation that improves pooled mass while harming a third of named players
+is not an improvement.
