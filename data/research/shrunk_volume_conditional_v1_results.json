@@ -1,0 +1,153 @@
+{
+  "gates": {
+    "M5": {
+      "pass": true,
+      "msg": "the three mc_only markets differ from the recorded ensemble as expected (min delta 0.0953)"
+    },
+    "M1": {
+      "pass": true,
+      "msg": "conditioner=reconstructed ensemble, target=actual; 13 forbidden names absent"
+    },
+    "S6": {
+      "pass": true,
+      "msg": "selected lambdas {'rec_yards': 0.0, 'receptions': 0.2, 'rush_yards': 0.4, 'rush_rec_yards': 0.3}"
+    },
+    "K6": {
+      "pass": false,
+      "msg": "no market selected lambda=0 (which would mean \"no correction is best\")"
+    },
+    "M2": {
+      "pass": true,
+      "msg": "no 2026 row entered any fit or the selection"
+    },
+    "M4": {
+      "pass": true,
+      "msg": "pass_yards is out of scope: no coefficient emitted, output untouched"
+    }
+  },
+  "selected": {
+    "rec_yards": {
+      "arm": "V1_linear",
+      "lam": 0.0,
+      "loso_ppmae": 18.627748092409192,
+      "baseline_loso": 18.627748092409192
+    },
+    "receptions": {
+      "arm": "V3_isotonic",
+      "lam": 0.2,
+      "loso_ppmae": 1.4129385835227652,
+      "baseline_loso": 1.4143611439193982
+    },
+    "rush_yards": {
+      "arm": "V3_isotonic",
+      "lam": 0.4,
+      "loso_ppmae": 18.130188393282666,
+      "baseline_loso": 18.398604244439678
+    },
+    "rush_rec_yards": {
+      "arm": "V1_linear",
+      "lam": 0.3,
+      "loso_ppmae": 25.2180822418114,
+      "baseline_loso": 25.335150954152688
+    }
+  },
+  "results_2026": {
+    "rec_yards": {
+      "arm": "V1_linear",
+      "lam": 0.0,
+      "n": 638,
+      "players": 221,
+      "ppmae_base": 20.67382153744217,
+      "ppmae_corr": 20.67382153744217,
+      "mae_ci": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "spread_base": 0.2228217052895396,
+      "spread_corr": 0.2228217052895396,
+      "level_base": 0.8125181087647315,
+      "level": 0.8125181087647315,
+      "worst_q": 0.0,
+      "worst_q_name": "Q0",
+      "S1": false,
+      "S2": true,
+      "S3": 1.0,
+      "S4": false,
+      "promote": false
+    },
+    "receptions": {
+      "arm": "V3_isotonic",
+      "lam": 0.2,
+      "n": 633,
+      "players": 219,
+      "ppmae_base": 1.5542384375624105,
+      "ppmae_corr": 1.5465391850388879,
+      "mae_ci": [
+        -0.0076992525235224695,
+        -0.018985818013953,
+        0.0028196485468102253
+      ],
+      "spread_base": 0.19797803819538318,
+      "spread_corr": 0.17268379882730722,
+      "level_base": 0.8403504953165164,
+      "level": 0.874214851108144,
+      "worst_q": 0.002817105702628104,
+      "worst_q_name": "Q1",
+      "S1": false,
+      "S2": true,
+      "S3": 1.0,
+      "S4": false,
+      "promote": false
+    },
+    "rush_yards": {
+      "arm": "V3_isotonic",
+      "lam": 0.4,
+      "n": 343,
+      "players": 119,
+      "ppmae_base": 17.711104801435006,
+      "ppmae_corr": 17.99487837481257,
+      "mae_ci": [
+        0.2837735733775533,
+        -0.17163005977163479,
+        0.7595674132224359
+      ],
+      "spread_base": 0.1199498524319923,
+      "spread_corr": 0.018964517051250684,
+      "level_base": 0.8105746572539583,
+      "level": 0.9271668531479199,
+      "worst_q": 0.05114541799039867,
+      "worst_q_name": "Q0",
+      "S1": true,
+      "S2": true,
+      "S3": 0.0,
+      "S4": false,
+      "promote": false
+    },
+    "rush_rec_yards": {
+      "arm": "V1_linear",
+      "lam": 0.3,
+      "n": 148,
+      "players": 58,
+      "ppmae_base": 27.802061043626423,
+      "ppmae_corr": 27.016045879427576,
+      "mae_ci": [
+        -0.7860151641988411,
+        -1.4630210690484595,
+        -0.11350322133776182
+      ],
+      "spread_base": -0.034685768983717113,
+      "spread_corr": -0.020194303652647405,
+      "level_base": 0.7650668934237929,
+      "level": 0.8230783565434133,
+      "worst_q": -0.02200084920698428,
+      "worst_q_name": "Q1",
+      "S1": true,
+      "S2": true,
+      "S3": 1.0,
+      "S4": false,
+      "promote": false
+    }
+  },
+  "any": false
+}
