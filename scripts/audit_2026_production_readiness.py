@@ -357,6 +357,68 @@ def _legacy_authority_findings() -> list[dict[str, str]]:
     return out
 
 
+def _injury_contract_findings() -> list[dict[str, str]]:
+    """Injury-status contract.
+
+    The rules layer discounts a player's opportunity only when
+    ``simulation_rules._injury_limited`` sees a designation in ``ctx.features``. That value
+    travels builder -> data/injuries.csv -> context_bridge merge -> features, and a break
+    anywhere in that chain is SILENT: the rule simply never fires and every inactive player
+    keeps his full opportunity. W7/W8 2026 showed exactly that outcome -- 29 players ruled
+    OUT held a mean 0.1392 target share and all recorded zero targets -- so these checks exist
+    to make the next break visible instead of invisible.
+    """
+    out: list[dict[str, str]] = []
+    try:
+        from scripts.build.build_injuries_weekly import SCHEMA as INJ_SCHEMA
+    except Exception as exc:  # pragma: no cover - import guard only
+        return [_finding("P1", "injury_schema_unreadable",
+                         f"cannot import build_injuries_weekly.SCHEMA: {type(exc).__name__}")]
+
+    for col in ("status", "designation"):
+        if col in INJ_SCHEMA:
+            continue
+        out.append(_finding("P1", "injury_schema_missing_field",
+                            f"build_injuries_weekly.SCHEMA lacks '{col}'; the rules layer reads it"))
+
+    bridge = _read(ROOT / "scripts" / "modeling" / "context_bridge.py")
+    for col in ("status", "designation"):
+        if f'["{col}"]' in bridge and col not in INJ_SCHEMA:
+            out.append(_finding("P1", "injury_contract_drift",
+                                f"context_bridge reads '{col}' but it is not in the injuries SCHEMA"))
+
+    inj = ROOT / "data" / "injuries.csv"
+    if inj.exists() and inj.stat().st_size:
+        import pandas as _pd
+        try:
+            df = _pd.read_csv(inj)
+        except Exception as exc:
+            out.append(_finding("P1", "injury_artifact_unreadable",
+                                f"data/injuries.csv unreadable: {type(exc).__name__}"))
+            return out
+        if "status" not in df.columns:
+            out.append(_finding("P0", "injury_status_column_absent",
+                                "data/injuries.csv has no 'status' column; the injury rule "
+                                "cannot fire and every inactive player keeps full opportunity"))
+        elif int(df["status"].notna().sum()) == 0:
+            out.append(_finding("P0", "injury_status_all_null",
+                                f"data/injuries.csv has 'status' but all {len(df)} rows are null; "
+                                "the injury rule cannot fire"))
+        else:
+            vals = {str(v).upper().strip() for v in df["status"].dropna().unique()}
+            tokens = ("OUT", "DOUBTFUL", "IR", "PUP")
+            if not any(any(t in v for t in tokens) for v in vals):
+                out.append(_finding("P0", "injury_status_unrecognised",
+                                    f"no value in data/injuries.csv 'status' matches the tokens "
+                                    f"_injury_limited recognises {tokens}; observed {sorted(vals)[:8]}"))
+            if any("QUESTIONABLE" in v for v in vals):
+                out.append(_finding("P1", "injury_questionable_untreated",
+                                    "provider emits QUESTIONABLE but _injury_limited does not "
+                                    "recognise it, so those players keep 100% of opportunity; "
+                                    "measured 2026 W1-8 retention is 0.8535 target / 0.5718 rush"))
+    return out
+
+
 def run() -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
     findings += _workflow_findings()
@@ -367,6 +429,7 @@ def run() -> list[dict[str, str]]:
     findings += _promotion_findings()
     findings += _v3_contract_findings()
     findings += _legacy_authority_findings()
+    findings += _injury_contract_findings()
     rank = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
     findings.sort(key=lambda x: (rank.get(x["severity"], 9), x["code"], x["message"]))
     return findings
