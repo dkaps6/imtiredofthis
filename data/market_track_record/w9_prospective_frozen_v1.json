@@ -1,0 +1,22 @@
+{
+  "season": 2026,
+  "week": 9,
+  "captured_utc": "2026-11-04T00:41:10.767840+00:00",
+  "players": 478,
+  "teams": 30,
+  "max_player_stats_week_read": 8,
+  "w9_injury_designations_available_at_capture": false,
+  "arms_frozen": [
+    "baseline",
+    "D3"
+  ],
+  "arms_pending": [
+    "D1 overlay"
+  ],
+  "totals": {
+    "rec_base": 7434.288068318095,
+    "rec_d3": 7069.802993397132,
+    "rush_base": 3683.584546372503,
+    "rush_d3": 3228.529100858752
+  }
+}
