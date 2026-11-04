@@ -883,3 +883,26 @@ jobs:
           # the durable archive existed, so those slates can never be graded
           # at row level again.
           retention-days: 90
+      # Must stay the LAST step in the job.
+      #
+      # "Summarize outputs" prints a wc -l for every generated artifact, which
+      # is hundreds of lines, and the artifact upload adds more. Any earlier
+      # failure is therefore pushed far outside the tail of the job log that
+      # the API will return, and a failed run reads as "something broke" with
+      # no reason attached. Re-running the audits here, last, puts the actual
+      # finding at the end of the log where it can be read.
+      - name: Diagnose a failed run (re-run the audits last, so the reason is readable)
+        if: failure()
+        run: |
+          export PYTHONPATH="${PWD}"
+          echo "===================== FAILURE DIAGNOSTIC ====================="
+          echo "--- python scripts/utils/audit_repo.py --strict"
+          python scripts/utils/audit_repo.py --strict 2>&1 | tail -40 || echo "(audit_repo exited non-zero)"
+          echo "--- python scripts/audit_2026_production_readiness.py --strict"
+          python scripts/audit_2026_production_readiness.py --strict 2>&1 | tail -40 || echo "(readiness audit exited non-zero)"
+          echo "--- key artifact presence"
+          for f in data/injuries.csv data/team_context_v3.csv data/model_ensemble_weights.csv \
+                   data/team_week_map.csv data/player_form.csv; do
+            if [ -e "$f" ]; then echo "  PRESENT $(wc -l < "$f") $f"; else echo "  MISSING $f"; fi
+          done
+          echo "=============================================================="
