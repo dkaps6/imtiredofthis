@@ -1,5 +1,15 @@
 # PRISM — ALT-LINE DECISION TABLE, AND THE HISTORICAL DATASET I MISSED
 
+> **DEPRECATED 2026-11-04 — do not bet from this table.**
+> Its thresholds are expressed as a fraction of the **model projection**, which is compressed by
+> 32-54pp across volume, so a fixed fraction means a different real threshold for every player.
+> Measured cost on held-out 2025: at `frac_of_proj = 0.6` for `rush_yards` the table promises 70.4%
+> and reality runs 60.9% (low volume, overpaying) to 90.4% (high volume, true break-even -943
+> against the -238 quoted here). It also fails decile calibration at 8.92pp.
+> **Superseded by `data/research/alt_line_market_anchored_table_v1.csv`**, documented in
+> `PRISM_ALT_LINE_ANCHOR_RESULTS_V1.md`. Retained as research lineage only.
+
+
 **Date:** 2026-11-04
 **Artifact:** `data/research/alt_line_clearance_curve_2024_2025_v1.csv`
 **Source:** `docs/research/overnight/clean_v1_full_stack_vegas_benchmark_detail.csv` —
