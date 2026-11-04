@@ -4,9 +4,11 @@
 
 **Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.
 **Branch:** all V22/V23 work is on `claude/nice-cori-4qkwqs` (PR #697 open, unmerged).
-**Production changes: ZERO.** Every file touched is under `scripts/research/`, `docs/research/`,
-`docs/production/` or `data/research/`. The one exception remains V22's
-`scripts/audit_2026_production_readiness.py` injury-contract gate.
+**Production changes: TWO, both narrow.** V22's `scripts/audit_2026_production_readiness.py`
+injury-contract gate, and **one row added to `data/model_ensemble_weights.csv`** for
+`rush_rec_yards` (§ below). **No code was modified for the second** — the consumer is already
+generic. Everything else is under `scripts/research/`, `docs/research/`, `docs/production/` or
+`data/research/`.
 
 **V22's findings all stand.** The ceiling (93% of players at the information limit, the alpha
 under-rated −0.0392), universal compression with three sources, allocator scale invariance, the
@@ -75,22 +77,58 @@ evidenced. **I predicted this would fail. It did not — the first time in this 
 beat my expectation of it.** The effect is **0.5–2% relative** and is **not** shown to convert to
 profit; do not build a tier on it.
 
-### THE OPEN PRODUCTION DEFECT V23 FOUND — THIS IS THE NEXT FIX
+### PROMOTED — `rush_rec_yards` ENSEMBLE CALIBRATION (production change)
 
-**`rush_rec_yards` has no calibrated ensemble.** `data/model_ensemble_weights.csv` carries
-`pass_yards`, `rush_att`, `rush_yards`, `rec_yards`, `receptions` — **and no row for
-`rush_rec_yards`**, which therefore ships `ensemble_status = uncalibrated_mc_only`,
-`method = mc_fallback_no_oos_weights`, i.e. **raw Monte Carlo with zero weight on ML and State**,
-both of which are computed and present.
+`docs/research/PRISM_RUSH_REC_ENSEMBLE_RESULTS_V1.md`, preregistered first. **Every gate passes.**
 
-Consequence on the 2026 boards: `proj − line = **−14.74**`, the model says OVER on **19.2%** of
-rows where truth is ~49%. Composing it from the two **calibrated** components recovers only
-**2.3 of the 14.4 yards**, so missing calibration is necessary but not sufficient — the players on
-that board are team alphas, and **−12.1 / 71.9 = −16.8% matches V22's alpha haircut of −16.2%
-almost exactly.** Those two findings are very likely the same defect seen from two directions.
+The market had **no row at all** in `data/model_ensemble_weights.csv`, so it shipped
+`uncalibrated_mc_only` — **raw Monte Carlo, zero weight on ML and State**, both computed and
+present. On 2,573 rows `mc_proj` sat at **0.657** of actual with MAE 32.6 while `ml_proj` sat at
+**0.952** with MAE 29.4.
 
-It is also the **worst-EV market in the programme (−0.1665)** and the second most *tractable* by
-relative dispersion. **A market that is predictable and that we are bad at is the right target.**
+**Promoted:** `mc 0.4211 / ml 0.3634 / state 0.2155`, `fit_2024_only_blind_holdout_2025`, lineage
+`RUSH_REC_ENSEMBLE_V23_FIT2024_BLIND2025`. Fit on 1,925 rows of 2024 with
+`ensemble_v2.fit_market_weights` **unmodified**; blind on 648 rows / 112 players of 2025.
+
+- **S1** per-player MAE **−2.2422** [−3.5550, −0.9037], clustered over players.
+- **S2** level **0.6211 → 0.7773** of realized.
+- **S3** Q1 unchanged, **Q2 −13.7%, Q3 −15.5%**, Q0 +3.7% — the gain is concentrated on the
+  high-volume players, i.e. exactly the V23 shortfall and the V22 alpha haircut.
+- **M4** `pass_yards` and the other four rows **byte-identical**.
+
+**This re-ran a fit that had already been rejected**, and §0 of its preregistration says so.
+`ENSEMBLE_WEIGHT_2023_HOLDOUT_RESULT.md` fit this market in 2023, got the largest MAE gain of three
+markets (33.040→30.456), and rejected it on main-line STRONG-tier ROI (−4.42%→−6.10%) while
+promoting `rec_yards` and `receptions`. **K7 records that main-line ROI was deliberately dropped as
+a gate** because V23 proved that lane unbeatable by construction and its selection layer
+miscalibrated by up to +0.448 on this market's own high-volume rows. **If anyone later shows
+main-line ROI is beatable, this promotion must be re-examined.**
+
+**⚠️ It moves no bet.** The V23 decision card anchors on the **sportsbook line**, not on our
+projection. This is a football-projection fix under the first principle, nothing more. Do not read
+S1 as a betting gain.
+
+### THE BEST-EVIDENCED OPEN LEAD — THE ENSEMBLE METHOD ITSELF
+
+`PRISM_RUSH_REC_ENSEMBLE_RESULTS_V1.md` §4. `fit_market_weights` is
+`LinearRegression(fit_intercept=False, positive=True)` followed by `_normalise_nonnegative`.
+**The raw fitted coefficients sum to 1.2315** — the regression wants to scale the components **up
+23%** and normalisation throws it away.
+
+| arm | level | per-player MAE vs the promoted blend |
+|---|---|---|
+| promoted (normalised) | 0.7773 | — |
+| same fit, **unnormalised** | **0.9572** | +0.7343 [−0.5183, +1.9558] — CI spans 0 |
+| `ml_proj` alone | 0.9392 | +0.4751 [−0.5856, +1.5122] — CI spans 0 |
+
+**The sum-to-one constraint costs ~18pp of level and buys nothing measurable.** And it is not
+confined to this market — every non-QB market shows MC ~30–40% low with ML near correct:
+`rec_yards` mc 0.715 / ml 1.012, `receptions` mc 0.699 / ml 1.018, `rush_yards` mc 0.589 /
+ml 0.944 (its promoted blend still only reaches 0.746).
+
+**This is the next study.** Relaxing the constraint changes **all five existing rows**, so it needs
+its own preregistration with **`pass_yards` as the positive control**. Do not change the method
+without one.
 
 ### WHAT V23 DID NOT ESTABLISH — THE HALF THAT IS MISSING
 
@@ -135,16 +173,21 @@ Everything on V22's failed list, plus:
 
 ### IMMEDIATE NEXT ACTIONS, IN ORDER
 
-1. **Fit and promote a `rush_rec_yards` ensemble row** following the existing
-   `ENSEMBLE_WEIGHT_2023_HOLDOUT_FIT` lineage pattern (nonnegative OOS linear blend, fit one
-   season, blind holdout the next). Preregister first. This is a **real production fix with a
-   measured cost** and it is the highest-value open item.
-2. **W9 is unplayed** — `data/market_track_record/w9_prospective_frozen_v1.csv` (478 players) is
-   frozen and carries **projections only, no lines**. The D1 injury overlay is still pending on it
-   (`load_injuries` max week was 8 at capture). Grade per the frozen rule in
-   `PRISM_W9_PROSPECTIVE_CAPTURE_V1.md` after Monday night.
-3. **Rebuild `receptions`** on absolute integer thresholds so it can go back on the card.
-4. **Resolve D1's root cause** — needs runtime instrumentation of a live run; the archived trace
+1. **Preregister and run the ensemble-method study** — whether `_normalise_nonnegative`'s
+   sum-to-one constraint should be relaxed, across all five existing rows, `pass_yards` as the
+   positive control. This is the best-evidenced open lead (§ above). **~18pp of level on four
+   markets is at stake.**
+2. **The branch test suite is RED and it blocks PR #697**, independent of any of this work:
+   4 pre-existing failures, proven pre-existing by stashing the weights row. Two are a sklearn
+   `HistGradientBoosting` binner crash on a 3-row fixture (`sliding_window_view` with <2 distinct
+   values) and **not** the §3 breach their name implies; one asserts a stale `FETCH_LIVE_ODDS`
+   literal whose credit-safety behaviour still holds (a plain push still defaults to `'false'` and
+   now needs an explicit commit marker to spend credits); one is a NaN role label in slate data.
+3. **W9 is unplayed** — `data/market_track_record/w9_prospective_frozen_v1.csv` (478 players) is
+   frozen and carries **projections only, no lines**. The D1 injury overlay is still pending on it.
+   Grade per the frozen rule in `PRISM_W9_PROSPECTIVE_CAPTURE_V1.md` after Monday night.
+4. **Rebuild `receptions`** on absolute integer thresholds so it can go back on the decision card.
+5. **Resolve D1's root cause** — needs runtime instrumentation of a live run; the archived trace
    copy is lossy and the builder does emit all 11 columns with `status` populated. Cause is OPEN.
 
 ### PROMOTED AT V22
