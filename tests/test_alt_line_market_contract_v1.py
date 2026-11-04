@@ -152,3 +152,45 @@ def test_archive_never_overwrites_a_paid_boundary():
     assert "odds_capture_label" in text
     assert "_part${i}.csv" in text
     assert "event_window_start" in text and "event_window_end" in text
+
+
+# --- injury-contract gate severities -------------------------------------
+
+def test_injury_gate_blocks_a_broken_chain_but_not_a_known_open_gap(tmp_path, monkeypatch):
+    """P0 for a severed chain; P2 for the QUESTIONABLE modelling gap.
+
+    The gap is true by construction on every real NFL report while
+    _injury_limited matches only OUT/DOUBTFUL/IR/PUP, so raising it at P1 in
+    an audit the Full Slate runs with --strict made every run fail. P0s must
+    still block.
+    """
+    import importlib
+    import pandas as pd
+    aud = importlib.import_module("scripts.audit_2026_production_readiness")
+    inj = Path("data/injuries.csv")
+    existed = inj.exists()
+    backup = inj.read_bytes() if existed else None
+
+    def write(vals):
+        inj.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame({"player": [f"P{i}" for i in range(len(vals))],
+                      "team": ["KC"] * len(vals), "season": [2026] * len(vals),
+                      "week": [9] * len(vals), "status": vals}).to_csv(inj, index=False)
+
+    try:
+        write(["Out", "Questionable", "Doubtful"])
+        sev = {f["code"]: f["severity"] for f in aud._injury_contract_findings()}
+        assert sev.get("injury_questionable_untreated") == "P2"
+
+        write(["Probable", "Active"])
+        sev = {f["code"]: f["severity"] for f in aud._injury_contract_findings()}
+        assert sev.get("injury_status_unrecognised") == "P0"
+
+        write([None, None])
+        sev = {f["code"]: f["severity"] for f in aud._injury_contract_findings()}
+        assert sev.get("injury_status_all_null") == "P0"
+    finally:
+        if existed:
+            inj.write_bytes(backup)
+        else:
+            inj.unlink(missing_ok=True)

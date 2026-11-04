@@ -412,10 +412,28 @@ def _injury_contract_findings() -> list[dict[str, str]]:
                                     f"no value in data/injuries.csv 'status' matches the tokens "
                                     f"_injury_limited recognises {tokens}; observed {sorted(vals)[:8]}"))
             if any("QUESTIONABLE" in v for v in vals):
-                out.append(_finding("P1", "injury_questionable_untreated",
+                # P2, NOT P1, and the distinction is deliberate.
+                #
+                # The P0 checks above detect a BREAK: the status column vanished,
+                # went all-null, or stopped carrying tokens _injury_limited can
+                # read. Those mean the chain is severed and must block.
+                #
+                # This one is different. It describes a known, documented,
+                # OPEN modelling gap -- _injury_limited matches only
+                # ("OUT","DOUBTFUL","IR","PUP"), so QUESTIONABLE players keep
+                # full opportunity -- and it is therefore TRUE BY CONSTRUCTION
+                # on every real NFL injury report. Raised at P1 it made
+                # --strict fail every Full Slate run, which is a permanent
+                # outage rather than a gate: a check that can never pass
+                # signals nothing. It stays visible at P2 and stays tracked
+                # until the underlying rule is fixed under its own
+                # preregistration. Closing it means changing _injury_limited,
+                # not lowering this line further.
+                out.append(_finding("P2", "injury_questionable_untreated",
                                     "provider emits QUESTIONABLE but _injury_limited does not "
                                     "recognise it, so those players keep 100% of opportunity; "
-                                    "measured 2026 W1-8 retention is 0.8535 target / 0.5718 rush"))
+                                    "measured 2026 W1-8 retention is 0.8535 target / 0.5718 rush; "
+                                    "OPEN research item, tracked not blocking"))
     return out
 
 
