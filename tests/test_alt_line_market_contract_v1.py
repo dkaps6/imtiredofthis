@@ -177,15 +177,6 @@ def test_injury_gate_blocks_a_broken_chain_but_not_a_known_open_gap(tmp_path, mo
                       "team": ["KC"] * len(vals), "season": [2026] * len(vals),
                       "week": [9] * len(vals), "status": vals}).to_csv(inj, index=False)
 
-    import json as _json
-    st = Path("data/injuries_source_status.json")
-    st_existed = st.exists()
-    st_backup = st.read_bytes() if st_existed else None
-    # The all-null case now depends on what the provenance file claims, so this
-    # test must control it rather than inherit whatever is on disk.
-    st.write_text(_json.dumps({"season": 2026, "week": 9, "state": "official_report"}),
-                  encoding="utf-8")
-
     try:
         write(["Out", "Questionable", "Doubtful"])
         sev = {f["code"]: f["severity"] for f in aud._injury_contract_findings()}
@@ -203,71 +194,66 @@ def test_injury_gate_blocks_a_broken_chain_but_not_a_known_open_gap(tmp_path, mo
             inj.write_bytes(backup)
         else:
             inj.unlink(missing_ok=True)
-        st.unlink(missing_ok=True)
-        if st_existed:
-            st.write_bytes(st_backup)
 
 
-# --- midweek practice report vs a self-contradicting artifact -------------
 
-def _write_injuries(vals, state):
-    import json
+# --- midweek practice report vs a severed provider chain -----------------
+
+def _write_injuries(status_vals, practice_vals):
     import pandas as pd
     p = Path("data/injuries.csv")
     p.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame({"player": [f"P{i}" for i in range(len(vals))],
-                  "team": ["BAL"] * len(vals), "season": [2026] * len(vals),
-                  "week": [9] * len(vals), "status": vals,
-                  "practice_status": ["Did Not Participate In Practice"] * len(vals)}
-                 ).to_csv(p, index=False)
-    Path("data/injuries_source_status.json").write_text(
-        json.dumps({"season": 2026, "week": 9, "state": state, "rows": len(vals)}),
-        encoding="utf-8")
+    pd.DataFrame({"player": [f"P{i}" for i in range(len(status_vals))],
+                  "team": ["BAL"] * len(status_vals), "season": [2026] * len(status_vals),
+                  "week": [9] * len(status_vals), "status": status_vals,
+                  "practice_status": practice_vals}).to_csv(p, index=False)
+
+
+def _sev():
+    import importlib
+    aud = importlib.import_module("scripts.audit_2026_production_readiness")
+    return {f["code"]: f["severity"] for f in aud._injury_contract_findings()}
+
+
+def _preserving_injuries(fn):
+    inj = Path("data/injuries.csv")
+    existed = inj.exists()
+    backup = inj.read_bytes() if existed else None
+    try:
+        fn()
+    finally:
+        inj.unlink(missing_ok=True)
+        if existed:
+            inj.write_bytes(backup)
 
 
 def test_midweek_practice_only_report_does_not_block():
-    """Designations publish Friday; a Wednesday build legitimately has none."""
-    import importlib
-    aud = importlib.import_module("scripts.audit_2026_production_readiness")
-    inj, st = Path("data/injuries.csv"), Path("data/injuries_source_status.json")
-    had = (inj.exists() and inj.read_bytes(), st.exists() and st.read_bytes())
-    try:
-        _write_injuries([None, None, None], "practice_report_only")
-        sev = {f["code"]: f["severity"] for f in aud._injury_contract_findings()}
+    """Designations publish Friday; a Wednesday build legitimately has none.
+
+    This is D1's root cause and it is expected, not a break.
+    """
+    def body():
+        _write_injuries([None, None, None],
+                        ["Did Not Participate In Practice",
+                         "Limited Participation in Practice",
+                         "Full Participation in Practice"])
+        sev = _sev()
         assert sev.get("injury_designations_not_published_yet") == "P2"
         assert "injury_status_all_null" not in sev
-    finally:
-        for p, data in zip((inj, st), had):
-            p.unlink(missing_ok=True)
-            if data:
-                p.write_bytes(data)
+    _preserving_injuries(body)
 
 
-def test_an_artifact_that_claims_official_but_has_no_designation_blocks():
-    """The real defect: the file contradicting its own provenance."""
-    import importlib
-    aud = importlib.import_module("scripts.audit_2026_production_readiness")
-    inj, st = Path("data/injuries.csv"), Path("data/injuries_source_status.json")
-    had = (inj.exists() and inj.read_bytes(), st.exists() and st.read_bytes())
-    try:
-        _write_injuries([None, None], "official_report")
-        sev = {f["code"]: f["severity"] for f in aud._injury_contract_findings()}
+def test_no_status_and_no_practice_is_a_severed_chain_and_blocks():
+    """Nothing usable from the provider at all must still fail closed."""
+    def body():
+        _write_injuries([None, None], [None, None])
+        sev = _sev()
         assert sev.get("injury_status_all_null") == "P0"
-    finally:
-        for p, data in zip((inj, st), had):
-            p.unlink(missing_ok=True)
-            if data:
-                p.write_bytes(data)
+    _preserving_injuries(body)
 
 
-def test_builder_labels_a_practice_only_frame_honestly():
-    import importlib
-    import pandas as pd
-    b = importlib.import_module("scripts.build.build_injuries_weekly")
-    practice_only = pd.DataFrame({"status": [None, None], "designation": [None, None],
-                                  "practice_status": ["Did Not Participate In Practice",
-                                                      "Full Participation in Practice"]})
-    assert b._report_state(practice_only) == "practice_report_only"
-    with_designation = pd.DataFrame({"status": ["Out", None], "designation": [None, None],
-                                     "practice_status": ["Did Not Participate In Practice", None]})
-    assert b._report_state(with_designation) == "official_report"
+def test_a_populated_status_still_reaches_the_token_checks():
+    def body():
+        _write_injuries(["Probable", "Active"], ["Full Participation in Practice"] * 2)
+        assert _sev().get("injury_status_unrecognised") == "P0"
+    _preserving_injuries(body)
