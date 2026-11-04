@@ -1,0 +1,77 @@
+{
+  "gates": {
+    "M1": {
+      "pass": true,
+      "msg": "target=actual, features=['mc_proj', 'ml_proj', 'state_proj']; 19 forbidden sportsbook columns absent"
+    },
+    "M2": {
+      "pass": true,
+      "msg": "fit seasons [2024], blind [2025]"
+    },
+    "K6": {
+      "pass": true,
+      "msg": "1925 fit rows vs MIN_CALIBRATION_ROWS=40"
+    },
+    "S1": {
+      "pass": true,
+      "msg": "delta=-2.2422 [-3.5550,-0.9037] over 112 players"
+    },
+    "S2": {
+      "pass": true,
+      "msg": "|level-1| 0.3789 -> 0.2227 (ratio 0.6211 -> 0.7773; A2 ml-only 0.9392)"
+    },
+    "S3": {
+      "pass": true,
+      "msg": "worst quartile degradation +3.7% at Q0 vs a +5% bar"
+    },
+    "M3": {
+      "pass": true,
+      "msg": "rush_rec_yards goes uncalibrated_mc_only -> calibrated with no code change"
+    },
+    "M4": {
+      "pass": true,
+      "msg": "400 rows of the other 4 markets bit-identical; 6 pre-existing weight lines byte-for-byte unchanged"
+    }
+  },
+  "weights": {
+    "mc": 0.42111964086821035,
+    "ml": 0.36337674883320836,
+    "state": 0.21550361029858123
+  },
+  "calibration_rows": 1925,
+  "calibration_mae": 28.81396186698042,
+  "calibration_rmse": 38.384702886429565,
+  "blind": {
+    "A0_mc_only": {
+      "per_player_mae": 28.503594644326288,
+      "pooled_mae": 36.44640363587002,
+      "level": 0.6211003223809902
+    },
+    "A1_blend": {
+      "per_player_mae": 26.261352134329645,
+      "pooled_mae": 31.789973446432462,
+      "level": 0.7772867862681163
+    },
+    "A2_ml_only_REF": {
+      "per_player_mae": 26.73647366857099,
+      "pooled_mae": 30.90072542731709,
+      "level": 0.939195660826083
+    },
+    "A3_unnormalised_REF": {
+      "per_player_mae": 26.995635569918743,
+      "pooled_mae": 30.501562576763284,
+      "level": 0.9572387474893623
+    }
+  },
+  "n": {
+    "fit": 1925,
+    "blind": 648,
+    "blind_players": 112
+  },
+  "a3_raw_coefs": [
+    0.5186142935778749,
+    0.4475031739441845,
+    0.26539548805669866
+  ],
+  "all_gates_pass": true
+}
