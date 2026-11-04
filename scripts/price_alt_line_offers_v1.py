@@ -35,7 +35,8 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUTS = ROOT / "outputs"
 DATA = ROOT / "data"
-TABLE = DATA / "research" / "alt_line_market_anchored_table_v1.csv"
+TABLE = DATA / "research" / "alt_line_clearance_v2.csv"
+RECP = DATA / "research" / "alt_line_receptions_absolute_v2.csv"
 BOUNDS = DATA / "research" / "alt_line_quartile_boundaries_v1.csv"
 
 # Provider key -> canonical market. Both the alternate ladder keys and the
@@ -54,11 +55,12 @@ MAIN_TO_CANON = {
     "player_receptions": "receptions",
     "player_rush_reception_yds": "rush_rec_yards",
 }
-# receptions is an INTEGER market: a fraction of a 1.5 line collapses onto the
-# same threshold, so the table's rows for it are degenerate and it is excluded
-# from the decision card. Keep it out of the ranking until it is rebuilt on
-# absolute thresholds.
-EXCLUDED = {"receptions"}
+# receptions is an INTEGER market, so it is priced from an ABSOLUTE-threshold
+# table rather than a fraction of the line: 0.4x, 0.5x, 0.6x and 0.7x of a 2.5
+# line all mean ">= 2". pass_yards is priced from a POOLED row (line_quartile
+# -1) because stratification was measured not to help it.
+INTEGER_MARKETS = {"receptions"}
+POOLED_MARKETS = {"pass_yards"}
 
 
 def _profit_per_dollar(american: float) -> float:
@@ -80,16 +82,17 @@ def _quartile(line: float, q: tuple[float, float, float]) -> int:
     return int(np.digitize([line], list(q))[0])
 
 
-def load_table() -> tuple[pd.DataFrame, dict[str, tuple[float, float, float]]]:
+def load_table():
     t = pd.read_csv(TABLE)
+    r = pd.read_csv(RECP) if RECP.exists() else pd.DataFrame()
     b = pd.read_csv(BOUNDS)
-    bounds = {str(r["market"]): (float(r["q25"]), float(r["q50"]), float(r["q75"]))
-              for _, r in b.iterrows()}
-    return t, bounds
+    bounds = {str(x["market"]): (float(x["q25"]), float(x["q50"]), float(x["q75"]))
+              for _, x in b.iterrows()}
+    return t, r, bounds
 
 
 def clearance(table: pd.DataFrame, market: str, qt: int, frac: float) -> tuple[float, float]:
-    """Interpolated clearance and its conservative lower bound at frac-of-line.
+    """Interpolated clearance and its drift-aware conservative bound.
 
     Returns (nan, nan) outside the table's supported fraction range rather than
     extrapolating: an alt ladder routinely quotes thresholds far beyond what two
@@ -103,11 +106,27 @@ def clearance(table: pd.DataFrame, market: str, qt: int, frac: float) -> tuple[f
     if frac < xs.min() or frac > xs.max():
         return (np.nan, np.nan)
     return (float(np.interp(frac, xs, cell["cleared"].to_numpy(float))),
-            float(np.interp(frac, xs, cell["cleared_ci_lo"].to_numpy(float))))
+            float(np.interp(frac, xs, cell["cleared_conservative"].to_numpy(float))))
+
+
+def clearance_integer(recp: pd.DataFrame, main_line: float, alt_line: float):
+    """P(actual >= k) for an integer market, where k follows from the alt line.
+
+    A book quoting "over 3.5 receptions" means ">= 4", so k = floor(T) + 1.
+    """
+    if recp.empty:
+        return (np.nan, np.nan)
+    k = int(np.floor(float(alt_line))) + 1
+    cell = recp[(np.isclose(recp["main_line"], float(main_line))) &
+                (recp["threshold_at_least"] == k)]
+    if cell.empty:
+        return (np.nan, np.nan)
+    r = cell.iloc[0]
+    return (float(r["cleared"]), float(r["cleared_conservative"]))
 
 
 def build(alt: pd.DataFrame, main: pd.DataFrame) -> pd.DataFrame:
-    table, bounds = load_table()
+    table, recp, bounds = load_table()
 
     alt = alt.copy()
     alt["canon"] = alt["market"].map(ALT_TO_CANON)
@@ -134,13 +153,16 @@ def build(alt: pd.DataFrame, main: pd.DataFrame) -> pd.DataFrame:
         frac = clr = lo = np.nan
         if not np.isfinite(ml) or ml <= 0:
             reason = "no_main_line_anchor"
-        elif canon in EXCLUDED:
-            reason = "market_excluded_integer_parameterisation"
-        elif canon not in bounds:
+        elif canon in INTEGER_MARKETS:
+            frac = float(r["line"]) / float(ml)
+            clr, lo = clearance_integer(recp, ml, float(r["line"]))
+            if not np.isfinite(clr):
+                reason = "integer_cell_outside_table_support"
+        elif canon not in bounds and canon not in POOLED_MARKETS:
             reason = "no_quartile_boundaries"
         else:
             frac = float(r["line"]) / float(ml)
-            qt = _quartile(float(ml), bounds[canon])
+            qt = -1 if canon in POOLED_MARKETS else _quartile(float(ml), bounds[canon])
             clr, lo = clearance(table, canon, qt, frac)
             if not np.isfinite(clr):
                 reason = "fraction_outside_table_support"
@@ -154,7 +176,7 @@ def build(alt: pd.DataFrame, main: pd.DataFrame) -> pd.DataFrame:
             "alt_threshold": float(r["line"]), "main_line": ml,
             "frac_of_line": frac,
             "offered_american": float(r["price_american"]),
-            "clearance": clr, "clearance_ci_lo": lo,
+            "clearance": clr, "clearance_conservative": lo,
             "p_side": p, "p_side_conservative": p_cons,
             "ev_per_dollar": _ev(p, float(r["price_american"])),
             "ev_conservative": _ev(p_cons, float(r["price_american"])),

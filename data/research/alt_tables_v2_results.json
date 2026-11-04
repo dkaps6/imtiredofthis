@@ -1,0 +1,12 @@
+{
+  "fraction_rows": 130,
+  "receptions_rows": 48,
+  "receptions_line_cap": 4.5,
+  "receptions_restriction_is_post_hoc": true,
+  "max_abs_drift_by_market": {
+    "rec_yards": 0.0503,
+    "rush_yards": 0.0913,
+    "rush_rec_yards": 0.127,
+    "pass_yards": 0.0255
+  }
+}

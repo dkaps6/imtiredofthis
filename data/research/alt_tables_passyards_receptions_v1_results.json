@@ -1,0 +1,14 @@
+{
+  "pass_yards": {
+    "rows": 812,
+    "players": 43,
+    "support_ok": true
+  },
+  "receptions": {
+    "calibration_max_gap": 0.052457987424147645,
+    "calibration_ok": false,
+    "monotonic": true,
+    "monotonicity_violations": [],
+    "calibration_cells": 60
+  }
+}

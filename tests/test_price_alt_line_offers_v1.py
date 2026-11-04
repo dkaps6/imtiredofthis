@@ -73,14 +73,53 @@ def test_a_threshold_outside_the_table_support_refuses_to_price():
     assert not np.isfinite(out.iloc[0]["ev_per_dollar"])
 
 
-def test_receptions_is_excluded_until_reparameterised():
+def test_receptions_prices_from_absolute_thresholds():
+    """"over 3.5 receptions" means ">= 4"; a 4.5 main line is in the table."""
+    alt = _alt([{"event_id": "e1", "player": "X", "book": "fd",
+                 "market": "player_receptions_alternate", "side": "OVER",
+                 "line": 3.5, "price_american": -150}])
+    main = _main([{"event_id": "e1", "player": "X", "book": "fd",
+                   "market": "player_receptions", "line": 4.5}])
+    r = mod.build(alt, main).iloc[0]
+    assert r["unpriceable_reason"] == ""
+    # table: main_line 4.5, >=4 clears 0.609
+    assert r["clearance"] == pytest.approx(0.609, abs=0.01)
+
+
+def test_receptions_above_the_post_hoc_line_cap_refuses():
+    """Main line 5.5 is outside the restricted table and must not be invented."""
     alt = _alt([{"event_id": "e1", "player": "X", "book": "fd",
                  "market": "player_receptions_alternate", "side": "OVER",
                  "line": 3.5, "price_american": -150}])
     main = _main([{"event_id": "e1", "player": "X", "book": "fd",
                    "market": "player_receptions", "line": 5.5}])
-    out = mod.build(alt, main)
-    assert out.iloc[0]["unpriceable_reason"] == "market_excluded_integer_parameterisation"
+    assert mod.build(alt, main).iloc[0]["unpriceable_reason"] == "integer_cell_outside_table_support"
+
+
+def test_pass_yards_prices_from_the_pooled_row():
+    """Stratification was measured not to help pass_yards; it uses quartile -1."""
+    alt = _alt([{"event_id": "e1", "player": "QB", "book": "fd",
+                 "market": "player_pass_yds_alternate", "side": "OVER",
+                 "line": 125.0, "price_american": -1500}])
+    main = _main([{"event_id": "e1", "player": "QB", "book": "fd",
+                   "market": "player_pass_yds", "line": 250.0}])
+    r = mod.build(alt, main).iloc[0]
+    assert r["unpriceable_reason"] == ""
+    assert r["frac_of_line"] == pytest.approx(0.5)
+    assert r["clearance"] > 0.9
+
+
+def test_the_conservative_bound_includes_season_drift():
+    """v1 used sampling error alone; rush_rec_yards moves 0.0632 between seasons."""
+    import pandas as pd
+    t = pd.read_csv(mod.TABLE)
+    assert "season_drift" in t.columns
+    assert "cleared_conservative" in t.columns
+    hit = t[(t.market == "rush_rec_yards") & (t.line_quartile == 0) & (t.frac_of_LINE == 0.4)]
+    assert not hit.empty
+    r = hit.iloc[0]
+    # the bound must sit below the point estimate by at least the drift
+    assert r["cleared"] - r["cleared_conservative"] >= abs(r["season_drift"]) - 1e-9
 
 
 def test_a_missing_main_line_anchor_refuses_to_price():
