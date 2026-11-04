@@ -27,6 +27,18 @@ on:
         required: false
         type: boolean
         default: false
+      event_window_start:
+        description: "Scope the PAID odds pull to events starting at/after this UTC instant (e.g. 2026-11-06T00:00:00Z). Blank = all provider events."
+        required: false
+        default: ""
+      event_window_end:
+        description: "Scope the PAID odds pull to events starting at/before this UTC instant. Blank = all provider events."
+        required: false
+        default: ""
+      odds_capture_label:
+        description: "Suffix for the archived paid boundary, so a two-part capture of one week does not overwrite itself (e.g. thu, sun)"
+        required: false
+        default: ""
       reuse_paid_odds_run_id:
         description: "Existing Full Slate run ID whose paid sportsbook artifact should be reused (NO OddsAPI fetch)"
         required: false
@@ -66,6 +78,9 @@ env:
   # never turn it on, whatever the commit message says: alt ladders are a
   # separate paid boundary and must be an explicit human choice.
   FETCH_ALT_LINES: ${{ github.event.inputs.fetch_alt_lines || 'false' }}
+  EVENT_WINDOW_START: ${{ github.event.inputs.event_window_start || '' }}
+  EVENT_WINDOW_END: ${{ github.event.inputs.event_window_end || '' }}
+  ODDS_CAPTURE_LABEL: ${{ github.event.inputs.odds_capture_label || '' }}
   REUSE_PAID_ODDS_RUN_ID: ${{ github.event.inputs.reuse_paid_odds_run_id || (github.event_name == 'push' && contains(github.event.head_commit.message, '[REPLAY_WEEK6_38791377571]') && '38791377571') || '' }}
   REUSE_PAID_ODDS_ARTIFACT_ID: ${{ github.event.inputs.reuse_paid_odds_artifact_id || (github.event_name == 'push' && contains(github.event.head_commit.message, '[REPLAY_WEEK6_38791377571]') && '11999923880') || '' }}
   REUSE_PAID_ODDS_ARTIFACT_DIGEST: ${{ github.event.inputs.reuse_paid_odds_artifact_digest || (github.event_name == 'push' && contains(github.event.head_commit.message, '[REPLAY_WEEK6_38791377571]') && 'sha256:0916cd1cbec93f9a2529190b3df7c39172eee011a31eb9df429a35cdb9b41f61') || '' }}
@@ -412,6 +427,8 @@ jobs:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
           ROLES_CSV: data/roles_current_production_eligible_v1.csv
           FETCH_ALT_LINES: ${{ env.FETCH_ALT_LINES }}
+          EVENT_WINDOW_START: ${{ env.EVENT_WINDOW_START }}
+          EVENT_WINDOW_END: ${{ env.EVENT_WINDOW_END }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_live_odds_gate.py --season "${SEASON}" --date "${SLATE_DATE}"
@@ -440,7 +457,23 @@ jobs:
           fi
           WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
           mkdir -p data/market_track_record/alt_props
-          DEST="data/market_track_record/alt_props/${SEASON}_wk$(printf '%02d' "${WEEK_RESOLVED}").csv"
+          BASE_NAME="${SEASON}_wk$(printf '%02d' "${WEEK_RESOLVED}")"
+          if [ -n "${ODDS_CAPTURE_LABEL}" ]; then
+            BASE_NAME="${BASE_NAME}_${ODDS_CAPTURE_LABEL}"
+          fi
+          DEST="data/market_track_record/alt_props/${BASE_NAME}.csv"
+          # Never overwrite a paid boundary. A week can legitimately be
+          # captured in parts (a Thursday game locks before the Sunday lines
+          # are worth taking), and clobbering one part destroys an
+          # unrepeatable purchase.
+          if [ -e "${DEST}" ]; then
+            i=2
+            while [ -e "data/market_track_record/alt_props/${BASE_NAME}_part${i}.csv" ]; do
+              i=$((i+1))
+            done
+            DEST="data/market_track_record/alt_props/${BASE_NAME}_part${i}.csv"
+            echo "::warning::A capture already existed for ${BASE_NAME}; writing ${DEST} instead of overwriting a paid boundary."
+          fi
           cp outputs/props_alt_raw.csv "${DEST}"
           python - <<'EOF'
           import os, pandas as pd

@@ -95,3 +95,60 @@ def test_alt_boundary_is_archived_to_a_durable_path():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "data/market_track_record/alt_props" in text
     assert "fetch_alt_lines" in text
+
+
+# --- event scoping before paid calls -------------------------------------
+
+def test_event_scoping_defaults_to_keeping_everything(monkeypatch):
+    """No window set must behave exactly as before this feature existed."""
+    monkeypatch.setattr(fetch, "ONLY_EVENT_IDS", [])
+    monkeypatch.setattr(fetch, "EVENT_WINDOW_START", "")
+    monkeypatch.setattr(fetch, "EVENT_WINDOW_END", "")
+    evs = [{"id": "a", "commence_time": "2026-11-06T01:15:00Z"},
+           {"id": "b", "commence_time": "2026-11-08T18:00:00Z"}]
+    assert fetch._scope_events_before_paid_calls(evs) == evs
+
+
+def test_event_window_scopes_to_one_game(monkeypatch):
+    monkeypatch.setattr(fetch, "ONLY_EVENT_IDS", [])
+    monkeypatch.setattr(fetch, "EVENT_WINDOW_START", "2026-11-06T00:00:00Z")
+    monkeypatch.setattr(fetch, "EVENT_WINDOW_END", "2026-11-06T12:00:00Z")
+    evs = [{"id": "thu", "commence_time": "2026-11-06T01:15:00Z"},
+           {"id": "sun1", "commence_time": "2026-11-08T18:00:00Z"},
+           {"id": "sun2", "commence_time": "2026-11-08T21:05:00Z"}]
+    kept = fetch._scope_events_before_paid_calls(evs)
+    assert [e["id"] for e in kept] == ["thu"]
+
+
+def test_only_event_ids_overrides_the_window(monkeypatch):
+    monkeypatch.setattr(fetch, "ONLY_EVENT_IDS", ["sun2"])
+    monkeypatch.setattr(fetch, "EVENT_WINDOW_START", "2026-11-06T00:00:00Z")
+    monkeypatch.setattr(fetch, "EVENT_WINDOW_END", "2026-11-06T12:00:00Z")
+    evs = [{"id": "thu", "commence_time": "2026-11-06T01:15:00Z"},
+           {"id": "sun2", "commence_time": "2026-11-08T21:05:00Z"}]
+    assert [e["id"] for e in fetch._scope_events_before_paid_calls(evs)] == ["sun2"]
+
+
+def test_a_window_that_drops_everything_fails_visibly_not_silently(monkeypatch):
+    """An empty scope must not quietly produce a zero-row paid run."""
+    monkeypatch.setattr(fetch, "ONLY_EVENT_IDS", [])
+    monkeypatch.setattr(fetch, "EVENT_WINDOW_START", "2030-01-01T00:00:00Z")
+    monkeypatch.setattr(fetch, "EVENT_WINDOW_END", "2030-01-02T00:00:00Z")
+    evs = [{"id": "thu", "commence_time": "2026-11-06T01:15:00Z"}]
+    assert fetch._scope_events_before_paid_calls(evs) == evs
+
+
+def test_an_undateable_event_is_never_dropped(monkeypatch):
+    monkeypatch.setattr(fetch, "ONLY_EVENT_IDS", [])
+    monkeypatch.setattr(fetch, "EVENT_WINDOW_START", "2026-11-06T00:00:00Z")
+    monkeypatch.setattr(fetch, "EVENT_WINDOW_END", "2026-11-06T12:00:00Z")
+    evs = [{"id": "nodate", "commence_time": None},
+           {"id": "sun", "commence_time": "2026-11-08T18:00:00Z"}]
+    assert [e["id"] for e in fetch._scope_events_before_paid_calls(evs)] == ["nodate"]
+
+
+def test_archive_never_overwrites_a_paid_boundary():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "odds_capture_label" in text
+    assert "_part${i}.csv" in text
+    assert "event_window_start" in text and "event_window_end" in text

@@ -104,6 +104,23 @@ ALT_LINE_MARKETS = [
     "player_rush_reception_yds_alternate",
 ]
 FETCH_ALT_LINES = os.getenv("FETCH_ALT_LINES", "0").strip().lower() in ("1", "true", "yes")
+
+# Event scoping applied BEFORE any paid per-market call.
+#
+# /v4/sports/{sport}/odds returns every upcoming event the provider lists,
+# with no date filter, and the per-market loop is one paid call per
+# (market, event). Slate scoping used to happen only on the OUTPUT
+# (_allowed_event_ids in run_live_odds_gate), which means a run paid for every
+# event the provider happened to be listing, including games outside the
+# target week. Filtering here converts that waste into a saving, and it is
+# what makes a two-part capture of one week affordable: a Thursday-only pull
+# costs one event's worth of markets rather than the whole slate's.
+#
+# EVENT_WINDOW_START / EVENT_WINDOW_END are ISO-8601 instants (UTC) compared
+# against each event's commence_time. ONLY_EVENT_IDS overrides both.
+EVENT_WINDOW_START = os.getenv("EVENT_WINDOW_START", "").strip()
+EVENT_WINDOW_END = os.getenv("EVENT_WINDOW_END", "").strip()
+ONLY_EVENT_IDS = [e.strip() for e in os.getenv("ONLY_EVENT_IDS", "").split(",") if e.strip()]
 ALT_RAW_PATH = OUTPUT_DIR / "props_alt_raw.csv"
 
 # ------------------------- CONFIG -------------------------
@@ -1668,6 +1685,66 @@ ALT_KEYS = {
     "player_anytime_td":    ["anytime_td"],
 }
 
+def _scope_events_before_paid_calls(events: list) -> list:
+    """Drop events outside the target window BEFORE spending per-market credit.
+
+    Returns the kept events and logs exactly how many paid calls this avoided,
+    so the saving is visible in the run log rather than implicit.
+    """
+    if not events:
+        return events
+    total = len(events)
+
+    if ONLY_EVENT_IDS:
+        wanted = set(ONLY_EVENT_IDS)
+        kept = [ev for ev in events if str(ev.get("id")) in wanted]
+        log.info(f"[scope] ONLY_EVENT_IDS set: keeping {len(kept)}/{total} events")
+        if not kept:
+            log.info("[scope] WARNING: ONLY_EVENT_IDS matched no event; keeping all to fail visibly")
+            return events
+        return kept
+
+    if not EVENT_WINDOW_START and not EVENT_WINDOW_END:
+        log.info(f"[scope] no event window set; all {total} provider events are in scope")
+        return events
+
+    def _dt(v: str):
+        try:
+            return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    lo = _dt(EVENT_WINDOW_START) if EVENT_WINDOW_START else None
+    hi = _dt(EVENT_WINDOW_END) if EVENT_WINDOW_END else None
+    if (EVENT_WINDOW_START and lo is None) or (EVENT_WINDOW_END and hi is None):
+        log.info(f"[scope] WARNING: unparseable window start={EVENT_WINDOW_START!r} "
+                 f"end={EVENT_WINDOW_END!r}; keeping all {total} events")
+        return events
+
+    kept = []
+    for ev in events:
+        ct = _dt(ev.get("commence_time"))
+        if ct is None:
+            kept.append(ev)  # never drop an event we cannot date
+            continue
+        if lo is not None and ct < lo:
+            continue
+        if hi is not None and ct > hi:
+            continue
+        kept.append(ev)
+
+    dropped = total - len(kept)
+    if not kept:
+        log.info(f"[scope] WARNING: window dropped every one of {total} events; "
+                 f"keeping all so the run fails visibly rather than silently empty")
+        return events
+    n_mk = len(MARKETS) + (len(ALT_LINE_MARKETS) if FETCH_ALT_LINES else 0)
+    log.info(f"[scope] window [{EVENT_WINDOW_START or '-'} .. {EVENT_WINDOW_END or '-'}] "
+             f"keeps {len(kept)}/{total} events, dropped {dropped}, "
+             f"avoiding ~{dropped * n_mk} paid per-market calls")
+    return kept
+
+
 def _fetch_alt_lines(
     api_key: str,
     region: str,
@@ -2004,6 +2081,7 @@ def fetch_odds(
     # events for event-odds
     events = _fetch_events_by_h2h(api_key, region, books_set)
     log.info(f"events pulled={len(events)}")
+    events = _scope_events_before_paid_calls(events)
     if not date:
         inferred_date = _derive_slate_date(events)
         if inferred_date:
