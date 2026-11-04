@@ -22,6 +22,23 @@ on:
         required: false
         type: boolean
         default: false
+      fetch_alt_lines:
+        description: "Also capture ALTERNATE-line ladders (USES ~5 MORE MARKETS x EVERY EVENT OF CREDIT; requires fetch_live_odds)"
+        required: false
+        type: boolean
+        default: false
+      event_window_start:
+        description: "Scope the PAID odds pull to events starting at/after this UTC instant (e.g. 2026-11-06T00:00:00Z). Blank = all provider events."
+        required: false
+        default: ""
+      event_window_end:
+        description: "Scope the PAID odds pull to events starting at/before this UTC instant. Blank = all provider events."
+        required: false
+        default: ""
+      odds_capture_label:
+        description: "Suffix for the archived paid boundary, so a two-part capture of one week does not overwrite itself (e.g. thu, sun)"
+        required: false
+        default: ""
       reuse_paid_odds_run_id:
         description: "Existing Full Slate run ID whose paid sportsbook artifact should be reused (NO OddsAPI fetch)"
         required: false
@@ -57,6 +74,13 @@ env:
   PRIOR_SEASON: ${{ github.event.inputs.prior_season || '2025' }}
   SLATE_DATE: ${{ github.event.inputs.date || '' }}
   FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds || (github.event_name == 'push' && contains(github.event.head_commit.message, '[LIVE_ODDS_AUTHORIZED]') && 'true') || 'false' }}
+  # Alternate-line capture is opt-in on workflow_dispatch ONLY. A push can
+  # never turn it on, whatever the commit message says: alt ladders are a
+  # separate paid boundary and must be an explicit human choice.
+  FETCH_ALT_LINES: ${{ github.event.inputs.fetch_alt_lines || 'false' }}
+  EVENT_WINDOW_START: ${{ github.event.inputs.event_window_start || '' }}
+  EVENT_WINDOW_END: ${{ github.event.inputs.event_window_end || '' }}
+  ODDS_CAPTURE_LABEL: ${{ github.event.inputs.odds_capture_label || '' }}
   REUSE_PAID_ODDS_RUN_ID: ${{ github.event.inputs.reuse_paid_odds_run_id || (github.event_name == 'push' && contains(github.event.head_commit.message, '[REPLAY_WEEK6_38791377571]') && '38791377571') || '' }}
   REUSE_PAID_ODDS_ARTIFACT_ID: ${{ github.event.inputs.reuse_paid_odds_artifact_id || (github.event_name == 'push' && contains(github.event.head_commit.message, '[REPLAY_WEEK6_38791377571]') && '11999923880') || '' }}
   REUSE_PAID_ODDS_ARTIFACT_DIGEST: ${{ github.event.inputs.reuse_paid_odds_artifact_digest || (github.event_name == 'push' && contains(github.event.head_commit.message, '[REPLAY_WEEK6_38791377571]') && 'sha256:0916cd1cbec93f9a2529190b3df7c39172eee011a31eb9df429a35cdb9b41f61') || '' }}
@@ -402,6 +426,9 @@ jobs:
         env:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
           ROLES_CSV: data/roles_current_production_eligible_v1.csv
+          FETCH_ALT_LINES: ${{ env.FETCH_ALT_LINES }}
+          EVENT_WINDOW_START: ${{ env.EVENT_WINDOW_START }}
+          EVENT_WINDOW_END: ${{ env.EVENT_WINDOW_END }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_live_odds_gate.py --season "${SEASON}" --date "${SLATE_DATE}"
@@ -418,6 +445,48 @@ jobs:
           if not status.get('available'):
               print('No current active-slate player prop markets are posted; sportsbook pricing will be skipped cleanly.')
           EOF
+
+      - name: Archive the alternate-line paid boundary at its durable path
+        if: ${{ always() && env.FETCH_LIVE_ODDS == 'true' && env.FETCH_ALT_LINES == 'true' }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          if [ ! -s outputs/props_alt_raw.csv ]; then
+            echo "no alternate-line capture produced; nothing to archive"
+            exit 0
+          fi
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          mkdir -p data/market_track_record/alt_props
+          BASE_NAME="${SEASON}_wk$(printf '%02d' "${WEEK_RESOLVED}")"
+          if [ -n "${ODDS_CAPTURE_LABEL}" ]; then
+            BASE_NAME="${BASE_NAME}_${ODDS_CAPTURE_LABEL}"
+          fi
+          DEST="data/market_track_record/alt_props/${BASE_NAME}.csv"
+          # Never overwrite a paid boundary. A week can legitimately be
+          # captured in parts (a Thursday game locks before the Sunday lines
+          # are worth taking), and clobbering one part destroys an
+          # unrepeatable purchase.
+          if [ -e "${DEST}" ]; then
+            i=2
+            while [ -e "data/market_track_record/alt_props/${BASE_NAME}_part${i}.csv" ]; do
+              i=$((i+1))
+            done
+            DEST="data/market_track_record/alt_props/${BASE_NAME}_part${i}.csv"
+            echo "::warning::A capture already existed for ${BASE_NAME}; writing ${DEST} instead of overwriting a paid boundary."
+          fi
+          cp outputs/props_alt_raw.csv "${DEST}"
+          python - <<'EOF'
+          import os, pandas as pd
+          d = pd.read_csv('outputs/props_alt_raw.csv', low_memory=False)
+          print(f"[alt] archived rows={len(d)} players={d['player'].nunique() if 'player' in d else 0} "
+                f"markets={sorted(d['market'].unique()) if 'market' in d else []}")
+          EOF
+          echo "archived -> ${DEST}"
+          # AGENTS.md 5a: this is an unrepeatable paid boundary. It is now in
+          # the 90-day artifact at its durable path, but an artifact is
+          # transport, not storage. COMMIT THIS FILE. Weeks 3-5 2026 were lost
+          # because a paid boundary was only ever an artifact.
+          echo "::warning::Alternate-line paid boundary written to ${DEST}. Commit it - artifacts expire at 90 days."
 
       - name: Restore pinned previously-paid sportsbook snapshot
         id: replay_odds
@@ -814,3 +883,26 @@ jobs:
           # the durable archive existed, so those slates can never be graded
           # at row level again.
           retention-days: 90
+      # Must stay the LAST step in the job.
+      #
+      # "Summarize outputs" prints a wc -l for every generated artifact, which
+      # is hundreds of lines, and the artifact upload adds more. Any earlier
+      # failure is therefore pushed far outside the tail of the job log that
+      # the API will return, and a failed run reads as "something broke" with
+      # no reason attached. Re-running the audits here, last, puts the actual
+      # finding at the end of the log where it can be read.
+      - name: Diagnose a failed run (re-run the audits last, so the reason is readable)
+        if: failure()
+        run: |
+          export PYTHONPATH="${PWD}"
+          echo "===================== FAILURE DIAGNOSTIC ====================="
+          echo "--- python scripts/utils/audit_repo.py --strict"
+          python scripts/utils/audit_repo.py --strict 2>&1 | tail -40 || echo "(audit_repo exited non-zero)"
+          echo "--- python scripts/audit_2026_production_readiness.py --strict"
+          python scripts/audit_2026_production_readiness.py --strict 2>&1 | tail -40 || echo "(readiness audit exited non-zero)"
+          echo "--- key artifact presence"
+          for f in data/injuries.csv data/team_context_v3.csv data/model_ensemble_weights.csv \
+                   data/team_week_map.csv data/player_form.csv; do
+            if [ -e "$f" ]; then echo "  PRESENT $(wc -l < "$f") $f"; else echo "  MISSING $f"; fi
+          done
+          echo "=============================================================="

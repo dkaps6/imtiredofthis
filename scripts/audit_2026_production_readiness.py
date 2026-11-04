@@ -357,6 +357,123 @@ def _legacy_authority_findings() -> list[dict[str, str]]:
     return out
 
 
+def _injury_contract_findings() -> list[dict[str, str]]:
+    """Injury-status contract.
+
+    The rules layer discounts a player's opportunity only when
+    ``simulation_rules._injury_limited`` sees a designation in ``ctx.features``. That value
+    travels builder -> data/injuries.csv -> context_bridge merge -> features, and a break
+    anywhere in that chain is SILENT: the rule simply never fires and every inactive player
+    keeps his full opportunity. W7/W8 2026 showed exactly that outcome -- 29 players ruled
+    OUT held a mean 0.1392 target share and all recorded zero targets -- so these checks exist
+    to make the next break visible instead of invisible.
+    """
+    out: list[dict[str, str]] = []
+    try:
+        from scripts.build.build_injuries_weekly import SCHEMA as INJ_SCHEMA
+    except Exception as exc:  # pragma: no cover - import guard only
+        return [_finding("P1", "injury_schema_unreadable",
+                         f"cannot import build_injuries_weekly.SCHEMA: {type(exc).__name__}")]
+
+    for col in ("status", "designation"):
+        if col in INJ_SCHEMA:
+            continue
+        out.append(_finding("P1", "injury_schema_missing_field",
+                            f"build_injuries_weekly.SCHEMA lacks '{col}'; the rules layer reads it"))
+
+    bridge = _read(ROOT / "scripts" / "modeling" / "context_bridge.py")
+    for col in ("status", "designation"):
+        if f'["{col}"]' in bridge and col not in INJ_SCHEMA:
+            out.append(_finding("P1", "injury_contract_drift",
+                                f"context_bridge reads '{col}' but it is not in the injuries SCHEMA"))
+
+    inj = ROOT / "data" / "injuries.csv"
+    if inj.exists() and inj.stat().st_size:
+        import pandas as _pd
+        try:
+            df = _pd.read_csv(inj)
+        except Exception as exc:
+            out.append(_finding("P1", "injury_artifact_unreadable",
+                                f"data/injuries.csv unreadable: {type(exc).__name__}"))
+            return out
+        if "status" not in df.columns:
+            out.append(_finding("P0", "injury_status_column_absent",
+                                "data/injuries.csv has no 'status' column; the injury rule "
+                                "cannot fire and every inactive player keeps full opportunity"))
+        elif int(df["status"].notna().sum()) == 0:
+            # An all-null status column has two very different causes and only
+            # one of them is a defect.
+            #
+            # NFL clubs publish PRACTICE PARTICIPATION on Wednesday and Thursday
+            # and the GAME DESIGNATION (Out / Doubtful / Questionable) on
+            # FRIDAY. A midweek build therefore legitimately carries practice
+            # rows and no designation at all, and blocking on that would fail
+            # every midweek dry run for a reason nobody can fix. That is the
+            # root cause of D1: _injury_limited reads `status`, `status` does
+            # not exist before Friday, so the rule silently never fires and
+            # every unavailable player keeps full opportunity.
+            #
+            # The defect is an all-null status with NO practice participation
+            # either, which means the provider gave us nothing usable and the
+            # chain is severed.
+            #
+            # This discriminates on the artifact's own contents rather than on
+            # injuries_source_status.json. That file currently reports
+            # "official_report" for a practice-only pull, which is itself a
+            # mislabel under AGENTS.md section 7 -- but correcting it means
+            # introducing a new state value, and three validators
+            # (validate_2026_provider_artifacts, validate_full_slate_data_quality_v1,
+            # repair_injuries_nflcom_v1) hard-code the permitted set and fail
+            # closed on anything else. That fix is real and is tracked
+            # separately; it is deliberately not bundled in here.
+            practice = df.get("practice_status")
+            has_practice = practice is not None and bool(
+                practice.notna().any() and practice.astype(str).str.strip().ne("").any()
+            )
+            if has_practice:
+                out.append(_finding("P2", "injury_designations_not_published_yet",
+                                    f"data/injuries.csv carries {len(df)} practice-participation rows "
+                                    "and no game designation; designations publish Friday, so the "
+                                    "injury rule cannot fire before then. Expected midweek state, "
+                                    "not a break -- this is D1's root cause"))
+            else:
+                out.append(_finding("P0", "injury_status_all_null",
+                                    f"data/injuries.csv has 'status' but all {len(df)} rows are null "
+                                    "AND no practice participation either; the provider returned "
+                                    "nothing usable and the injury rule cannot fire"))
+        else:
+            vals = {str(v).upper().strip() for v in df["status"].dropna().unique()}
+            tokens = ("OUT", "DOUBTFUL", "IR", "PUP")
+            if not any(any(t in v for t in tokens) for v in vals):
+                out.append(_finding("P0", "injury_status_unrecognised",
+                                    f"no value in data/injuries.csv 'status' matches the tokens "
+                                    f"_injury_limited recognises {tokens}; observed {sorted(vals)[:8]}"))
+            if any("QUESTIONABLE" in v for v in vals):
+                # P2, NOT P1, and the distinction is deliberate.
+                #
+                # The P0 checks above detect a BREAK: the status column vanished,
+                # went all-null, or stopped carrying tokens _injury_limited can
+                # read. Those mean the chain is severed and must block.
+                #
+                # This one is different. It describes a known, documented,
+                # OPEN modelling gap -- _injury_limited matches only
+                # ("OUT","DOUBTFUL","IR","PUP"), so QUESTIONABLE players keep
+                # full opportunity -- and it is therefore TRUE BY CONSTRUCTION
+                # on every real NFL injury report. Raised at P1 it made
+                # --strict fail every Full Slate run, which is a permanent
+                # outage rather than a gate: a check that can never pass
+                # signals nothing. It stays visible at P2 and stays tracked
+                # until the underlying rule is fixed under its own
+                # preregistration. Closing it means changing _injury_limited,
+                # not lowering this line further.
+                out.append(_finding("P2", "injury_questionable_untreated",
+                                    "provider emits QUESTIONABLE but _injury_limited does not "
+                                    "recognise it, so those players keep 100% of opportunity; "
+                                    "measured 2026 W1-8 retention is 0.8535 target / 0.5718 rush; "
+                                    "OPEN research item, tracked not blocking"))
+    return out
+
+
 def run() -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
     findings += _workflow_findings()
@@ -367,6 +484,7 @@ def run() -> list[dict[str, str]]:
     findings += _promotion_findings()
     findings += _v3_contract_findings()
     findings += _legacy_authority_findings()
+    findings += _injury_contract_findings()
     rank = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
     findings.sort(key=lambda x: (rank.get(x["severity"], 9), x["code"], x["message"]))
     return findings

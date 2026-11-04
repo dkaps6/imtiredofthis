@@ -68,7 +68,7 @@ ALLOW_FALLBACK = os.getenv("ALLOW_FALLBACK", "1") == "1"  # if no offers from pr
 MISSING_POLICY = os.getenv("MISSING_POLICY", "warn")  # "warn" or "ignore" (never "fail")
 
 MARKETS = [
-    # keep your existing list; include only what you actually fetch
+    # Main-line player markets. These feed the canonical pricing path.
     "player_pass_yds",
     "player_pass_tds",
     "player_rush_yds",
@@ -76,9 +76,52 @@ MARKETS = [
     "player_reception_yds",
     "player_receptions",
     "player_rush_reception_yds",
-    "player_anytime_td",
-    # etc…
+    # player_anytime_td REMOVED 2026-11-04 by standing instruction. It was a
+    # measured trap: win rate on it is meaningless without price, and it is
+    # one of only two markets that still ship uncalibrated_mc_only. Removing
+    # it also saves one market x every event of OddsAPI credit per run.
 ]
+
+# Alternate-line ("ladder") player markets. OPT-IN via FETCH_ALT_LINES=true.
+#
+# These are NOT main lines and must never enter the canonical pricing path:
+# each returns ~10-15 thresholds per player, so routing them into
+# props_raw.csv would multiply rows, break the duplicate-book-line check and
+# the strict pricing audits. They are captured to their own artifact and
+# consumed only by the market-anchored alt-line decision card
+# (docs/research/PRISM_ALT_LINE_DECISION_CARD_V1.md), which needs OFFERED alt
+# prices to compare against its break-even figures.
+#
+# Keys confirmed against the-odds-api.com/sports-odds-data/betting-markets.html.
+# Only the markets the decision card actually has rows for are listed;
+# player_rush_attempts_alternate and player_pass_tds_alternate are available
+# but deliberately omitted so they do not cost credits for nothing.
+ALT_LINE_MARKETS = [
+    "player_pass_yds_alternate",
+    "player_rush_yds_alternate",
+    "player_reception_yds_alternate",
+    "player_receptions_alternate",
+    "player_rush_reception_yds_alternate",
+]
+FETCH_ALT_LINES = os.getenv("FETCH_ALT_LINES", "0").strip().lower() in ("1", "true", "yes")
+
+# Event scoping applied BEFORE any paid per-market call.
+#
+# /v4/sports/{sport}/odds returns every upcoming event the provider lists,
+# with no date filter, and the per-market loop is one paid call per
+# (market, event). Slate scoping used to happen only on the OUTPUT
+# (_allowed_event_ids in run_live_odds_gate), which means a run paid for every
+# event the provider happened to be listing, including games outside the
+# target week. Filtering here converts that waste into a saving, and it is
+# what makes a two-part capture of one week affordable: a Thursday-only pull
+# costs one event's worth of markets rather than the whole slate's.
+#
+# EVENT_WINDOW_START / EVENT_WINDOW_END are ISO-8601 instants (UTC) compared
+# against each event's commence_time. ONLY_EVENT_IDS overrides both.
+EVENT_WINDOW_START = os.getenv("EVENT_WINDOW_START", "").strip()
+EVENT_WINDOW_END = os.getenv("EVENT_WINDOW_END", "").strip()
+ONLY_EVENT_IDS = [e.strip() for e in os.getenv("ONLY_EVENT_IDS", "").split(",") if e.strip()]
+ALT_RAW_PATH = OUTPUT_DIR / "props_alt_raw.csv"
 
 # ------------------------- CONFIG -------------------------
 
@@ -1642,6 +1685,147 @@ ALT_KEYS = {
     "player_anytime_td":    ["anytime_td"],
 }
 
+def _scope_events_before_paid_calls(events: list) -> list:
+    """Drop events outside the target window BEFORE spending per-market credit.
+
+    Returns the kept events and logs exactly how many paid calls this avoided,
+    so the saving is visible in the run log rather than implicit.
+    """
+    if not events:
+        return events
+    total = len(events)
+
+    if ONLY_EVENT_IDS:
+        wanted = set(ONLY_EVENT_IDS)
+        kept = [ev for ev in events if str(ev.get("id")) in wanted]
+        log.info(f"[scope] ONLY_EVENT_IDS set: keeping {len(kept)}/{total} events")
+        if not kept:
+            log.info("[scope] WARNING: ONLY_EVENT_IDS matched no event; keeping all to fail visibly")
+            return events
+        return kept
+
+    if not EVENT_WINDOW_START and not EVENT_WINDOW_END:
+        log.info(f"[scope] no event window set; all {total} provider events are in scope")
+        return events
+
+    def _dt(v: str):
+        try:
+            return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    lo = _dt(EVENT_WINDOW_START) if EVENT_WINDOW_START else None
+    hi = _dt(EVENT_WINDOW_END) if EVENT_WINDOW_END else None
+    if (EVENT_WINDOW_START and lo is None) or (EVENT_WINDOW_END and hi is None):
+        log.info(f"[scope] WARNING: unparseable window start={EVENT_WINDOW_START!r} "
+                 f"end={EVENT_WINDOW_END!r}; keeping all {total} events")
+        return events
+
+    kept = []
+    for ev in events:
+        ct = _dt(ev.get("commence_time"))
+        if ct is None:
+            kept.append(ev)  # never drop an event we cannot date
+            continue
+        if lo is not None and ct < lo:
+            continue
+        if hi is not None and ct > hi:
+            continue
+        kept.append(ev)
+
+    dropped = total - len(kept)
+    if not kept:
+        log.info(f"[scope] WARNING: window dropped every one of {total} events; "
+                 f"keeping all so the run fails visibly rather than silently empty")
+        return events
+    n_mk = len(MARKETS) + (len(ALT_LINE_MARKETS) if FETCH_ALT_LINES else 0)
+    log.info(f"[scope] window [{EVENT_WINDOW_START or '-'} .. {EVENT_WINDOW_END or '-'}] "
+             f"keeps {len(kept)}/{total} events, dropped {dropped}, "
+             f"avoiding ~{dropped * n_mk} paid per-market calls")
+    return kept
+
+
+def _fetch_alt_lines(
+    api_key: str,
+    region: str,
+    books: Optional[set[str]],
+    event_ids: list[str],
+    fetched_at: str,
+) -> pd.DataFrame:
+    """Capture alternate-line ladders into their own artifact. PROBE FIRST.
+
+    Cost control: each (market, event) is one OddsAPI call, so blindly fanning
+    5 alternate markets across a 16-game slate is 80 calls. Instead probe ONE
+    event with each key, keep only the keys that actually return offers, and
+    fan those out. A key the plan does not serve costs 1 call, not 16.
+
+    These rows are returned to the caller ONLY to be written to ALT_RAW_PATH.
+    They are never appended to the main `frames` list and never reach
+    props_raw.csv or the pricing path.
+    """
+    if not event_ids:
+        log.info("[alt] no events; skipping alternate-line capture")
+        return pd.DataFrame()
+
+    probe_eid = str(event_ids[0])
+    serving: List[str] = []
+    log.info(f"[alt] probing {len(ALT_LINE_MARKETS)} alternate markets on event {probe_eid}")
+    probe_frames: List[pd.DataFrame] = []
+    for mk in ALT_LINE_MARKETS:
+        url = f"{BASE}/sports/{SPORT}/events/{probe_eid}/odds"
+        params = {"apiKey": api_key, "regions": region, "markets": mk, "oddsFormat": "american"}
+        status, js, headers = _get(url, params)
+        n = 0
+        if status == 200 and isinstance(js, dict):
+            try:
+                df = _normalize_player_rows([js], books, mk)
+            except Exception as err:
+                log.info(f"[alt] normalize fail probe market={mk}: {err}")
+                df = pd.DataFrame()
+            if not df.empty:
+                df["fetched_at"] = fetched_at
+                probe_frames.append(df)
+                n = len(df)
+                serving.append(mk)
+        log.info(f"[alt] probe market={mk} status={status} rows={n} limit={_lim(headers)}")
+
+    if not serving:
+        log.info("[alt] no alternate market returned offers on the probe event; "
+                 "capture stops here and costs %d calls", len(ALT_LINE_MARKETS))
+        return pd.DataFrame()
+
+    log.info(f"[alt] serving keys={serving}; fanning out to {len(event_ids)-1} remaining events")
+    frames: List[pd.DataFrame] = list(probe_frames)
+    for mk in serving:
+        for eid in event_ids[1:]:
+            url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
+            params = {"apiKey": api_key, "regions": region, "markets": mk, "oddsFormat": "american"}
+            status, js, headers = _get(url, params)
+            if status == 200 and isinstance(js, dict):
+                try:
+                    df = _normalize_player_rows([js], books, mk)
+                except Exception as err:
+                    log.info(f"[alt] normalize fail eid={eid} market={mk}: {err}")
+                    continue
+                if not df.empty:
+                    df["fetched_at"] = fetched_at
+                    frames.append(df)
+            elif status == 422:
+                log.info(f"[alt] eid={eid} market={mk} 422 (not served for this event)")
+            else:
+                log.info(f"[alt] eid={eid} market={mk} status={status}")
+
+    out = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    if not out.empty:
+        # One row per (event, book, market, player, threshold, side). A ladder
+        # is expected here, unlike a main line - do not collapse it.
+        out = out.drop_duplicates(
+            subset=["event_id", "book", "market", "player", "line", "side"]
+        ).reset_index(drop=True)
+    log.info(f"[alt] captured rows={len(out)} across markets={sorted(out['market'].unique()) if not out.empty else []}")
+    return out
+
+
 def _fetch_market_for_events(
     api_key: str,
     region: str,
@@ -1897,6 +2081,7 @@ def fetch_odds(
     # events for event-odds
     events = _fetch_events_by_h2h(api_key, region, books_set)
     log.info(f"events pulled={len(events)}")
+    events = _scope_events_before_paid_calls(events)
     if not date:
         inferred_date = _derive_slate_date(events)
         if inferred_date:
@@ -1914,6 +2099,19 @@ def fetch_odds(
     else:
         pd.DataFrame().to_csv(out_game, index=False)
         log.info(f"wrote empty {out_game}")
+
+    # Alternate-line capture: opt-in, isolated, its own artifact.
+    if FETCH_ALT_LINES:
+        try:
+            alt_df = _fetch_alt_lines(api_key, region, books_set, event_ids, fetched_at)
+        except Exception as err:
+            log.info(f"[alt] alternate-line capture failed softly: {err}")
+            alt_df = pd.DataFrame()
+        ALT_RAW_PATH.parent.mkdir(parents=True, exist_ok=True)
+        alt_df.to_csv(ALT_RAW_PATH, index=False)
+        log.info(f"[alt] wrote {ALT_RAW_PATH} rows={len(alt_df)}")
+    else:
+        log.info("[alt] FETCH_ALT_LINES not set; no alternate-line credits spent")
 
     # per-market fetch
     frames: List[pd.DataFrame] = []
