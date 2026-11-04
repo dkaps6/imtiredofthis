@@ -1,143 +1,163 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-11-02 — V21 — **LIVE SIDE-GRADING CORRECTED / MODEL HAS A DIRECTIONAL EDGE / CONFIDENCE DOES NOT DISCRIMINATE / ELITE-WR UNDER-PROJECTION OPENED** / CLAUDE ISSUE #535
+## TOP CHECKPOINT — 2026-11-04 — V22 — **THE CEILING IS MEASURED: 93% OF PLAYERS ARE AT THE INFORMATION LIMIT, THE ALPHA IS NOT / COMPRESSION HAS THREE SOURCES / THREE CODE DEFECTS FOUND, ONE COMBINATION READY / NOTHING PROMOTED** / CLAUDE ISSUE #535
 
 **Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.
+**Branch:** all V22 work is on `claude/nice-cori-4qkwqs` (107 commits ahead of `main`, PR #697 open).
+**Production changes: ZERO.** Every file touched is under `scripts/research/` or `docs/research/`.
 
-**Supersedes V20 in place.** Displaced V20 root archived at
-`docs/handoffs/NFL_HANDOFF_2026-10-28_V20_PRE_V21_ROOT_ARCHIVE.md`. The V20 RB/roster lane is
-**unchanged and still open** — see "STILL OPEN FROM V20" below. This checkpoint adds a new,
-independent finding about live market grading and opens one new player-level lead.
+### WHAT V22 ESTABLISHED — THE CEILING, AND WHY NINE STUDIES CAME BACK NULL
 
-**Read in this exact order**:
-1. `AGENTS.md` (canonical 2026 operating contract, player-first first principle).
-2. **ONLY THIS NEWEST ACTIVE TOP V21.** Do not recursively read prior checkpoints unless this
-   file explicitly points to one.
-3. **`docs/research/PRISM_LIVE_SIDE_GRADING_CORRECTION_V1.md` — NEW. Read before touching any
-   live-market or betting-adjacent measurement. It retracts a 2026-11-01 result.**
-4. `docs/research/PRISM_RB_RUSH_SHARE_MASS_BUDGET_V1.md` — the RB root cause, still binding.
-5. The still-binding correction sections further down this file (V16 constant-sigma, the V18
-   off-path retraction, the RB diagnosis table). Do not re-derive them.
-6. GitHub Issue https://github.com/dkaps6/imtiredofthis/issues/535 — GPT ↔ Claude work channel.
-   Fetch everything newer than comment 6479259425 before acting.
+`docs/research/PRISM_IRREDUCIBLE_FLOOR_AND_ALPHA_HAIRCUT_V1.md`
 
----
+A model that knows every player's **true** target rate exactly still scores **M1 = 0.03245**,
+because it is graded against one game and multinomial luck is irreducible. Production (E1) scores
+**0.04203**. **Real headroom is +0.00958, not the +0.01690 previously claimed** — ORACLE_BOTH
+scored *below* the physical floor, and re-run on simulated data where it can only fit noise it
+returns 0.02505 against its 0.02513. **~43% of that headroom was realization-fitting.**
 
-### WHAT CHANGED AT V21 — A MEASUREMENT ERROR, AND WHAT IT HID
+**Three of four tiers are at or below the luck floor** (5–12% has +0.0013 of room, 12–20%
++0.0037). **That explains the entire history of null results**: five estimator corrections and
+four signal studies were aimed at a pooled metric where **600 of 769 rows were already at the
+information limit.** They were not bad studies. They were studies of a solved problem. It also
+explains why a naive opportunity count beat every sophisticated arm in three of four studies — at
+the noise floor the naive estimator is correct and sophistication only adds variance.
 
-**The defect.** The `side` column in
-`data/research/live_2026/backtest_2026_live_calibration_v1_rows.csv` is a **board listing
-orientation, not the model's pick**. It agrees with `sign(model_proj − vegas_line)` in only
-**622/1571 = 39.6%** of rows; in **930** rows it reads `over` while the projection sits below
-the line.
+**Scored against true rate, with no realization noise and no outcome selection:**
 
-A 2026-11-01 study graded by that column, reported a pooled **48.31%** with a CI excluding
-breakeven, and concluded the model had no side-picking edge. **That conclusion is withdrawn.**
-It measured the wrong direction.
-
-**Always derive the pick as `'over' if model_proj > vegas_line else 'under'`.** Never trust a
-`side` column without checking it against the projection first.
-
-**The corrected result.** Model directional picks, 1,571 graded live rows, weeks 1/2/6/7:
-
-| scope | record | hit | 95% CI |
+| player's TRUE rate | n | E1 − TRUE | \|E1 − TRUE\| |
 |---|---|---|---|
-| all | 832/1571 | **52.96%** | [50.5%, 55.4%] |
+| <5% | 452 | +0.0043 | **0.0068** |
+| 5–12% | 149 | +0.0044 | **0.0172** |
+| 12–20% | 107 | −0.0066 | **0.0212** |
+| **20%+** | **61** | **−0.0392** | **0.0440** |
 
-Breakeven at −110 is 52.4%. By week: **W1 51.4% → W2 50.7% → W6 53.9% → W7 56.3%.** Monotone
-across the observed blocks, but four weeks only and no single week's CI excludes breakeven —
-a live hypothesis, **not** an established result. Weeks 3–5 are permanently lost (AGENTS.md §5a).
+**The model is excellent for 93% of players and under-rates each team's true alpha by −0.0392 —
+16% of his rate, ~1.1 targets per game.** Mechanism: phantom players occupy *relative* share, so
+the alpha's allocation probability is reduced by exactly (1 − waste). Predicted −0.0390 against an
+observed −0.0393.
 
-**Market cell is the structure that discriminates:**
+**Also corrected at V22:** 63% of the previously-reported −0.1009 top-tier under-allocation was a
+regression artifact from binning on outcome. Real gap +0.0274.
 
-| cell | record | hit |
+### COMPRESSION IS UNIVERSAL — AND HAS THREE INDEPENDENT SOURCES
+
+`PRISM_ALPHA_COMPRESSION_BOARD_CHECK_V1.md`, `PRISM_ROLE_SHRINKAGE_FIX_RESULTS_V1.md`
+
+Tiered **pregame-only**, `(model − vegas)/vegas`: **10 of 10 role × market cells compress,
+monotone in every one.** WR was the mild case; **TE `rec_yards` +58.8pp and RB `rush_yards`
++73.9pp** are worse. `rush_rec_yards` is the worst projection cell (−13.7% to −23.6%).
+
+**The natural experiment:** `pass_yards` is the only market that bypasses generic shrinkage
+(M89/M90 synthesis) and the **only** market without the defect — **+9.4pp and ±1% bias.** It is
+now a **positive control**: an arm that damages it is disqualified.
+
+The three sources:
+1. **`bayesian_v2._posterior_mean`** — `GROUP_STRENGTH` is a fixed weight that never decays, and
+   `PRIOR_PLAYER_CAP` truncates the player's own history at 6–10 games. At Week 8 a receiver with
+   a full prior season has 17 prior games of which **6 count**, so the role constant permanently
+   holds **18.75%** of every estimate. The target is **not** `DEFAULTS` — it is
+   `_weighted_group_mean`, the `prior_games`-weighted position mean (WR **0.144–0.148**, RB 0.064,
+   TE 0.122).
+2. **`rules_v2.matchup_multipliers`** — multiplies zero-sum shares with **no renormalisation**.
+   Ceilings: **WR1 1.000 (floor 0.95), TE 1.265, RB 1.320.** WR1 is the only role that cannot
+   exceed 1.0. Live values recovered from production: **WR 1.0000, QB 1.0000, TE 1.2560, RB 1.1956.**
+3. **Opportunity-share estimation itself** (the first two feed it).
+
+### THE KEY STRUCTURAL FACT — THE ALLOCATOR IS SCALE-INVARIANT
+
+`PRISM_ALLOCATOR_CAP_SCALE_INVARIANCE_V1.md` — **read this before touching any share work.**
+
+`_allocate_counts` gives probability **`share_i / team_sum`** once the cap binds. **Any uniform
+per-team rescale is a mathematical no-op**, and team opportunity is pinned at 95% of attempts for
+any sum ≥ 1.0. Confirmed in the live harness: team targets span **0.3 across eight arms**.
+
+**This retracted three earlier V22 claims:**
+- the "+0.5574 of excess mass competing for removal" framing — **there is no excess mass**; the cap
+  discards it. Team sums (1.5110 vs realized 0.9536) are vector properties with **no production
+  consequence**;
+- D1's A2-vs-A3 result — **identical in 54/54 team-weeks at 0.000e+00.** The
+  discard-vs-redistribute lesson was wrong;
+- D2's five arms are **two** production models: `{C0,M1,M3}` and `{M2,M4}`. M1 was not a weaker
+  fix, it was **no fix**.
+
+Only **relative** shares reach the simulation. All compression findings survive, because they
+measured relative shape.
+
+### THE SPLIT THAT UNIFIED NINE NULLS
+
+**Opportunity shrinkage is wrong. Efficiency shrinkage is CORRECT.** No arm passed G1 on `ypt`,
+`ypc` or `receptions_per_target`, and every arm harmed a tier; shrinking a player's efficiency
+toward his own prior-season efficiency was the single worst result in the study. **Efficiency
+genuinely does not persist**, so the group prior is doing real work there. **Do not reopen
+efficiency shrinkage.**
+
+**Best estimator arm: A4 / λ=1.00 — the role-STATE anchor** (position × depth-rank, not bare
+position). `tgt_share` bias **0.01079 → 0.00798, a 26% reduction**, 86.6% breadth, compression
+−55.3%, no tier harmed, and it halves the team-sum excess. **Gain is linear in λ**, so there is no
+cheap sweet spot.
+
+**A5 — the literal "player has the rules" arm (shrink toward the player's own prior) — LOST to A4
+on non-overlapping CIs and was worst on efficiency.** The winning unit is the player's **current
+role-state**, neither the bare position nor his own thin history. Refinement, not refutation.
+
+**But A4 costs side accuracy: −1.13pp (V1), −0.88pp (V2).** The P-versus-S frontier is real and
+measured twice. **Nothing promotes on one objective alone.**
+
+### THREE CODE DEFECTS — MEASURED, WITH ONE COMBINATION READY
+
+| | defect | status |
 |---|---|---|
-| `pass_yards` OVER | 38/62 | **61.3%** |
-| `rush_yards` UNDER | 101/171 | **59.1%** |
-| `receptions` OVER | 94/170 | 55.3% |
-| `rush_yards` OVER | 55/113 | **48.7%** |
+| **D1** | **`injuries.csv` ships 5 of 11 columns** — no `status` field, so `_injury_limited` returns False for every player in every week. The injury rule is **dead code** and an OUT player keeps **100%** of his share, sometimes boosted (Tyler Warren 0.1957 → 0.2476 while Out). 124 OUT skill players, **0.0% played, retention exactly 0.0000.** QUESTIONABLE: 64.3% played, **0.8535 target / 0.5718 rush** retention. | **fix validated**, inert in production until the artifact is repaired |
+| **D2** | matchup multipliers break the share constraint. Share fix gains +0.00441 but on **yards scores −0.128** — it moves opportunity to higher-`ypt` WRs and receiving was already 9.1% high. | **DO NOT SHIP** |
+| **D3** | sd floor + clip at zero give **2.40 phantom receiving yards at zero targets**, 1.19 rushing. | **fix validated** (A1, the zero-opportunity gate) |
 
-`rush_yards` OVER sitting below breakeven is the **mirror of the V20 RB mass-deflation root
-cause**: the model under-projects RB rushing volume, so its rush OVERs are manufactured by a
-known defect while its rush UNDERs ride it. These two lanes are the same defect seen from two
-directions — treat them as one problem.
+**READY: `D1--D3` for receiving.** Per-player gain **+1.015 [+0.569,+1.524]**, ratio
+**1.091 → 1.045**, bottom tier over-projection **−55.8%**, no tier past the 2% bar. D1 and D3 are
+**synergistic** (+0.069), not independent.
 
-**Model confidence is worthless as a ranking key.** Realized accuracy is flat at ~49–57%
-across *every* confidence band: rows the model calls **88.3%** realize **53.7%**; rows it calls
-52.4% realize 52.8%. `edge_pct` deciles show no monotone relationship either (top decile 55.1%,
-CI [47.3%, 62.6%]). **The distribution's location carries signal; its width does not.** Do not
-use `model_proj`/`model_sd` probability or `edge_pct` as a betting probability or ranking key.
+**BLOCKED: D3 for rushing.** Production's rushing aggregate is **0.984 — accidentally right**,
+because phantom yards offset a genuine under-projection. D3 takes it to **0.860**. The 14% gap
+decomposes into **three equal factors**: attempts **0.959** (26.0 model vs 27.1 realized), the cap
+**0.941**, `ypc` **0.953**. Positional reallocation recovers **+0.9%** and is nearly a dead end —
+because the model's `ypc` is ~4.2 for everyone against realized **RB 4.44 / QB 3.55**, so fixing
+*who* carries does not change yards. `PRISM_RUSH_ALLOCATION_RESULTS_V1.md`.
 
----
+### PROCESS — EIGHT SPECIFICATION ERRORS, ALL CAUGHT, AND THE FIX
 
-### NEW PLAYER-LEVEL LEAD — ELITE RECEIVERS ARE UNDER-PROJECTED
+Allocator V1's non-mass-preserving transform · the board check's lookahead tiering · ROLE_SHRINKAGE
+V1's copied G7 · V1's unexercised G5 · V2's infeasible G7 threshold · D1's G2 contradicting its own
+arm · the rush study's near-zero-denominator 2% bar · **the rush study omitting kill conditions
+entirely.**
 
-On the committed Week 8 board, model `receptions` projections vs sportsbook alt ladders:
+Two fixes adopted and both worked: **scope every gate to the arms it governs** (D3 was the first
+clean run), and this **mandatory preregistration checklist** — research question · arms · gates ·
+**kill conditions** · prediction with named risks · scope.
 
-| player | model proj | market alt | implied |
-|---|---|---|---|
-| Ja'Marr Chase | **4.49** | 4+ @ −1800 | 94.7% |
-| Justin Jefferson | **4.12** | 4+ @ −800 | 88.9% |
+**Prediction record: 8 hits, ~17 misses. The named RISK landed in nearly every study.** The
+preregistered risk statement is the productive element of this methodology; the predictions are
+close to worthless. Keep writing both; weight only the risks.
 
-A market pricing 4+ receptions at 94.7% implies a mean well above 6. A ~2-reception gap on two
-alpha receivers is **model error, not edge**. This is the receiving-side analogue of the
-existence-ceiling / WR-hierarchy compression already open in the RB lane, and it is the most
-valuable item in this checkpoint for the research lane: player-level, falsifiable, structural.
+### IMMEDIATE NEXT ACTION — THE PROSPECTIVE WEEK, AND IT EXPIRES AT KICKOFF
 
-**Per-player side records are NOT a usable signal.** 88 players have n≥8; median 52.8%; only
-**4 of 88** clear a 95% Wilson lower bound above 52.4%, against ~2 expected **by chance**. Do
-not build a per-player prior on four weeks. The negative tail is mildly usable only because it
-corroborates a known defect: Kenneth Walker III **4/16**, Sam Darnold **0/4**.
+**Every V22 study failed to promote for the same reason: no holdout.** W7+W8 only; **W3–W5 2026
+are permanently lost** (AGENTS.md §5a). **Week 9 is unplayed as of 2026-11-04.**
 
----
+1. **Capture a W9 prospective board NOW, before kickoff** — production vs `D1--D3`, frozen and
+   committed. This is the holdout that unblocks promotion and it is the only item with a deadline.
+2. **Repair `injuries.csv`**: `build_injuries_weekly` must emit its declared 11-column SCHEMA, and
+   `audit_2026_production_readiness.py` must assert it so a file without `status` **fails closed**.
+   Production repair, no preregistration needed. **D1 does nothing until this lands.**
+3. **`ypc` is position-blind** — a third of the rushing gap and the reason correct allocation does
+   nothing. A player-identity problem, not a calibration one.
+4. **The 0.95 cap** costs **5.9% on every market.** ⚠️ **It is already protected** — V20 §7 forbids
+   removing it without explicit user authorization and preregistered evidence. Treat as
+   authorization-gated, not unnoticed.
 
-### IMMEDIATE NEXT ACTION — A FREE PROSPECTIVE TEST IS AVAILABLE
+### PROMOTED AT V22
 
-`data/market_track_record/boards/2026_wk08.csv` (2,820 rows) is committed and its games are
-complete. Grade it with the **corrected** direction. This:
-
-1. extends the series to five weeks and gives the W1→W7 uptrend its first out-of-sample test;
-2. tests `pass_yards OVER` 61.3% and `rush_yards UNDER` 59.1% on rows frozen before kickoff —
-   the strongest evidence this lane can produce;
-3. costs nothing, because the board is already in git.
-
-**Preregister before scoring:** hypothesis is `pass OVER > 52.4%` and `rush UNDER > 52.4%` on
-W8; naive control is "all model picks pooled"; kill condition is either cell landing below
-breakeven on n≥40.
-
----
-
-### STILL OPEN FROM V20 — UNCHANGED, STILL SEQUENCED
-
-The V20 lane is **not superseded by the above**, only joined by it. The sequence stands:
-
-**(1) roster/availability EXISTENCE integrity → (2) coverage-aware team rush-budget
-reconciliation → (3) Bayesian evidence-dependent shrinkage.** Do not skip that order.
-
-- **Ourlads is the sole authority that a player exists** on the production football path. W7
-  lineage: `roles_ourlads` 458 → `roles_ourlads_status_v1` 458 → `current_player_availability`
-  458 → `roles_current_production_eligible_v1` **396** → `football_simulation_universe` **396**.
-  The availability layer **never adds a row**; it only narrows. A player Ourlads omits is
-  structurally unreachable.
-- **Rush mass is not reconciled to a team budget.** Post-top-5 `rules_rush_share` sums to
-  **1.2729** per team (28/28 over the 0.95 cap); `_allocate_counts` applies a uniform **0.7574**
-  haircut; simulated RB carries land at **19.77/team vs 23.15 actual, bias −3.38**.
-  Working contract, **designed not promoted**:
-  `team_modeled_mass_target = 1 − unresolved_roster_rush_mass`, residual state-derived, never a
-  universal 0.05. **Do not remove the cap and do not normalize an incomplete roster to 1.0.**
-- **AUDIT TARGET 6 remains open:** find a genuinely **pregame-safe** player-existence feed
-  (`nflreadpy.load_rosters_weekly(2026)` resolves the W7 cases in settled data but its
-  publication timing is unproven for Thursday/game-day use); measure whether the same existence
-  ceiling contaminates **WR/TE** target shares — note §"NEW PLAYER-LEVEL LEAD" above is now a
-  concrete reason to suspect it does.
-- **Standing capability gap:** production uses **zero NextGen Stats** though
-  `load_nextgen_stats` returns 2026 weeks 1–7. Not the active lane. Target-week NGS is outcome
-  data and can never be used upstream.
-
-### PROMOTED AT V21
-
-**Nothing.** V21 corrects a measurement and records what the corrected measurement shows. No
-coefficient, weight, feature, artifact schema, or pricing path changed.
+**Nothing.** No coefficient, weight, feature, artifact schema or pricing path changed. `D1--D3`
+for receiving is *ready* and awaits the W9 holdout.
 
 ### NON-NEGOTIABLE USER SCIENCE
 **THE PLAYER SHOULD HAVE THE RULES, NOT THE POSITION HAVE THE PLAYER.** Named-individual
