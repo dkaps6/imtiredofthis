@@ -488,6 +488,39 @@ jobs:
           # because a paid boundary was only ever an artifact.
           echo "::warning::Alternate-line paid boundary written to ${DEST}. Commit it - artifacts expire at 90 days."
 
+      - name: Price the alternate-line offers against the empirical clearance table
+        # Runs AFTER the odds are already paid for, so a defect here must not
+        # destroy the slate: it is downstream analysis, not the board. Warns
+        # loudly instead of failing the run.
+        if: ${{ always() && env.FETCH_LIVE_ODDS == 'true' && env.FETCH_ALT_LINES == 'true' }}
+        continue-on-error: true
+        run: |
+          export PYTHONPATH="${PWD}"
+          if [ ! -s outputs/props_alt_raw.csv ]; then
+            echo "no alternate-line capture; nothing to price"
+            exit 0
+          fi
+          python scripts/price_alt_line_offers_v1.py \
+            --alt outputs/props_alt_raw.csv \
+            --main outputs/props_raw.csv \
+            --out outputs/alt_line_edges.csv || {
+              echo "::warning::alt-line edge pricing failed; the raw capture is still archived"
+              exit 0
+            }
+          if [ -s outputs/alt_line_edges.csv ]; then
+            WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+            NAME="${SEASON}_wk$(printf '%02d' "${WEEK_RESOLVED}")"
+            if [ -n "${ODDS_CAPTURE_LABEL}" ]; then NAME="${NAME}_${ODDS_CAPTURE_LABEL}"; fi
+            mkdir -p data/market_track_record/alt_props
+            D="data/market_track_record/alt_props/${NAME}_edges.csv"
+            i=2
+            while [ -e "${D}" ]; do
+              D="data/market_track_record/alt_props/${NAME}_edges_part${i}.csv"; i=$((i+1))
+            done
+            cp outputs/alt_line_edges.csv "${D}"
+            echo "edges archived -> ${D}"
+          fi
+
       - name: Restore pinned previously-paid sportsbook snapshot
         id: replay_odds
         if: ${{ env.FETCH_LIVE_ODDS != 'true' && env.REUSE_PAID_ODDS_RUN_ID != '' }}
