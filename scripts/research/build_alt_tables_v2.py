@@ -22,16 +22,22 @@ Three changes over v1, all of them things v1 got wrong or left out.
    is the wrong parameterisation: 0.4x, 0.5x, 0.6x and 0.7x of a 2.5 line all
    mean ">= 2". Books quote it as "3+ receptions" and the table now matches.
 
-Honesty note on receptions, stated rather than buried: the absolute table was
-preregistered to need decile calibration within 3pp on a 2024->2025 split and
-it FAILED at 0.0525. The failure is concentrated in one thin cell -- main line
-5.5, 55 validation players, gaps to -0.20 -- while every other line sits within
-~6pp and mostly 2-3pp, and the market pooled drifts only 0.0284. The cells
-emitted here are therefore restricted to main lines at or below 4.5, which is a
-POST-HOC restriction chosen after seeing which cell failed. It is labelled as
-such in the artifact, its per-cell drift is published so a reader can see
-exactly which rows are trustworthy, and it should be re-validated on a clean
-split when a third season exists.
+Receptions, and the line cap, which is NO LONGER post-hoc. The absolute table
+was preregistered to need decile calibration within 3pp on a 2024->2025 split
+and FAILED at 0.0525, concentrated entirely in main line 5.5. The cap at 4.5
+was initially chosen after seeing that, which made it post-hoc.
+
+It has since been validated on a THIRD, fully independent sample: 2026 weeks
+1/2/6/7/8 board lines joined to nflverse actuals, 583 rows / 215 players. Line
+5.5 is again the worst by a wide margin -- max cell error 0.1059 against
+0.051-0.059 for every other line, on only 29 rows -- so two independent
+holdouts agree it is unstable and the cap stands on evidence rather than on
+hindsight.
+
+What 2026 also showed is that the surviving lines carry no systematic drift
+(mean gaps +0.017, +0.000, -0.012, -0.002) but do carry about 5pp of cell-level
+noise, which is above the 3pp bar. That error is priced into the conservative
+bound via RECP_OOS_CELL_ERROR rather than wished away.
 """
 from __future__ import annotations
 
@@ -51,7 +57,14 @@ GRID = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5]
 MIN_ROWS, MIN_PLAYERS = 100, 40
 STRATIFIED = ["rec_yards", "rush_yards", "rush_rec_yards"]   # volume stratification helps
 POOLED = ["pass_yards"]                                       # measured: it does not
-RECP_MAX_LINE = 4.5                                           # post-hoc, see module docstring
+RECP_MAX_LINE = 4.5   # validated on 2026 out-of-sample, see module docstring
+# Measured cell-level error of the receptions table against a THIRD, fully
+# independent sample (2026 weeks 1/2/6/7/8 board lines joined to nflverse
+# actuals, 583 rows / 215 players). Mean gaps per line were +0.017, +0.000,
+# -0.012, -0.002 -- no systematic drift -- but worst-cell error reached 0.059.
+# That is above the 3pp bar, so it is priced into the conservative bound
+# rather than wished away.
+RECP_OOS_CELL_ERROR = 0.059
 
 
 def load() -> pd.DataFrame:
@@ -133,7 +146,9 @@ def build_receptions(h: pd.DataFrame) -> pd.DataFrame:
                 continue
             d = (float(np.mean(a25 >= k)) - float(np.mean(a24 >= k))
                  if len(a24) >= 30 and len(a25) >= 30 else 0.0)
-            lo = _bound(p, npl, d)
+            # Widen by whichever is larger: the season drift seen inside the fit
+            # sample, or the cell error measured against the independent 2026 set.
+            lo = _bound(p, npl, max(abs(d), RECP_OOS_CELL_ERROR))
             rows.append({"market": "receptions", "main_line": float(L),
                          "threshold_at_least": k, "n": n, "players": npl,
                          "cleared": round(p, 4), "season_drift": round(d, 4),
