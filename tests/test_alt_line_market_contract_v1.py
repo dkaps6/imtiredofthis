@@ -177,6 +177,15 @@ def test_injury_gate_blocks_a_broken_chain_but_not_a_known_open_gap(tmp_path, mo
                       "team": ["KC"] * len(vals), "season": [2026] * len(vals),
                       "week": [9] * len(vals), "status": vals}).to_csv(inj, index=False)
 
+    import json as _json
+    st = Path("data/injuries_source_status.json")
+    st_existed = st.exists()
+    st_backup = st.read_bytes() if st_existed else None
+    # The all-null case now depends on what the provenance file claims, so this
+    # test must control it rather than inherit whatever is on disk.
+    st.write_text(_json.dumps({"season": 2026, "week": 9, "state": "official_report"}),
+                  encoding="utf-8")
+
     try:
         write(["Out", "Questionable", "Doubtful"])
         sev = {f["code"]: f["severity"] for f in aud._injury_contract_findings()}
@@ -194,3 +203,71 @@ def test_injury_gate_blocks_a_broken_chain_but_not_a_known_open_gap(tmp_path, mo
             inj.write_bytes(backup)
         else:
             inj.unlink(missing_ok=True)
+        st.unlink(missing_ok=True)
+        if st_existed:
+            st.write_bytes(st_backup)
+
+
+# --- midweek practice report vs a self-contradicting artifact -------------
+
+def _write_injuries(vals, state):
+    import json
+    import pandas as pd
+    p = Path("data/injuries.csv")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"player": [f"P{i}" for i in range(len(vals))],
+                  "team": ["BAL"] * len(vals), "season": [2026] * len(vals),
+                  "week": [9] * len(vals), "status": vals,
+                  "practice_status": ["Did Not Participate In Practice"] * len(vals)}
+                 ).to_csv(p, index=False)
+    Path("data/injuries_source_status.json").write_text(
+        json.dumps({"season": 2026, "week": 9, "state": state, "rows": len(vals)}),
+        encoding="utf-8")
+
+
+def test_midweek_practice_only_report_does_not_block():
+    """Designations publish Friday; a Wednesday build legitimately has none."""
+    import importlib
+    aud = importlib.import_module("scripts.audit_2026_production_readiness")
+    inj, st = Path("data/injuries.csv"), Path("data/injuries_source_status.json")
+    had = (inj.exists() and inj.read_bytes(), st.exists() and st.read_bytes())
+    try:
+        _write_injuries([None, None, None], "practice_report_only")
+        sev = {f["code"]: f["severity"] for f in aud._injury_contract_findings()}
+        assert sev.get("injury_designations_not_published_yet") == "P2"
+        assert "injury_status_all_null" not in sev
+    finally:
+        for p, data in zip((inj, st), had):
+            p.unlink(missing_ok=True)
+            if data:
+                p.write_bytes(data)
+
+
+def test_an_artifact_that_claims_official_but_has_no_designation_blocks():
+    """The real defect: the file contradicting its own provenance."""
+    import importlib
+    aud = importlib.import_module("scripts.audit_2026_production_readiness")
+    inj, st = Path("data/injuries.csv"), Path("data/injuries_source_status.json")
+    had = (inj.exists() and inj.read_bytes(), st.exists() and st.read_bytes())
+    try:
+        _write_injuries([None, None], "official_report")
+        sev = {f["code"]: f["severity"] for f in aud._injury_contract_findings()}
+        assert sev.get("injury_status_all_null") == "P0"
+    finally:
+        for p, data in zip((inj, st), had):
+            p.unlink(missing_ok=True)
+            if data:
+                p.write_bytes(data)
+
+
+def test_builder_labels_a_practice_only_frame_honestly():
+    import importlib
+    import pandas as pd
+    b = importlib.import_module("scripts.build.build_injuries_weekly")
+    practice_only = pd.DataFrame({"status": [None, None], "designation": [None, None],
+                                  "practice_status": ["Did Not Participate In Practice",
+                                                      "Full Participation in Practice"]})
+    assert b._report_state(practice_only) == "practice_report_only"
+    with_designation = pd.DataFrame({"status": ["Out", None], "designation": [None, None],
+                                     "practice_status": ["Did Not Participate In Practice", None]})
+    assert b._report_state(with_designation) == "official_report"

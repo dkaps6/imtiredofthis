@@ -401,9 +401,41 @@ def _injury_contract_findings() -> list[dict[str, str]]:
                                 "data/injuries.csv has no 'status' column; the injury rule "
                                 "cannot fire and every inactive player keeps full opportunity"))
         elif int(df["status"].notna().sum()) == 0:
-            out.append(_finding("P0", "injury_status_all_null",
-                                f"data/injuries.csv has 'status' but all {len(df)} rows are null; "
-                                "the injury rule cannot fire"))
+            # An all-null status column has two very different causes and only
+            # one of them is a defect.
+            #
+            # NFL clubs publish practice participation Wed/Thu and the game
+            # designation (Out/Doubtful/Questionable) on Friday. A midweek build
+            # therefore legitimately has no designation yet, and the builder now
+            # labels that state "practice_report_only". That is truthful, it is
+            # expected, and blocking on it would make every midweek dry run fail
+            # for a reason nobody can fix.
+            #
+            # The defect is the artifact CONTRADICTING ITSELF: claiming
+            # "official_report" while carrying no official designation. That is
+            # the AGENTS.md section 7 "labelled current while actually stale"
+            # class and it must block, because downstream the rule layer reads
+            # status, finds nothing, and every unavailable player silently keeps
+            # full opportunity.
+            import json as _json
+            state = None
+            status_path = ROOT / "data" / "injuries_source_status.json"
+            if status_path.exists() and status_path.stat().st_size:
+                try:
+                    state = str(_json.loads(status_path.read_text(encoding="utf-8")).get("state", ""))
+                except Exception:
+                    state = None
+            if state == "practice_report_only":
+                out.append(_finding("P2", "injury_designations_not_published_yet",
+                                    f"data/injuries.csv carries {len(df)} practice-participation rows "
+                                    "and no game designation; the provider labels this "
+                                    "'practice_report_only' and the injury rule cannot fire until "
+                                    "designations publish (Friday). Truthful midweek state, not a break"))
+            else:
+                out.append(_finding("P0", "injury_status_all_null",
+                                    f"data/injuries.csv has 'status' but all {len(df)} rows are null "
+                                    f"while injuries_source_status.json reports state={state!r}; "
+                                    "the artifact contradicts itself and the injury rule cannot fire"))
         else:
             vals = {str(v).upper().strip() for v in df["status"].dropna().unique()}
             tokens = ("OUT", "DOUBTFUL", "IR", "PUP")

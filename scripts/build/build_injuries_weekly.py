@@ -175,6 +175,30 @@ def load_nflcom_fallback(season: int, week: int) -> pd.DataFrame:
     return normalize_nflcom_dataframe(pd.concat(tables, ignore_index=True), season, week)
 
 
+def _report_state(df: "pd.DataFrame") -> str:
+    """Label what the provider actually published, not merely that rows exist.
+
+    NFL clubs publish PRACTICE PARTICIPATION on Wednesday and Thursday and the
+    GAME DESIGNATION (Out / Doubtful / Questionable) on Friday. A midweek pull
+    therefore returns a populated frame whose ``status`` and ``designation``
+    columns are entirely empty. Calling that ``official_report`` is false: the
+    official designation does not exist yet, and the downstream rule layer
+    (``simulation_rules._injury_limited``) reads ``status``, so it silently
+    cannot fire. AGENTS.md section 4 requires the artifact be labelled for what
+    it is rather than quietly passed off as current.
+    """
+    designation_cols = [c for c in ("status", "designation") if c in df.columns]
+    has_designation = any(
+        df[c].notna().any() and df[c].astype(str).str.strip().ne("").any()
+        for c in designation_cols
+    )
+    if has_designation:
+        return "official_report"
+    if "practice_status" in df.columns and df["practice_status"].notna().any():
+        return "practice_report_only"
+    return "official_report"
+
+
 def build_injuries_with_status(season: int, week: int) -> tuple[pd.DataFrame, dict]:
     """Return injury rows plus an explicit provider-health state.
 
@@ -190,7 +214,7 @@ def build_injuries_with_status(season: int, week: int) -> tuple[pd.DataFrame, di
         successful_checks.append("nflverse")
         if not df.empty:
             status = {
-                "season": int(season), "week": int(week), "state": "official_report",
+                "season": int(season), "week": int(week), "state": _report_state(df),
                 "source": "nflverse", "rows": int(len(df)),
                 "successful_checks": successful_checks, "provider_errors": errors,
                 "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -204,7 +228,7 @@ def build_injuries_with_status(season: int, week: int) -> tuple[pd.DataFrame, di
         successful_checks.append("nfl.com")
         if not df.empty:
             status = {
-                "season": int(season), "week": int(week), "state": "official_report",
+                "season": int(season), "week": int(week), "state": _report_state(df),
                 "source": "nfl.com", "rows": int(len(df)),
                 "successful_checks": successful_checks, "provider_errors": errors,
                 "generated_at_utc": datetime.now(timezone.utc).isoformat(),
