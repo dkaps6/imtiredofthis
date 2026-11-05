@@ -6,7 +6,6 @@ ARI,Elijah Higgins,TE,elijahhiggins,ourlads_depth
 ARI,Evan Hull,RB,evanhull,ourlads_depth
 ARI,Gardner Minshew,QB,gardnerminshew,ourlads_depth
 ARI,Harrison Wallace,SWR,harrisonwallace,ourlads_depth
-ARI,Jacoby Brissett,QB,jacobybrissett,ourlads_depth
 ARI,Michael Wilson,RWR,michaelwilson,ourlads_depth
 ARI,Reggie Virgil,LWR,reggievirgil,ourlads_depth
 ARI,Simi Fehoko,LWR,simifehoko,ourlads_depth
@@ -80,6 +79,7 @@ CHI,Luther Burden,RWR,lutherburden,ourlads_depth
 CHI,Rome Odunze,LWR,romeodunze,ourlads_depth
 CHI,Roschon Johnson,RB,roschonjohnson,ourlads_depth
 CHI,Sam Roush,TE,samroush,ourlads_depth
+CHI,Stephen Carlson,TE,stephencarlson,ourlads_depth
 CHI,Tyson Bagent,QB,tysonbagent,ourlads_depth
 CHI,Zavion Thomas,SWR,zavionthomas,ourlads_depth
 CIN,Chase Brown,RB,chasebrown,ourlads_depth
@@ -240,7 +240,6 @@ LAC,Quentin Johnston,LWR,quentinjohnston,ourlads_depth
 LAC,Scott Matlock,FB,scottmatlock,ourlads_depth
 LAC,Theo Wease,LWR,theowease,ourlads_depth
 LAC,Tre Harris,RWR,treharris,ourlads_depth
-LAR,Alex Bachman,SWR,alexbachman,ourlads_depth
 LAR,Blake Corum,RB,blakecorum,ourlads_depth
 LAR,CJ Daniels,LWR,cjdaniels,ourlads_depth
 LAR,Colby Parkinson,TE,colbyparkinson,ourlads_depth
@@ -258,7 +257,6 @@ LAR,Ty Simpson,QB,tysimpson,ourlads_depth
 LV,Aidan O'Connell,QB,aidanoconnell,ourlads_depth
 LV,Ashton Jeanty,RB,ashtonjeanty,ourlads_depth
 LV,Brock Bowers,TE,brockbowers,ourlads_depth
-LV,Cody White,RWR,codywhite,ourlads_depth
 LV,Connor Heyward,FB,connorheyward,ourlads_depth
 LV,Dareke Young,SWR,darekeyoung,ourlads_depth
 LV,Dont'E Thornton,LWR,dontethornton,ourlads_depth
@@ -290,7 +288,7 @@ MIA,Will Kacmarek,TE,willkacmarek,ourlads_depth
 MIN,Aaron Jones,RB,aaronjones,ourlads_depth
 MIN,Ben Yurosek,TE,benyurosek,ourlads_depth
 MIN,Carson Wentz,QB,carsonwentz,ourlads_depth
-MIN,Demond Claiborne,RB,demondclaiborne,ourlads_depth
+MIN,Deejay Dallas,RB,deejaydallas,ourlads_depth
 MIN,Gavin Bartholomew,TE,gavinbartholomew,ourlads_depth
 MIN,Jauan Jennings,SWR,jauanjennings,ourlads_depth
 MIN,Jordan Addison,RWR,jordanaddison,ourlads_depth
