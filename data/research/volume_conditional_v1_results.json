@@ -1,0 +1,272 @@
+{
+  "gates": {
+    "M1": {
+      "pass": true,
+      "msg": "conditioner=ensemble_proj target=actual; 19 forbidden columns absent from ['ensemble_proj', 'actual', 'market', 'season', 'player']"
+    },
+    "M2": {
+      "pass": true,
+      "msg": "fits are 2024 only; 2025 is blind"
+    },
+    "M4": {
+      "pass": false,
+      "msg": "pass_yards not evaluable; control unverifiable"
+    }
+  },
+  "markets": {
+    "rec_yards": {
+      "V0_incumbent": {
+        "ppmae": 18.93012934573429,
+        "level": 0.7229924838210385,
+        "mean_of_ratios": 0.36247954971966645,
+        "median_of_ratios": 0.312837859506673,
+        "mean_over_mean": 0.31190258014799555
+      },
+      "V1_linear": {
+        "ppmae": 20.27460927825547,
+        "level": 1.041771419555198,
+        "mean_of_ratios": -0.5050320184357617,
+        "median_of_ratios": -0.11931794080337466,
+        "mean_over_mean": -0.06891984278437979,
+        "mae_delta": [
+          1.3444799325211791,
+          0.7868651976290866,
+          1.8982777288459987
+        ],
+        "S1": true,
+        "S2": false,
+        "S3": 0.0,
+        "S4": true,
+        "worst_quartile_rel": 0.0698751476684901,
+        "worst_quartile": "Q1"
+      },
+      "V2_tiered": {
+        "ppmae": 20.069366399176683,
+        "level": 1.0442850389921137,
+        "mean_of_ratios": -0.30353403846661675,
+        "median_of_ratios": -0.02236124854352628,
+        "mean_over_mean": 0.019817623346298108,
+        "mae_delta": [
+          1.1392370534423915,
+          0.645551967177602,
+          1.6796343556309623
+        ],
+        "S1": true,
+        "S2": false,
+        "S3": 1.0,
+        "S4": true,
+        "worst_quartile_rel": 0.04685388628627676,
+        "worst_quartile": "Q1"
+      },
+      "V3_isotonic": {
+        "ppmae": 20.094741129452935,
+        "level": 1.043799284365049,
+        "mean_of_ratios": -0.2470428824897013,
+        "median_of_ratios": -0.010107846904267248,
+        "mean_over_mean": 0.045488874840364346,
+        "mae_delta": [
+          1.1646117837186432,
+          0.6305983573789968,
+          1.705492953296189
+        ],
+        "S1": true,
+        "S2": false,
+        "S3": 1.0,
+        "S4": true,
+        "worst_quartile_rel": 0.04800046708026669,
+        "worst_quartile": "Q1"
+      }
+    },
+    "receptions": {
+      "V0_incumbent": {
+        "ppmae": 1.4304489427659675,
+        "level": 0.7093699528936742,
+        "mean_of_ratios": 0.5329522605349507,
+        "median_of_ratios": 0.32475,
+        "mean_over_mean": 0.34741651400368156
+      },
+      "V1_linear": {
+        "ppmae": 1.490602349800104,
+        "level": 1.0593345589552063,
+        "mean_of_ratios": 0.12698834856935415,
+        "median_of_ratios": -0.04538593588646345,
+        "mean_over_mean": -0.0053055072158445515,
+        "mae_delta": [
+          0.060153407034136325,
+          -0.008643306141334548,
+          0.12895098191412224
+        ],
+        "S1": true,
+        "S2": true,
+        "S3": 1.0,
+        "S4": false,
+        "worst_quartile_rel": 0.002587979367145653,
+        "worst_quartile": "Q3"
+      },
+      "V2_tiered": {
+        "ppmae": 1.4929703037401176,
+        "level": 1.0597336050880044,
+        "mean_of_ratios": 0.19508728027354927,
+        "median_of_ratios": 0.0037538929133678067,
+        "mean_over_mean": 0.054454740419629166,
+        "mae_delta": [
+          0.06252136097414984,
+          -0.00038598721522013714,
+          0.12604276065330505
+        ],
+        "S1": true,
+        "S2": true,
+        "S3": 1.0,
+        "S4": false,
+        "worst_quartile_rel": 0.008304331227828837,
+        "worst_quartile": "Q3"
+      },
+      "V3_isotonic": {
+        "ppmae": 1.473225429873259,
+        "level": 1.06181488195854,
+        "mean_of_ratios": 0.1943000708130771,
+        "median_of_ratios": 0.05578201151971651,
+        "mean_over_mean": 0.04431676320777145,
+        "mae_delta": [
+          0.04277648710729126,
+          -0.020206435550784087,
+          0.10640033113338052
+        ],
+        "S1": true,
+        "S2": true,
+        "S3": 1.0,
+        "S4": false,
+        "worst_quartile_rel": 0.01222433042127774,
+        "worst_quartile": "Q3"
+      }
+    },
+    "rush_yards": {
+      "V0_incumbent": {
+        "ppmae": 18.243577993464545,
+        "level": 0.7502965362925004,
+        "mean_of_ratios": 0.10033783661255424,
+        "median_of_ratios": 0.19348070201477252,
+        "mean_over_mean": 0.1351752424251258
+      },
+      "V1_linear": {
+        "ppmae": 18.849241940188943,
+        "level": 1.0377843825301283,
+        "mean_of_ratios": -0.5506792511749103,
+        "median_of_ratios": -0.19983798465126856,
+        "mean_over_mean": -0.11718154412157866,
+        "mae_delta": [
+          0.6056639467243963,
+          -0.19083023580141675,
+          1.3818123818794878
+        ],
+        "S1": false,
+        "S2": true,
+        "S3": 0.0,
+        "S4": true,
+        "worst_quartile_rel": 0.07552147890763847,
+        "worst_quartile": "Q0"
+      },
+      "V2_tiered": {
+        "ppmae": 18.774853262189094,
+        "level": 1.0336835165472509,
+        "mean_of_ratios": -0.46736295425082686,
+        "median_of_ratios": -0.03127891523401338,
+        "mean_over_mean": -0.11745197768251514,
+        "mae_delta": [
+          0.5312752687245477,
+          -0.18635427047041753,
+          1.2983081407975932
+        ],
+        "S1": true,
+        "S2": true,
+        "S3": 0.0,
+        "S4": true,
+        "worst_quartile_rel": 0.098622252708525,
+        "worst_quartile": "Q0"
+      },
+      "V3_isotonic": {
+        "ppmae": 18.901880689332643,
+        "level": 1.034750247786698,
+        "mean_of_ratios": -0.6561870758355375,
+        "median_of_ratios": -0.24279970760233938,
+        "mean_over_mean": -0.1467521910739742,
+        "mae_delta": [
+          0.6583026958680995,
+          -0.12661448205296102,
+          1.4392468906385274
+        ],
+        "S1": false,
+        "S2": true,
+        "S3": 0.0,
+        "S4": true,
+        "worst_quartile_rel": 0.10036440712773068,
+        "worst_quartile": "Q0"
+      }
+    },
+    "rush_rec_yards": {
+      "V0_incumbent": {
+        "ppmae": 28.397045174963758,
+        "level": 0.6210565416782635,
+        "mean_of_ratios": -0.08348728746439826,
+        "median_of_ratios": 0.022777852373479512,
+        "mean_over_mean": 0.10724082637927068
+      },
+      "V1_linear": {
+        "ppmae": 28.169612994499012,
+        "level": 0.8886315429720928,
+        "mean_of_ratios": -0.6721341240027019,
+        "median_of_ratios": -0.39050333683619376,
+        "mean_over_mean": -0.12323245345967915,
+        "mae_delta": [
+          -0.22743218046474903,
+          -2.7267961250613597,
+          2.1142126582145018
+        ],
+        "S1": false,
+        "S2": true,
+        "S3": 1.0,
+        "S4": false,
+        "worst_quartile_rel": 0.00618552126220109,
+        "worst_quartile": "Q0"
+      },
+      "V2_tiered": {
+        "ppmae": 27.973857562141554,
+        "level": 0.8888090980165302,
+        "mean_of_ratios": -0.6228945719559911,
+        "median_of_ratios": -0.2946880305965168,
+        "mean_over_mean": -0.12074979010253606,
+        "mae_delta": [
+          -0.4231876128222067,
+          -2.740721455263376,
+          1.8879018442891087
+        ],
+        "S1": false,
+        "S2": true,
+        "S3": 1.0,
+        "S4": false,
+        "worst_quartile_rel": -0.012994676060132512,
+        "worst_quartile": "Q0"
+      },
+      "V3_isotonic": {
+        "ppmae": 28.12696781382498,
+        "level": 0.8908546585259762,
+        "mean_of_ratios": -0.6010211332749948,
+        "median_of_ratios": -0.3113818568179624,
+        "mean_over_mean": -0.10847556930969415,
+        "mae_delta": [
+          -0.27007736113878406,
+          -2.623594053299896,
+          2.0825019012076638
+        ],
+        "S1": false,
+        "S2": true,
+        "S3": 1.0,
+        "S4": false,
+        "worst_quartile_rel": -0.0024980905403679003,
+        "worst_quartile": "Q0"
+      }
+    }
+  },
+  "m4_dead": [],
+  "any": false
+}
