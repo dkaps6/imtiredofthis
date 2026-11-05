@@ -5,6 +5,16 @@ on:
     workflows: ["Full Slate"]
     types: [completed]
     branches: [main]
+  # Re-archive a PAST run's artifact on demand. A workflow_run trigger fires
+  # once, against the archiver as it existed on main at that moment, so a run
+  # whose paid boundary this workflow could not yet carry (alternate lines
+  # before this commit) leaves an unrepeatable purchase stranded in a 90-day
+  # artifact with no way to rescue it. AGENTS.md 5a says that is not storage.
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Full Slate run id whose artifact should be archived"
+        required: true
 
 permissions:
   contents: write
@@ -23,12 +33,12 @@ jobs:
     # odds or re-prices anything -- it only reads outputs the triggering
     # run already produced and already paid for, same boundary as
     # scripts/operations/archive_priced_board_v1.py itself.
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
-      SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+      SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id || github.event.workflow_run.id }}
     steps:
       - uses: actions/checkout@v4
         with:
