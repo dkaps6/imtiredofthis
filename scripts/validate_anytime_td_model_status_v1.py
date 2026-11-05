@@ -33,7 +33,58 @@ def main() -> int:
     priced.columns = [str(c).strip().lower() for c in priced.columns]
     atd = priced.loc[priced["source_market"].astype(str).eq("player_anytime_td")].copy()
     if atd.empty:
-        raise RuntimeError("ATD status found zero priced anytime-TD rows")
+        # Zero ATD rows has two very different causes and only one is a defect.
+        #
+        # player_anytime_td was removed from the paid pull on 2026-11-04 by
+        # standing instruction, in favour of the alternate-line ladders. When
+        # the market is not requested there is simply nothing to audit, and the
+        # provenance contract this script enforces -- sportsbook-independent
+        # prior, no generic ML/State lane, valid probabilities -- holds
+        # vacuously. Failing there blocks every paid slate for the absence of a
+        # market nobody asked for; 2026 Week 9 run 42104253081 died exactly
+        # that way after the board was already priced.
+        #
+        # If the market IS configured and still produced nothing, that is a
+        # real provider or pricing gap and must still fail closed. The
+        # configured market list is the authority for telling the two apart; if
+        # it cannot be read, fail closed rather than assume.
+        try:
+            from scripts.fetch_props_oddsapi import MARKETS as _CONFIGURED_MARKETS
+        except Exception as exc:
+            raise RuntimeError(
+                "ATD status found zero priced anytime-TD rows and the configured "
+                f"market list could not be read to explain it: {exc}"
+            ) from exc
+        if "player_anytime_td" in set(_CONFIGURED_MARKETS):
+            raise RuntimeError(
+                "ATD status found zero priced anytime-TD rows even though "
+                "player_anytime_td IS in the configured market pull"
+            )
+        rows = pd.DataFrame([{
+            "execution_status": "PASS",
+            "scientific_status": "DEDICATED_ATD_WALK_FORWARD_CERTIFICATION_REQUIRED",
+            "atd_market_offered": 0,
+            "old_market_assisted_scorer_active": 0,
+            "current_sportsbook_inputs_used_for_football_probability": 0,
+            "current_method": "not priced this run; player_anytime_td is not in the configured market pull",
+            "priced_atd_book_line_rows": 0,
+            "priced_atd_players": 0,
+            "player_history_rate_rows": 0,
+            "position_prior_fallback_rows": 0,
+            "dedicated_probability_model_certified": 0,
+            "dedicated_brier_logloss_calibration_audited": 0,
+        }])
+        OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
+        rows.to_csv(OUT_CSV, index=False)
+        payload = rows.iloc[0].to_dict()
+        payload.update({
+            "disposition": "ATD_MARKET_NOT_OFFERED_BY_CONFIGURATION",
+            "next_required_research": "none while the market is not pulled; re-audit before reinstating player_anytime_td",
+            "sportsbook_role": "not fetched",
+        })
+        OUT_JSON.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print("[anytime_td_model_status] " + json.dumps(payload, sort_keys=True))
+        return 0
     prior = json.loads(prior_status_path.read_text(encoding="utf-8"))
 
     if prior.get("sportsbook_inputs_used") is not False:
@@ -50,6 +101,7 @@ def main() -> int:
     rows = pd.DataFrame([{
         "execution_status": "PASS",
         "scientific_status": "DEDICATED_ATD_WALK_FORWARD_CERTIFICATION_REQUIRED",
+        "atd_market_offered": 1,
         "old_market_assisted_scorer_active": 0,
         "current_sportsbook_inputs_used_for_football_probability": 0,
         "current_method": "offensive_td_rate + rz_share/script modifiers + joint MC Bernoulli",
