@@ -3,9 +3,9 @@
   "files": {
     "data/metrics_ready.csv": {
       "archived_as": "metrics_ready.csv.gz",
-      "bytes_gz": 83432,
-      "bytes_raw": 2483709,
-      "sha256_raw": "f068b2f0f14f1f252bf4bdb03040d6b52ee30d5116cc11b6dd52a30786309f26"
+      "bytes_gz": 83314,
+      "bytes_raw": 2477765,
+      "sha256_raw": "1c572cec77d7f820f0859538f98f87361c0d5aa2d2a15c3937bf1b83d3148e50"
     },
     "data/model_ensemble_diagnostics.csv": {
       "archived_as": "model_ensemble_diagnostics.csv.gz",
@@ -27,9 +27,9 @@
     },
     "data/model_rule_simulation_inputs.csv": {
       "archived_as": "model_rule_simulation_inputs.csv.gz",
-      "bytes_gz": 139039,
-      "bytes_raw": 3152938,
-      "sha256_raw": "9cf048b8574f5234d4287b242c8b0c9c8844d786d7cb20be1fb0244ca811f0ed"
+      "bytes_gz": 138792,
+      "bytes_raw": 3146994,
+      "sha256_raw": "d08cb39ace5e9dbe14dfb51749882223ba391a361fdef99718781bbce94cf3c4"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
@@ -70,8 +70,8 @@
   },
   "required_column_stripped": {},
   "required_missing": [],
-  "source_git_sha": "20a1042d98fc38b1f90af973073c7a4126eeee89",
-  "source_run_id": "42102376747",
+  "source_git_sha": "736e28c1ee030f61d882206c2a8354f5db756a92",
+  "source_run_id": "42104253081",
   "stem": "2026_wk09",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
