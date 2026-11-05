@@ -160,6 +160,16 @@ def main() -> int:
     _require(atd.get("execution_status") == "PASS", "ATD execution did not pass")
     _require(int(atd.get("current_sportsbook_inputs_used_for_football_probability", 1)) == 0, "sportsbook input leaked into ATD football probability")
     _require(int(atd.get("dedicated_probability_model_certified", 1)) == 0, "ATD science status unexpectedly changed; re-audit required")
+    # player_anytime_td is not in the configured pull as of 2026-11-04, so the
+    # ATD status artifact may legitimately report the market as not offered.
+    # Make that claim falsifiable: it is only acceptable with zero priced rows,
+    # so a mislabelled artifact cannot wave real ATD rows past this gate.
+    if int(atd.get("atd_market_offered", 1)) == 0:
+        _require(
+            int(atd.get("priced_atd_book_line_rows", -1)) == 0
+            and int(atd.get("priced_atd_players", -1)) == 0,
+            "ATD status claims the market was not offered but reports priced rows",
+        )
 
     snapshot_mode = "NO_CREDIT_REPLAY" if live.get("replay_source_run") else "LIVE_SPORTSBOOK_SNAPSHOT"
     payload = {
