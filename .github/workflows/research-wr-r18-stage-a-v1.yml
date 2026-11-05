@@ -1,0 +1,112 @@
+name: WR R18 Receiver Target CPOE Stage A V1
+
+on:
+  push:
+    branches:
+      - research-wr-r18-receiver-target-cpoe-v1
+    paths:
+      - '.github/workflows/research-wr-r18-stage-a-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  stage-a-2023-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AUTHORITY_RUN_ID: '34238301577'
+      AUTHORITY_ARTIFACT_ID: '10061328722'
+      AUTHORITY_ARTIFACT_NAME: wr-r15-wr1-anchor-participation-v1
+      AUTHORITY_DIGEST: sha256:8df31b5e136621d959272daf0422dfc665593cd0da2eb0892b4aa69c1417f3ce
+      AUTHORITY_CSV: /tmp/wr_r15_artifact/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv
+      OUT_DIR: data/backtests/wr_r18_receiver_target_cpoe_v1
+
+    steps:
+      - name: Checkout frozen R18 branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas numpy pyarrow nflreadpy
+
+      - name: Run final corrected WR-R18 synthetic mechanics suite
+        run: |
+          python -m scripts.research.test_wr_r18_receiver_target_cpoe_synthetic_v1c
+
+      - name: Verify exact WR-R15 authority artifact lineage
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${AUTHORITY_RUN_ID}/artifacts" > /tmp/wr_r15_artifacts.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          payload = json.loads(Path('/tmp/wr_r15_artifacts.json').read_text())
+          matches = [a for a in payload.get('artifacts', []) if int(a.get('id', -1)) == int(os.environ['AUTHORITY_ARTIFACT_ID'])]
+          if len(matches) != 1:
+              raise SystemExit(f"expected exactly one authority artifact id={os.environ['AUTHORITY_ARTIFACT_ID']}, got {len(matches)}")
+          a = matches[0]
+          if a.get('name') != os.environ['AUTHORITY_ARTIFACT_NAME']:
+              raise SystemExit(f"authority artifact name mismatch: {a.get('name')}")
+          if a.get('digest') != os.environ['AUTHORITY_DIGEST']:
+              raise SystemExit(f"authority digest mismatch: {a.get('digest')}")
+          if bool(a.get('expired')):
+              raise SystemExit('authority artifact is expired')
+          print('WR-R15 authority artifact lineage: PASS')
+          print(json.dumps({k: a.get(k) for k in ['id','name','digest','expired','size_in_bytes']}, indent=2))
+          PY
+
+      - name: Download exact WR-R15 authority artifact
+        run: |
+          rm -rf /tmp/wr_r15_artifact
+          mkdir -p /tmp/wr_r15_artifact
+          gh run download "${AUTHORITY_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${AUTHORITY_ARTIFACT_NAME}" \
+            --dir /tmp/wr_r15_artifact
+          test -s "${AUTHORITY_CSV}"
+          ls -lh "${AUTHORITY_CSV}"
+
+      - name: Run frozen WR-R18 Stage A on 2023 development only
+        run: |
+          rm -rf "${OUT_DIR}"
+          python -m scripts.research.evaluate_wr_r18_receiver_target_cpoe_stage_a_v1c \
+            --authority "${AUTHORITY_CSV}" \
+            --out-dir "${OUT_DIR}"
+
+      - name: Assert 2024 holdout remained sealed
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          p = Path(os.environ['OUT_DIR']) / 'wr_r18_stage_a_result.json'
+          if not p.exists():
+              raise SystemExit(f'missing Stage-A result: {p}')
+          result = json.loads(p.read_text())
+          if result.get('stage') != 'A_2023_DEVELOPMENT_ONLY':
+              raise SystemExit(f"unexpected stage: {result.get('stage')}")
+          if result.get('holdout_2024_scored') is not False:
+              raise SystemExit('2024 holdout was not sealed')
+          print('2024 holdout seal: PASS')
+          print(json.dumps(result, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload WR-R18 Stage A evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-r18-receiver-target-cpoe-stage-a-v1
+          path: data/backtests/wr_r18_receiver_target_cpoe_v1/
+          if-no-files-found: warn
+          retention-days: 30
