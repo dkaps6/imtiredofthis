@@ -933,6 +933,14 @@ jobs:
           python scripts/utils/audit_repo.py --strict 2>&1 | tail -40 || echo "(audit_repo exited non-zero)"
           echo "--- python scripts/audit_2026_production_readiness.py --strict"
           python scripts/audit_2026_production_readiness.py --strict 2>&1 | tail -40 || echo "(readiness audit exited non-zero)"
+          echo "--- live odds gate status (why an odds fetch failed)"
+          if [ -s data/live_odds_status.json ]; then cat data/live_odds_status.json; else echo "  (absent: the gate raised before writing it)"; fi
+          echo "--- alternate-line probe status"
+          if [ -s data/alt_line_probe_status.json ]; then cat data/alt_line_probe_status.json; else echo "  (absent: the alt probe never ran)"; fi
+          echo "--- odds artifact row counts"
+          for f in outputs/props_raw.csv outputs/odds_game.csv outputs/props_alt_raw.csv outputs/alt_line_edges.csv; do
+            if [ -e "$f" ]; then echo "  $(wc -l < "$f") $f"; else echo "  MISSING $f"; fi
+          done
           echo "--- key artifact presence"
           for f in data/injuries.csv data/team_context_v3.csv data/model_ensemble_weights.csv \
                    data/team_week_map.csv data/player_form.csv; do

@@ -1745,6 +1745,41 @@ def _scope_events_before_paid_calls(events: list) -> list:
     return kept
 
 
+def _write_alt_probe_status(probe_log, serving, probe_eid) -> None:
+    """Record the alternate-market probe to a COMMITTED artifact, not just the log.
+
+    The first live attempt (run 42088454699) captured nothing from alternates and
+    the reason was invisible: GitHub's log API only returns a tail, the job's
+    output summary pushes any earlier failure out of it, and artifact downloads
+    are blocked from some environments. A paid run that cannot be diagnosed
+    afterwards is a paid run wasted. This lands under data/, so the market
+    track record archiver commits it and the next failure is readable from git.
+
+    An HTTP 401 or 403 here almost always means the OddsAPI plan does not
+    include alternate markets, which is a subscription question rather than a
+    code one.
+    """
+    try:
+        statuses = sorted({int(p["http_status"]) for p in probe_log})
+        payload = {
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "probe_event_id": str(probe_eid),
+            "markets_requested": list(ALT_LINE_MARKETS),
+            "markets_serving": list(serving),
+            "probe": probe_log,
+            "distinct_http_statuses": statuses,
+            "likely_plan_restriction": bool(statuses) and all(s in (401, 403) for s in statuses),
+            "all_empty_http_200": bool(probe_log) and all(
+                p["http_status"] == 200 and p["rows"] == 0 for p in probe_log),
+        }
+        path = DATA_DIR / "alt_line_probe_status.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        log.info(f"[alt] wrote {path}: serving={serving or 'NONE'} statuses={statuses}")
+    except Exception as err:  # never let diagnostics break a paid run
+        log.info(f"[alt] could not write probe status: {err}")
+
+
 def _fetch_alt_lines(
     api_key: str,
     region: str,
@@ -1769,6 +1804,7 @@ def _fetch_alt_lines(
 
     probe_eid = str(event_ids[0])
     serving: List[str] = []
+    probe_log: List[dict[str, Any]] = []
     log.info(f"[alt] probing {len(ALT_LINE_MARKETS)} alternate markets on event {probe_eid}")
     probe_frames: List[pd.DataFrame] = []
     for mk in ALT_LINE_MARKETS:
@@ -1787,8 +1823,10 @@ def _fetch_alt_lines(
                 probe_frames.append(df)
                 n = len(df)
                 serving.append(mk)
+        probe_log.append({"market": mk, "http_status": int(status), "rows": int(n)})
         log.info(f"[alt] probe market={mk} status={status} rows={n} limit={_lim(headers)}")
 
+    _write_alt_probe_status(probe_log, serving, probe_eid)
     if not serving:
         log.info("[alt] no alternate market returned offers on the probe event; "
                  "capture stops here and costs %d calls", len(ALT_LINE_MARKETS))
