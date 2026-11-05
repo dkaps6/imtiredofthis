@@ -1,0 +1,128 @@
+name: Market Relative Bet Selector V1 Stage 1
+
+on:
+  pull_request:
+    paths:
+      - "docs/research/MARKET_RELATIVE_BET_SELECTOR_V1_PLAN.md"
+      - "docs/research/MARKET_RELATIVE_BET_SELECTOR_V1_PRE_RESULT_AMENDMENT.md"
+      - "scripts/research/build_market_relative_stage1_source_v1.py"
+      - "scripts/research/market_relative_bet_selector_stage1_v1.py"
+      - "tests/test_market_relative_bet_selector_stage1_v1.py"
+      - ".github/workflows/research-market-relative-bet-selector-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  stage1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow
+
+      - name: Run frozen Stage-1 mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q             tests/test_market_relative_bet_selector_stage1_v1.py             tests/test_build_authority_exact_vegas_projection_trace_v1.py             tests/test_benchmark_identity_v1.py
+
+      - name: Verify primary authority artifact identities are still live
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, subprocess
+          expected={
+            34122984048:(10018942911,"qb-pd3-internal-disagreement-reliability","sha256:cde910939dba0631a2a68e9acfbcafcdb90af1d1b2128627442073854bf3f849"),
+            34152797603:(10029942404,"te-r5p-production-contract-refit-v1","sha256:f9951441b748ef72514dbc81adf6fbe9cd023c9bf64ecb52a016840989ab4cdb"),
+          }
+          repo=os.environ["GITHUB_REPOSITORY"]
+          for run,(aid,name,digest) in expected.items():
+              raw=subprocess.check_output(["gh","api",f"repos/{repo}/actions/runs/{run}/artifacts?per_page=100"],text=True)
+              arts=json.loads(raw).get("artifacts",[])
+              m=[a for a in arts if int(a.get("id",-1))==aid]
+              if len(m)!=1: raise SystemExit(f"FATAL authority artifact {aid} missing")
+              a=m[0]
+              if a.get("name")!=name or a.get("digest")!=digest or a.get("expired"):
+                  raise SystemExit(f"FATAL authority artifact drift: {a}")
+              print("AUTHORITY_ARTIFACT_PASS",run,aid,name,digest)
+          PY
+
+      - name: Download exact QB authority
+        uses: actions/download-artifact@v4
+        with:
+          name: qb-pd3-internal-disagreement-reliability
+          path: /tmp/qb
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34122984048
+
+      - name: Download exact TE authority
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r5p-production-contract-refit-v1
+          path: /tmp/te
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34152797603
+
+      - name: Build leakage-safe historical schedule inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/mrsel /tmp/hist_2024 /tmp/hist_2025
+          mkdir -p /tmp/mrsel /tmp/hist_2024 /tmp/hist_2025
+          python scripts/backtest/build_historical_inputs.py             --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py             --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+
+      - name: Build exact Stage-1 football source rows
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/build_market_relative_stage1_source_v1.py             --qb-casebook /tmp/qb/data/backtests/qb_pd3_internal_disagreement_reliability/qb_pd3_casebook.csv             --te-casebook /tmp/te/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_oos_player_casebook.csv             --schedule-file /tmp/hist_2024/schedule_history.csv             --schedule-file /tmp/hist_2025/schedule_history.csv             --out /tmp/mrsel/stage1_authority_projection_trace.csv
+
+      - name: Rebuild free historical market archive on exact Stage-1 identities
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/prepare_free_market_prop_archive_v1.py             --projection-file /tmp/mrsel/stage1_authority_projection_trace.csv             --out-dir /tmp/mrsel/market_archive
+
+      - name: Run frozen Stage-1 two-direction holdout once
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/market_relative_bet_selector_stage1_v1.py             --source /tmp/mrsel/stage1_authority_projection_trace.csv             --props /tmp/mrsel/market_archive/historical_market_props.csv             --out-dir /tmp/mrsel/result
+          echo "--- STAGE 1 DISPOSITION ---"
+          cat /tmp/mrsel/result/stage1_disposition.json
+          echo "--- STAGE 1 SUMMARY ---"
+          cat /tmp/mrsel/result/stage1_summary.csv
+
+      - name: Upload immutable Stage-1 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-relative-bet-selector-v1-stage1
+          retention-days: 30
+          path: |
+            /tmp/mrsel/stage1_authority_projection_trace.csv
+            /tmp/mrsel/market_relative_stage1_source_audit.csv
+            /tmp/mrsel/market_archive/market_archive_source_audit.csv
+            /tmp/mrsel/market_archive/historical_market_props.csv
+            /tmp/mrsel/result/stage1_matched_rows.csv
+            /tmp/mrsel/result/stage1_summary.csv
+            /tmp/mrsel/result/stage1_detail.csv
+            /tmp/mrsel/result/stage1_disposition.json
+          if-no-files-found: warn
