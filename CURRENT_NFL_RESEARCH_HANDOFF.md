@@ -1,194 +1,159 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-11-04 — V23 — **THE BETTING LAYER WAS ANCHORED ON THE WRONG NUMBER AND IS NOW FIXED / THE LINE IS A NEAR-PERFECT MEDIAN / THE MODEL ADDS A LITTLE, IN THE TWO MARKETS WE CAN TEST / `rush_rec_yards` HAS NO CALIBRATED ENSEMBLE AT ALL / W3-W5 CLOSED FORENSICALLY** / CLAUDE ISSUE #535
+## TOP CHECKPOINT — 2026-11-05 — V24 — **THE 2026 WEEK 9 PAID BOARD IS CERTIFIED AND IN GIT / ALTERNATE LINES WORK AND ARE PRICED / FOUR BOARD-KILLING GATES FIXED, TWO OF THEM OURS / MIN QB WITHHELD ON PURPOSE** / CLAUDE ISSUE #535
 
 **Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.
-**Branch:** all V22/V23 work is on `claude/nice-cori-4qkwqs` (PR #697 open, unmerged).
-**Production changes: TWO, both narrow.** V22's `scripts/audit_2026_production_readiness.py`
-injury-contract gate, and **one row added to `data/model_ensemble_weights.csv`** for
-`rush_rec_yards` (§ below). **No code was modified for the second** — the consumer is already
-generic. Everything else is under `scripts/research/`, `docs/research/`, `docs/production/` or
-`data/research/`.
+**Branch:** `claude/nice-cori-4qkwqs`. **PRs #701-#706 are MERGED to `main`.** Full Slate is
+dispatchable by anyone from `main`; nothing in this checkpoint lives only in a chat.
 
-**V22's findings all stand.** The ceiling (93% of players at the information limit, the alpha
-under-rated −0.0392), universal compression with three sources, allocator scale invariance, the
-opportunity-vs-efficiency shrinkage split, and the three code defects (D1/D3 validated, D2
-withdrawn) are unchanged and archived in
-`docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V22_PRE_V23_2026-11-04.md`. **Do not re-derive them.**
+**V23 is superseded, not retracted.** Its findings all stand and are archived verbatim in
+`docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V23_PRE_V24_2026-11-05.md`: the main line is a
+near-perfect median (realized P(over) 0.476-0.508 in every quartile, so main-line side-picking
+is closed for good), compression is a slope rather than a level, the measured betting
+contribution is 0.56pp on `rec_yards` and 2.28pp on `receptions`, and W3-W5 2026 are closed
+forensically. **Do not re-derive them.**
 
 ---
 
-### WHAT V23 ESTABLISHED — AND IT IS THE FIRST RESULT THAT CHANGES A BET
+### WHAT ACTUALLY SHIPPED AND IS LIVE
 
-`docs/research/PRISM_ALT_LINE_ANCHOR_RESULTS_V1.md` (preregistered first, in
-`..._PREREGISTRATION_V1.md`). **MARKET-ASSISTED layer. No football projection touched.**
+**1. The Week 9 2026 paid board is certified and committed.** Run 42105885230.
 
-**1. The sportsbook main line is a near-perfect median, in every volume quartile.**
-Realized `P(actual > line)` sits at **0.476–0.508** across all four line quartiles of every market,
-2024+2025. This independently explains the V22 edge decomposition's −0.0211: **main-line
-side-picking is unbeatable by construction**, and that lane is closed for good.
+| artifact in git | contents |
+|---|---|
+| `data/market_track_record/boards/2026_wk09.csv` | priced board, **1,538 rows after quarantine**, 30 teams |
+| `data/market_track_record/alt_props/2026_wk09_full.csv` | **8,563 alternate offers** |
+| `data/market_track_record/alt_props/2026_wk09_full_edges.csv` | **8,563 priced alt edges** (4,644 priceable) |
+| `data/market_track_record/alt_props/2026_wk09_thu.csv` | 738 Thursday offers |
+| `raw_props/` + `game_odds/` `2026_wk09*` | the paid boundaries, non-clobbering |
 
-**2. The model's projection is compressed in volume, and it is live in production.**
-Median `model_proj / vegas_line` by line quartile on the 2026 boards:
+Board markets: `rec_yards` 516, `receptions` 512, `rush_yards` 286, `pass_yards` 116,
+`rush_rec_yards` 114.
 
-| market | Q0 low | Q1 | Q2 | Q3 high | spread |
-|---|---|---|---|---|---|
-| `rec_yards` | 1.366 | 1.035 | 0.961 | 0.827 | **53.9pp** |
-| `rush_yards` | 1.221 | 1.070 | 0.817 | 0.790 | 43.1pp |
-| `rush_rec_yards` | 1.078 | 0.821 | 0.807 | 0.730 | 34.8pp |
-| `receptions` | 1.116 | 0.922 | 0.854 | 0.791 | 32.5pp |
-| **`pass_yards`** | 1.077 | 1.026 | 1.012 | 0.933 | **14.4pp** |
+**2. ALTERNATE LINES ARE CONFIRMED SERVED BY THE PLAN.** All five keys HTTP 200 on first live
+execution: `player_pass_yds_alternate`, `player_rush_yds_alternate`,
+`player_reception_yds_alternate`, `player_receptions_alternate`,
+`player_rush_reception_yds_alternate`. 738 rows for ONE game, 8,563 for a 15-game slate.
+`player_anytime_td` is OUT of the pull by standing instruction and must stay out.
 
-`pass_yards`, the one market with a promoted synthesis, is again the clean control at a quarter the
-spread. **This is V22's compression finding measured against the line instead of against outcomes.**
+**3. `scripts/price_alt_line_offers_v1.py` prices them off realized clearance, never the
+model.** Deliberate: `pricing_v2._prob_over` is a Normal approximation wrong by up to +0.448
+in the tails, which is where every alt line lives.
 
-**3. The model's probabilities are catastrophically miscalibrated on volume.** Model `p_over`
-against realized over-rate, 2024+2025: `rec_yards` gap +0.260 in Q3, **`rush_rec_yards` +0.448** —
-the model asserts a **3.9%** chance of the over where reality is **48.7%**. **Never bet off
-`p_over`, `fair_prob` or `edge_pct` on a high-volume player.**
+---
 
-**4. The committed alt-line table was anchored on the projection and is DEPRECATED.**
-`data/research/alt_line_clearance_curve_2024_2025_v1.csv` expressed thresholds as a fraction of the
-**projection**, so a fixed fraction meant a different real threshold for every player. Measured on
-held-out 2025, `rush_yards` at `frac_of_proj = 0.6`:
+### THE FOUR GATES THAT KILLED PAID RUNS, AND WHO CAUSED THEM
 
-| volume | line ~ | realized | promised 70.4% | true break-even vs the −238 quoted |
-|---|---|---|---|---|
-| Q0 | 8.5 | **60.9%** | −9.5pp | **−156 — we were overpaying** |
-| Q3 | 69.0 | **90.4%** | +20.0pp | **−943 — we were refusing it** |
+Two were real gates catching real problems. Two were ours. Stated that way on purpose.
 
-`rush_rec_yards` Q3 at the same fraction clears **96.0%**, a true break-even of **−2379** against
-−473 quoted. **The safe tier the model kept failing to find was being filtered out by the table's
-own anchor.** It also failed decile calibration at **8.92pp**.
+**(a) THEIRS — provider name spelling. Cost TWO paid runs.** Ourlads says "Matt Hibner";
+nflverse and the books say "Matthew Hibner" (gsis 00-0040879, BAL TE). Run 42094118645 died in
+`repair_live_prop_identity`; run 42099277230 died five steps later in
+`materialize_live_props_for_model` on the same name. Fixed three ways:
+- three verified rows in `data/manual_name_overrides.csv` — Hibner, **Joshua->Josh Palmer**
+  (BUF, 00-0036988), **Mitch->Mitchell Tinsley** (CIN, 00-0038839). All three are nflverse
+  `player_display_name`, confirmed across 2025 AND 2026 weekly stats, which is the exact field
+  `player_form_v2` builds `player_game_logs` from. NOT roster `full_name`, NOT `football_name`
+  (which says "Mitch").
+- `scripts/audit_provider_name_parity_v1.py` runs in Full Slate **BEFORE the paid fetch**,
+  strict only when a paid fetch is imminent. It found Palmer and Tinsley, both Week 9 teams,
+  before they cost anything.
+- a namespaced `il:` initial+surname fallback in `_infer_team` only, which cannot widen the
+  quarantine or override matchers and still fails closed on a cross-team surname collision.
 
-**5. SHIPPED: the market-anchored, volume-stratified replacement.**
-`data/research/alt_line_market_anchored_table_v1.csv` (150 cells, ≥100 rows and ≥40 players each),
-bands in `data/research/alt_line_quartile_boundaries_v1.csv`, per-bet lookup in
-`docs/research/PRISM_ALT_LINE_DECISION_CARD_V1.md`. **It needs no odds pull** — the main line comes
-off the app. Internal check: at `frac = 1.00` clearance is **0.497–0.561** in every quartile, the
-line behaving as a median exactly as (1) says.
+**(b) THEIRS — the MIN starter conflict. The gate saved a bad bet.** Ourlads/C2 certify
+**Kyler Murray** QB1 and he started weeks 3-8 (29/37/30/24/29 attempts). DraftKings AND FanDuel
+post **only Carson Wentz**, at 207.5, and post no Murray offer at all. The nflverse week-9
+injury feed has **no MIN rows**, because MIN plays Monday and designations publish Friday.
+Nothing reconciles them, so per the AGENTS.md anomaly gate the state is `UNRESOLVED_CONTEXT`.
+Our row projected **229.45 against 207.5** — a +21.9 yard "edge" on a QB whose team's
+established starter has no prop posted. **Withheld via
+`data/manual_final_board_quarantine.csv` (MIN, 2026, wk9); NO starter override was added.**
+A Friday-or-later re-run resolves it. Same pattern as the Wentz MIN wk2 row and four other QBs.
 
-**6. The model DOES add something to bet selection — in the two markets with power to test it.**
-Δ Brier (B3 − B2) over players, 2025: `receptions` **−0.00418** [−0.00545, −0.00305] and
-`rec_yards` **−0.00102** [−0.00134, −0.00070], the only two markets clearing the 150-player bar,
-both PASS, with `rec_yards` holding prospectively on 2026. The three that fail
-(`pass_yards`, `rush_yards`, `rush_rec_yards`) are all K5-underpowered, so their failure is weakly
-evidenced. **I predicted this would fail. It did not — the first time in this programme the model
-beat my expectation of it.** The effect is **0.5–2% relative** and is **not** shown to convert to
-profit; do not build a tier on it.
+**(c) OURS — the alt pricer was validated against a schema production does not write.**
+It died on `KeyError: 'line'`. `outputs/props_raw.csv` is the GROUPED artifact, with per-book
+lines inside `offers_json` and no `line` column; the W8 archive it was tested against is the
+older FLAT shape. `flatten_main()` now reads either and fails loudly on neither. Also fixed
+there: `cleared_conservative` is a one-sided DOWNWARD haircut, so `1 - cleared` gave UNDERs no
+haircut at all and made every UNDER outrank every OVER on `ev_conservative`, the column the
+board sorts by.
 
-### PROMOTED — `rush_rec_yards` ENSEMBLE CALIBRATION (production change)
+**(d) OURS — removing `player_anytime_td` orphaned a gate that required it.**
+`validate_anytime_td_model_status_v1` demanded >=1 priced ATD row. Now: not in `MARKETS` + zero
+rows -> labelled `ATD_MARKET_NOT_OFFERED_BY_CONFIGURATION`; **in `MARKETS` + zero rows -> still
+fails closed**; market list unreadable -> fails closed. `validate_certified_full_slate_stack_v1`
+GAINED an assertion: a not-offered claim is only valid with zero priced rows.
 
-`docs/research/PRISM_RUSH_REC_ENSEMBLE_RESULTS_V1.md`, preregistered first. **Every gate passes.**
+---
 
-The market had **no row at all** in `data/model_ensemble_weights.csv`, so it shipped
-`uncalibrated_mc_only` — **raw Monte Carlo, zero weight on ML and State**, both computed and
-present. On 2,573 rows `mc_proj` sat at **0.657** of actual with MAE 32.6 while `ml_proj` sat at
-**0.952** with MAE 29.4.
+### DURABILITY DEFECTS FOUND AND FIXED — AGENTS.md 5a
 
-**Promoted:** `mc 0.4211 / ml 0.3634 / state 0.2155`, `fit_2024_only_blind_holdout_2025`, lineage
-`RUSH_REC_ENSEMBLE_V23_FIT2024_BLIND2025`. Fit on 1,925 rows of 2024 with
-`ensemble_v2.fit_market_weights` **unmodified**; blind on 648 rows / 112 players of 2025.
+1. **The archiver's two-file allowlist** meant 738 paid alt rows existed only in a 90-day
+   artifact. It now carries `alt_props/` and `alt_edges/` and Full Slate's own label-bearing
+   filenames.
+2. **The archiver clobbered `${ARCH_STEM}.csv`**, so a Sunday capture would have silently
+   destroyed Thursday's `game_odds`/`raw_props` boundary. First capture keeps the canonical
+   stem (replay/parity tooling reads that exact name); later ones get `_partN`.
+3. **`workflow_dispatch` added to the archiver** so a past run's stranded artifact can be
+   re-archived. Used to rescue run 42094118645.
+4. **`boards/` is a union-by-key ledger, so a quarantine could not propagate.** The certified
+   1,538-row capture merged back to 1,544 and **republished the withheld Wentz row,
+   indistinguishable from a certified one**. The season/week-scoped final-board quarantine is
+   now enforced on the ledger after the merge, using the existing matcher.
 
-- **S1** per-player MAE **−2.2422** [−3.5550, −0.9037], clustered over players.
-- **S2** level **0.6211 → 0.7773** of realized.
-- **S3** Q1 unchanged, **Q2 −13.7%, Q3 −15.5%**, Q0 +3.7% — the gain is concentrated on the
-  high-volume players, i.e. exactly the V23 shortfall and the V22 alpha haircut.
-- **M4** `pass_yards` and the other four rows **byte-identical**.
+---
 
-**This re-ran a fit that had already been rejected**, and §0 of its preregistration says so.
-`ENSEMBLE_WEIGHT_2023_HOLDOUT_RESULT.md` fit this market in 2023, got the largest MAE gain of three
-markets (33.040→30.456), and rejected it on main-line STRONG-tier ROI (−4.42%→−6.10%) while
-promoting `rec_yards` and `receptions`. **K7 records that main-line ROI was deliberately dropped as
-a gate** because V23 proved that lane unbeatable by construction and its selection layer
-miscalibrated by up to +0.448 on this market's own high-volume rows. **If anyone later shows
-main-line ROI is beatable, this promotion must be re-examined.**
+### OPERATIONAL TRAPS — READ BEFORE DISPATCHING ANYTHING
 
-**⚠️ It moves no bet.** The V23 decision card anchors on the **sportsbook line**, not on our
-projection. This is a football-projection fix under the first principle, nothing more. Do not read
-S1 as a betting gain.
+- **Merging to `main` cancels an in-flight paid Full Slate run.** `concurrency` is
+  `full-slate-${{ github.ref }}` with `cancel-in-progress`, and it fires when the competing run
+  is **created**, not when it starts. Cancelling the push run afterwards is too late.
+  **Do not merge while a paid run is in flight.**
+- **The zero-credit replay path works and should be the default for a re-run.**
+  `reuse_paid_odds_run_id` + `_artifact_id` + `_artifact_digest`, `fetch_live_odds=false`. It
+  verifies run id, artifact id, digest and expiry before use. It requires
+  `outputs/props_raw_compact.csv`, which only exists if the compact step succeeded, so a run
+  that died before it cannot be replayed.
+- **Credits: ~193 remaining** after Week 9 (~109 used on the full-slate main-market fetch).
+  A Sunday main+alt run for the remaining games is roughly 160.
+- **`[LIVE_ODDS_AUTHORIZED]` in a push commit message to `main` spends paid credits**, since
+  `e0e6c832`. `test_full_slate_workflow_contract::test_full_slate_main_push_defaults_to_no_credit_mode`
+  is RED because of it and was left red deliberately — it is a user decision, not a bug to
+  paper over. **Never put that marker in a commit message.**
+- Four tests fail on a clean checkout and are NOT ours: that contract test, two `test_ml_v2`
+  cases, `test_slot_role_unreachable_v1`. They reproduce with all V24 changes stashed.
 
-### THE BEST-EVIDENCED OPEN LEAD — THE ENSEMBLE METHOD ITSELF
+---
 
-`PRISM_RUSH_REC_ENSEMBLE_RESULTS_V1.md` §4. `fit_market_weights` is
-`LinearRegression(fit_intercept=False, positive=True)` followed by `_normalise_nonnegative`.
-**The raw fitted coefficients sum to 1.2315** — the regression wants to scale the components **up
-23%** and normalisation throws it away.
+### NOT DONE — DO NOT PRESENT THESE AS FINISHED
 
-| arm | level | per-player MAE vs the promoted blend |
-|---|---|---|
-| promoted (normalised) | 0.7773 | — |
-| same fit, **unnormalised** | **0.9572** | +0.7343 [−0.5183, +1.9558] — CI spans 0 |
-| `ml_proj` alone | 0.9392 | +0.4751 [−0.5856, +1.5122] — CI spans 0 |
-
-**The sum-to-one constraint costs ~18pp of level and buys nothing measurable.** And it is not
-confined to this market — every non-QB market shows MC ~30–40% low with ML near correct:
-`rec_yards` mc 0.715 / ml 1.012, `receptions` mc 0.699 / ml 1.018, `rush_yards` mc 0.589 /
-ml 0.944 (its promoted blend still only reaches 0.746).
-
-**This is the next study.** Relaxing the constraint changes **all five existing rows**, so it needs
-its own preregistration with **`pass_yards` as the positive control**. Do not change the method
-without one.
-
-### WHAT V23 DID NOT ESTABLISH — THE HALF THAT IS MISSING
-
-**The table gives the price you need. It does not give the price the book offers.** The committed
-boards carry **main-line odds only**; no alt-line price exists anywhere in this repository.
-Converting the card into realized profit needs either the user reading offered alt prices off the
-app, or an **explicitly authorized** alt-line odds acquisition. **This is a data question, not a
-modelling one, and it is the single remaining blocker on the money path.**
-
-Two disclosed defects in what shipped: the stratified arm **misses decile calibration by 0.38pp**
-(3.38 vs a 3pp bar), so the **conservative CI-low** break-even is the operative number; and
-**`receptions` is parameterised wrongly** for an integer market (fractional thresholds collapse;
-Q1 does not exist) and is **omitted from the card** until rebuilt on absolute thresholds.
-
-### CLOSED FORENSICALLY — W3/W4/W5 2026, DO NOT RE-INVESTIGATE
-
-`docs/production/MISSING_WEEKS_3_5_FORENSIC_CLOSURE_V1.md`. **Nothing was deleted**; git shows only
-ADDs. **W3's pricing failed mechanically** so no board was ever produced (run `36330757181`; its
-one surviving artifact is the 90-day RB PD2 research capture). **W4 and W5 boards did exist** —
-runs `36934563481`/`36935917903` and `37852811339`/`37860592615`, artifact ids and sha256 digests
-recorded in the handoffs — and `list_workflow_run_artifacts` now returns **`total_count: 0` for all
-four**. Root cause: `full-slate.yml` carried split retention, **90 days for the research capture and
-7 for the bundle holding the board**, and that `7` survived until **2026-10-19**, when `a6068d6a`
-raised it and `584782f7` added archive-on-pricing-failure. W6 was preserved by hand the same day.
-**That one date explains the entire shape of the archive.** Five of eight 2026 slates are gradeable
-at row level: W1, W2, W6, W7, W8. W4/W5 lines came from paid acquisitions that cannot be refetched.
-
-### ALREADY RUN — DO NOT REPEAT
-
-Everything on V22's failed list, plus:
-
-- **`rec_yards` M89-style residual synthesis** — `PRISM_REC_YARDS_SYNTHESIS_RESULTS_V1.md`.
-  **Failed K2/K4/K5** on 1,014 rows of 2026 W2+W6. Its §4 limitation ("a multi-season fit is not
-  available at any effort") **was wrong** — `docs/research/overnight/clean_v1_full_stack_vegas_benchmark_detail.csv`
-  has 17,715 rows over 2024+2025 with all four components, lines, both sides' odds and outcomes.
-  **A refit on that data is a legitimately different study and is still open**, but note its §5
-  argument (receiving is noise-dominated at rel. dispersion 0.915) and that V23 found the *level*
-  is fine in production for `rec_yards` (−1.85, 48.2% over) — the compression is in the *spread*,
-  not the mean, so a mean-correcting synthesis is aimed at the wrong moment.
-- **Alt-line anchor choice** — settled above. The anchor is the **line**. Do not re-test it.
-- **Main-line side-picking** — closed twice now, by EV decomposition and by (1) above.
+- **The 25 positive-EV-conservative alt rows are NOT a bet list.** They concentrate in
+  `receptions` at 0.5/1.5 main lines on long prices; the cell inspected had `n=122, players=77`
+  with `post_hoc_line_restriction=True`; and one row is `Kirk Cousins rush_yards OVER 0.5`,
+  the table applied to a population it was never fit on. **A per-cell table-support audit
+  (n, players, the post-hoc flag) is REQUIRED before any money.** Not run.
+- **Week 9 is not graded.** Grade after Monday 2026-11-09 from `boards/2026_wk09.csv`.
+- **MIN pass yards is absent from the Week 9 board by design**, not by failure.
+- **`injuries_source_status.json` still mislabels practice-only pulls as `official_report`.**
+  Root cause known since V22: NFL publishes game designations Friday, so `status` is null
+  midweek and `_injury_limited` can never fire. Tracked as P2
+  `injury_questionable_untreated`; it is also why (b) above could not be resolved.
+- **`anytime_td` must stay out of any ticket construction.**
 
 ### IMMEDIATE NEXT ACTIONS, IN ORDER
 
-1. **Preregister and run the ensemble-method study** — whether `_normalise_nonnegative`'s
-   sum-to-one constraint should be relaxed, across all five existing rows, `pass_yards` as the
-   positive control. This is the best-evidenced open lead (§ above). **~18pp of level on four
-   markets is at stake.**
-2. **The branch test suite is RED and it blocks PR #697**, independent of any of this work:
-   4 pre-existing failures, proven pre-existing by stashing the weights row. Two are a sklearn
-   `HistGradientBoosting` binner crash on a 3-row fixture (`sliding_window_view` with <2 distinct
-   values) and **not** the §3 breach their name implies; one asserts a stale `FETCH_LIVE_ODDS`
-   literal whose credit-safety behaviour still holds (a plain push still defaults to `'false'` and
-   now needs an explicit commit marker to spend credits); one is a NaN role label in slate data.
-3. **W9 is unplayed** — `data/market_track_record/w9_prospective_frozen_v1.csv` (478 players) is
-   frozen and carries **projections only, no lines**. The D1 injury overlay is still pending on it.
-   Grade per the frozen rule in `PRISM_W9_PROSPECTIVE_CAPTURE_V1.md` after Monday night.
-4. **Rebuild `receptions`** on absolute integer thresholds so it can go back on the decision card.
-5. **Resolve D1's root cause** — needs runtime instrumentation of a live run; the archived trace
-   copy is lossy and the builder does emit all 11 columns with `status` populated. Cause is OPEN.
+1. Grade Week 9 after Monday from `boards/2026_wk09.csv` + `alt_props/2026_wk09_full_edges.csv`.
+   This is the first slate where alt edges can be graded at row level.
+2. Run the **per-cell alt table-support audit** before treating any alt row as bettable.
+3. If a Sunday/Friday re-run is wanted: dispatch Full Slate from `main` with
+   `fetch_live_odds=true`, `fetch_alt_lines=true`, an `event_window` covering only the
+   remaining games, and a fresh `odds_capture_label`. Check `~193` credits first.
+4. Re-examine MIN QB once Friday designations publish; remove the wk9 quarantine row only if
+   the football authority actually supersedes Murray.
+5. Then resume the V23 queue (archived): `rush_rec_yards` ensemble is fitted and live;
+   the volume-conditional and shrunk-volume-conditional lanes are CLOSED NEGATIVE.
+
 
 ### PROMOTED AT V22
 
