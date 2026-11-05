@@ -125,16 +125,60 @@ jobs:
           #
           # odds_game.csv also carries the game total, spread and implied team
           # totals, which is the pregame game-environment signal.
-          for pair in "odds_game.csv:game_odds" "props_raw.csv:raw_props"; do
+          #
+          # A week is legitimately captured in PARTS: the Thursday game's
+          # lines lock before the Sunday slate is worth buying, so Full Slate
+          # is dispatched more than once per week with an odds_capture_label.
+          # This step used to `cp` straight onto ${ARCH_STEM}.csv, so the
+          # Sunday archive silently destroyed the Thursday paid boundary --
+          # the same unrepeatable-purchase loss AGENTS.md 5a was written
+          # about. Keep the first capture at the canonical stem (replay and
+          # parity tooling reads that exact name) and give every later one a
+          # _partN suffix. Never overwrite a paid boundary.
+          for pair in "odds_game.csv:game_odds" "props_raw.csv:raw_props" \
+                      "props_alt_raw.csv:alt_props" "alt_line_edges.csv:alt_edges"; do
             f="${pair%%:*}"; d="${pair##*:}"
             if [ -s "/tmp/fs_artifact/outputs/$f" ]; then
               mkdir -p "data/market_track_record/$d"
-              cp "/tmp/fs_artifact/outputs/$f" "data/market_track_record/$d/${ARCH_STEM}.csv"
-              echo "preserved $d/${ARCH_STEM}.csv ($(wc -l < "/tmp/fs_artifact/outputs/$f") lines)"
+              DEST="data/market_track_record/$d/${ARCH_STEM}.csv"
+              if [ -e "${DEST}" ]; then
+                if cmp -s "/tmp/fs_artifact/outputs/$f" "${DEST}"; then
+                  echo "note: $d/${ARCH_STEM}.csv already holds this exact capture"
+                  continue
+                fi
+                i=2
+                while [ -e "data/market_track_record/$d/${ARCH_STEM}_part${i}.csv" ]; do
+                  i=$((i+1))
+                done
+                DEST="data/market_track_record/$d/${ARCH_STEM}_part${i}.csv"
+                echo "::warning::$d/${ARCH_STEM}.csv exists and differs; writing ${DEST} rather than overwriting a paid boundary."
+              fi
+              cp "/tmp/fs_artifact/outputs/$f" "${DEST}"
+              echo "preserved ${DEST} ($(wc -l < "/tmp/fs_artifact/outputs/$f") lines)"
             else
               echo "note: $f absent from this run's artifact (expected with no live odds)"
             fi
           done
+
+          # Full Slate also writes the alternate-line boundary to its own
+          # durable path inside the run, with the capture label in the name
+          # (2026_wk09_thu.csv). Carry those over verbatim: the label says
+          # WHICH part of the week was bought, which ${ARCH_STEM} cannot.
+          SRC_ALT=/tmp/fs_artifact/data/market_track_record/alt_props
+          if [ -d "${SRC_ALT}" ]; then
+            mkdir -p data/market_track_record/alt_props
+            for f in "${SRC_ALT}"/*.csv; do
+              [ -e "$f" ] || continue
+              B="$(basename "$f")"
+              T="data/market_track_record/alt_props/${B}"
+              if [ -e "${T}" ]; then
+                echo "note: alt_props/${B} already archived; leaving it untouched"
+                continue
+              fi
+              cp "$f" "${T}"
+              echo "preserved alt_props/${B} ($(wc -l < "$f") lines)"
+            done
+          fi
 
       - name: Preserve the REPLAY INPUT SET
         run: |

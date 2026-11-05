@@ -26,6 +26,8 @@ It writes outputs/alt_line_edges.csv and changes no football projection.
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import sys
 from pathlib import Path
 
@@ -35,6 +37,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUTS = ROOT / "outputs"
 DATA = ROOT / "data"
+_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 TABLE = DATA / "research" / "alt_line_clearance_v2.csv"
 RECP = DATA / "research" / "alt_line_receptions_absolute_v2.csv"
 BOUNDS = DATA / "research" / "alt_line_quartile_boundaries_v1.csv"
@@ -125,6 +128,111 @@ def clearance_integer(recp: pd.DataFrame, main_line: float, alt_line: float):
     return (float(r["cleared"]), float(r["cleared_conservative"]))
 
 
+def _name_key(value) -> str:
+    """Exact join key: lowercased alphanumerics of the whole name, suffix-stripped."""
+    if value is None or (isinstance(value, float) and not np.isfinite(value)):
+        return ""
+    raw = str(value).strip().lower().replace("\u2019", "'")
+    if raw in {"", "nan", "none", "null", "<na>"}:
+        return ""
+    tokens = [t for t in (re.sub(r"[^a-z0-9]", "", tok) for tok in re.split(r"\s+", raw)) if t]
+    while tokens and tokens[-1] in _SUFFIXES:
+        tokens.pop()
+    return "".join(tokens)
+
+
+def _initial_last_key(value) -> str:
+    """Fallback join key: first initial + surname.
+
+    The alternate ladder and the main line are two separate OddsAPI calls and
+    the books do not always spell a name the same way in both ("Matt Hibner"
+    vs "Matthew Hibner"). Without this an alt ladder silently loses its
+    anchor and every row on it comes back no_main_line_anchor.
+    """
+    if value is None:
+        return ""
+    raw = str(value).strip().lower().replace("\u2019", "'")
+    tokens = [t for t in (re.sub(r"[^a-z0-9]", "", tok) for tok in re.split(r"\s+", raw)) if t]
+    while tokens and tokens[-1] in _SUFFIXES:
+        tokens.pop()
+    if len(tokens) < 2:
+        return ""
+    return f"{tokens[0][0]}{tokens[-1]}"
+
+
+def _main_player_series(main: pd.DataFrame) -> pd.Series:
+    for col in ("book_player_name", "canonical_player_name", "player", "player_canonical", "player_raw"):
+        if col in main.columns:
+            vals = main[col].astype("string").fillna("").str.strip()
+            if vals.ne("").any():
+                return vals
+    raise RuntimeError(
+        f"main props artifact has no usable player-name column; columns={list(main.columns)}"
+    )
+
+
+def flatten_main(main: pd.DataFrame) -> pd.DataFrame:
+    """Return main-line rows as (event_id, player, market, line), whichever schema.
+
+    Production's outputs/props_raw.csv is the GROUPED artifact: one row per
+    (event, market, player) with the per-book lines inside an offers_json
+    blob, and NO 'line' column at all. Run 42094118645 bought the Week 9
+    Thursday odds, captured 738 alternate offers, and then this script died on
+    KeyError: 'line' because it had only ever been exercised against the older
+    FLAT archive schema (data/market_track_record/raw_props/2026_wk08.csv),
+    which does carry player/line/over_odds. Handle both, and say so loudly if
+    neither is present, rather than crashing on a column lookup.
+    """
+    if main.empty:
+        return pd.DataFrame(columns=["event_id", "player", "market", "line"])
+
+    if "line" in main.columns:
+        flat = main.copy()
+        flat["player"] = _main_player_series(flat)
+        flat["line"] = pd.to_numeric(flat["line"], errors="coerce")
+        return flat[["event_id", "player", "market", "line"]]
+
+    if "offers_json" not in main.columns:
+        raise RuntimeError(
+            "main props artifact carries neither a 'line' column nor 'offers_json'; "
+            f"columns={list(main.columns)}"
+        )
+
+    players = _main_player_series(main)
+    recs: list[dict] = []
+    for (event_id, market, player, blob) in zip(
+        main.get("event_id", pd.Series("", index=main.index)),
+        main.get("market", pd.Series("", index=main.index)),
+        players,
+        main["offers_json"],
+    ):
+        if not isinstance(blob, str) or not blob.strip():
+            continue
+        try:
+            offers = json.loads(blob)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(offers, dict):
+            offers = offers.get("bookmakers") or []
+        if not isinstance(offers, list):
+            continue
+        for off in offers:
+            if not isinstance(off, dict):
+                continue
+            # OVER and UNDER carry the same posted line; keep OVER so a
+            # one-sided book cannot skew the median.
+            if str(off.get("side", "")).upper() not in {"OVER", ""}:
+                continue
+            line = pd.to_numeric(off.get("line"), errors="coerce")
+            if not np.isfinite(line):
+                continue
+            recs.append({"event_id": event_id, "player": player,
+                         "market": market, "line": float(line)})
+    return pd.DataFrame.from_records(
+        recs, columns=["event_id", "player", "market", "line"]
+    )
+
+
 def build(alt: pd.DataFrame, main: pd.DataFrame) -> pd.DataFrame:
     table, recp, bounds = load_table()
 
@@ -134,17 +242,29 @@ def build(alt: pd.DataFrame, main: pd.DataFrame) -> pd.DataFrame:
     alt["line"] = pd.to_numeric(alt["line"], errors="coerce")
     alt["price_american"] = pd.to_numeric(alt["price_american"], errors="coerce")
     alt = alt.dropna(subset=["line", "price_american"])
+    alt["_k"] = alt["player"].map(_name_key)
+    alt["_kf"] = alt["player"].map(_initial_last_key)
 
-    main = main.copy()
+    main = flatten_main(main)
     main["canon"] = main["market"].map(MAIN_TO_CANON)
     main = main[main["canon"].notna()]
-    main["line"] = pd.to_numeric(main["line"], errors="coerce")
     main = main.dropna(subset=["line"])
-    # One anchor per player-market: the median posted line across books.
-    anchor = (main.groupby(["event_id", "player", "canon"], as_index=False)["line"]
-                  .median().rename(columns={"line": "main_line"}))
+    main["_k"] = main["player"].map(_name_key)
+    main["_kf"] = main["player"].map(_initial_last_key)
 
-    m = alt.merge(anchor, on=["event_id", "player", "canon"], how="left")
+    # One anchor per player-market: the median posted line across books.
+    anchor = (main.groupby(["event_id", "_k", "canon"], as_index=False)["line"]
+                  .median().rename(columns={"line": "main_line"}))
+    m = alt.merge(anchor, on=["event_id", "_k", "canon"], how="left")
+
+    # Spelling fallback, applied only where the exact key found no anchor and
+    # the initial+surname form is unambiguous inside that event and market.
+    fb = main.groupby(["event_id", "_kf", "canon"]).agg(
+        main_line_fb=("line", "median"), _n=("_k", "nunique")
+    ).reset_index()
+    fb = fb.loc[fb["_n"].eq(1), ["event_id", "_kf", "canon", "main_line_fb"]]
+    m = m.merge(fb, on=["event_id", "_kf", "canon"], how="left")
+    m["main_line"] = m["main_line"].fillna(m["main_line_fb"])
 
     rows = []
     for _, r in m.iterrows():
@@ -168,8 +288,22 @@ def build(alt: pd.DataFrame, main: pd.DataFrame) -> pd.DataFrame:
                 reason = "fraction_outside_table_support"
         side = str(r.get("side", "")).upper()
         # The table gives P(actual > threshold). An UNDER wins on the complement.
+        #
+        # cleared_conservative is a ONE-SIDED downward haircut on the clearance
+        # rate: the cluster-bootstrap sampling margin plus a season-drift
+        # allowance. For an OVER that is already the conservative direction.
+        # For an UNDER it is not -- an UNDER is hurt by clearance being HIGHER
+        # than measured, so taking 1 - cleared as "conservative" applies no
+        # haircut whatsoever and makes every UNDER outrank every OVER on the
+        # ev_conservative column that this board is sorted by. Mirror the same
+        # haircut magnitude in the direction that actually hurts the UNDER.
         p = clr if side == "OVER" else (1.0 - clr if np.isfinite(clr) else np.nan)
-        p_cons = lo if side == "OVER" else (1.0 - clr if np.isfinite(clr) else np.nan)
+        if side == "OVER":
+            p_cons = lo
+        elif np.isfinite(clr) and np.isfinite(lo):
+            p_cons = float(np.clip(1.0 - clr - (clr - lo), 0.0, 1.0))
+        else:
+            p_cons = np.nan
         rows.append({
             "event_id": r.get("event_id"), "player": r.get("player"),
             "market": canon, "book": r.get("book"), "side": side,

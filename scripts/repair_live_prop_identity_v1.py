@@ -74,6 +74,45 @@ def _name_keys(value) -> set[str]:
     return {k for k in keys if k}
 
 
+def _initial_last_keys(value) -> set[str]:
+    """Namespaced fallback key: first initial + surname.
+
+    Ourlads lists the BAL tight end as "Matt Hibner"; DraftKings posts
+    "Matthew Hibner". Both full-name keys therefore miss, and because this
+    module fails closed on an unresolved core player, one correctly-rostered
+    TE2 killed the entire 2026 Week 9 paid board (run 42094118645) after the
+    sportsbook odds had already been bought. The same mismatch is visible in
+    the Week 7 trace, so it recurs; a nickname lookup table would be an
+    endless list of Matt/Matthew, Mike/Michael, Will/William.
+
+    Key instead on the one part a depth chart and a sportsbook never disagree
+    about -- the surname -- plus the first initial.
+
+    Two deliberate constraints keep this from weakening the gate:
+
+    * the "il:" namespace keeps this form out of _name_keys, so the manual
+      roster-override and prop-quarantine matchers stay exact and cannot be
+      widened by it;
+    * it is consumed only by _infer_team, which resolves a TEAM and not a
+      player, and which still requires exactly one of the event's two teams
+      to match. A surname collision across the two teams in a game yields
+      two matches and fails closed exactly as before.
+    """
+    if _missing_text(value):
+        return set()
+    raw = str(value).strip().lower().replace("\u2019", "'")
+    tokens: list[str] = []
+    for token in re.split(r"\s+", raw):
+        clean = re.sub(r"[^a-z0-9-]", "", token).replace("-", "")
+        if clean:
+            tokens.append(clean)
+    while tokens and tokens[-1] in SUFFIXES:
+        tokens.pop()
+    if len(tokens) < 2:
+        return set()
+    return {f"il:{tokens[0][0]}{tokens[-1]}"}
+
+
 def _load_manual_roster_overrides() -> dict[str, set[str]]:
     """Load verified player->team additions for gaps in the Ourlads scrape.
 
@@ -178,7 +217,9 @@ def _build_roster_index(
         team = canon_team(getattr(row, "team", ""))
         if team not in CANON_TEAM_CODES:
             continue
-        roster.setdefault(team, set()).update(_name_keys(getattr(row, "player", "")))
+        player_name = getattr(row, "player", "")
+        roster.setdefault(team, set()).update(_name_keys(player_name))
+        roster[team].update(_initial_last_keys(player_name))
 
     # Live runs can legitimately contain only the remaining slate. Require
     # complete coverage for teams participating in the current sportsbook
@@ -245,12 +286,19 @@ def _is_placeholder(row: dict) -> bool:
 
 def _infer_team(player, event_id, roster: dict[str, set[str]], events: dict[str, tuple[str, str]]) -> str:
     pair = events.get(str(event_id))
-    keys = _name_keys(player)
-    if pair is None or not keys:
+    if pair is None:
         return ""
-    matches = [team for team in pair if keys & roster.get(team, set())]
-    matches = list(dict.fromkeys(matches))
-    return matches[0] if len(matches) == 1 else ""
+
+    def _unique(keys: set[str]) -> str:
+        if not keys:
+            return ""
+        matches = list(dict.fromkeys(team for team in pair if keys & roster.get(team, set())))
+        return matches[0] if len(matches) == 1 else ""
+
+    # Exact full-name identity first. The initial+surname form is only ever a
+    # fallback for a provider/depth-chart nickname disagreement, and it still
+    # has to land on exactly one of this event's two teams.
+    return _unique(_name_keys(player)) or _unique(_initial_last_keys(player))
 
 
 def _opponent(team: str, event_id, events: dict[str, tuple[str, str]]) -> str:
