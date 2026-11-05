@@ -11,14 +11,14 @@ c75744790b7acf6260c78ba5e739c0e5,2026-11-06T01:15:00Z,BAL,JAX,fanduel,FanDuel,sp
 c75744790b7acf6260c78ba5e739c0e5,2026-11-06T01:15:00Z,BAL,JAX,fanduel,FanDuel,spreads,Jacksonville Jaguars,-120,-9.5
 c75744790b7acf6260c78ba5e739c0e5,2026-11-06T01:15:00Z,BAL,JAX,fanduel,FanDuel,totals,Over,-110,39.5
 c75744790b7acf6260c78ba5e739c0e5,2026-11-06T01:15:00Z,BAL,JAX,fanduel,FanDuel,totals,Under,-110,39.5
-c75744790b7acf6260c78ba5e739c0e5,2026-11-06T01:15:00Z,BAL,JAX,betmgm,BetMGM,h2h,Baltimore Ravens,425,
-c75744790b7acf6260c78ba5e739c0e5,2026-11-06T01:15:00Z,BAL,JAX,betmgm,BetMGM,h2h,Jacksonville Jaguars,-550,
+c75744790b7acf6260c78ba5e739c0e5,2026-11-06T01:15:00Z,BAL,JAX,betmgm,BetMGM,h2h,Baltimore Ravens,400,
+c75744790b7acf6260c78ba5e739c0e5,2026-11-06T01:15:00Z,BAL,JAX,betmgm,BetMGM,h2h,Jacksonville Jaguars,-500,
 c75744790b7acf6260c78ba5e739c0e5,2026-11-06T01:15:00Z,BAL,JAX,betmgm,BetMGM,spreads,Baltimore Ravens,-112,10.0
 c75744790b7acf6260c78ba5e739c0e5,2026-11-06T01:15:00Z,BAL,JAX,betmgm,BetMGM,spreads,Jacksonville Jaguars,-105,-10.0
 c75744790b7acf6260c78ba5e739c0e5,2026-11-06T01:15:00Z,BAL,JAX,betmgm,BetMGM,totals,Over,-110,39.5
 c75744790b7acf6260c78ba5e739c0e5,2026-11-06T01:15:00Z,BAL,JAX,betmgm,BetMGM,totals,Under,-108,39.5
-dc56d980f527ffeef89940133b211b13,2026-11-08T14:30:00Z,ATL,CIN,draftkings,DraftKings,h2h,Atlanta Falcons,142,
-dc56d980f527ffeef89940133b211b13,2026-11-08T14:30:00Z,ATL,CIN,draftkings,DraftKings,h2h,Cincinnati Bengals,-170,
+dc56d980f527ffeef89940133b211b13,2026-11-08T14:30:00Z,ATL,CIN,draftkings,DraftKings,h2h,Atlanta Falcons,140,
+dc56d980f527ffeef89940133b211b13,2026-11-08T14:30:00Z,ATL,CIN,draftkings,DraftKings,h2h,Cincinnati Bengals,-166,
 dc56d980f527ffeef89940133b211b13,2026-11-08T14:30:00Z,ATL,CIN,draftkings,DraftKings,spreads,Atlanta Falcons,-108,3.0
 dc56d980f527ffeef89940133b211b13,2026-11-08T14:30:00Z,ATL,CIN,draftkings,DraftKings,spreads,Cincinnati Bengals,-112,-3.0
 dc56d980f527ffeef89940133b211b13,2026-11-08T14:30:00Z,ATL,CIN,draftkings,DraftKings,totals,Over,-110,52.5
@@ -251,21 +251,21 @@ ac9d38a18d5c92814233a31aa9a48d78,2026-11-08T21:05:00Z,SF,LV,betmgm,BetMGM,totals
 9760d8f19f84bfee300a74ceb656c95d,2026-11-09T01:20:00Z,CHI,TB,betmgm,BetMGM,spreads,Tampa Bay Buccaneers,-112,6.5
 9760d8f19f84bfee300a74ceb656c95d,2026-11-09T01:20:00Z,CHI,TB,betmgm,BetMGM,totals,Over,-110,47.5
 9760d8f19f84bfee300a74ceb656c95d,2026-11-09T01:20:00Z,CHI,TB,betmgm,BetMGM,totals,Under,-108,47.5
-17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,draftkings,DraftKings,h2h,Buffalo Bills,-185,
-17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,draftkings,DraftKings,h2h,Minnesota Vikings,154,
-17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,draftkings,DraftKings,spreads,Buffalo Bills,-105,-3.5
-17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,draftkings,DraftKings,spreads,Minnesota Vikings,-115,3.5
+17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,draftkings,DraftKings,h2h,Buffalo Bills,-170,
+17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,draftkings,DraftKings,h2h,Minnesota Vikings,142,
+17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,draftkings,DraftKings,spreads,Buffalo Bills,-115,-3.0
+17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,draftkings,DraftKings,spreads,Minnesota Vikings,-105,3.0
 17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,draftkings,DraftKings,totals,Over,-115,44.5
 17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,draftkings,DraftKings,totals,Under,-105,44.5
-17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,fanduel,FanDuel,h2h,Buffalo Bills,-188,
-17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,fanduel,FanDuel,h2h,Minnesota Vikings,158,
-17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,fanduel,FanDuel,spreads,Buffalo Bills,-105,-3.5
-17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,fanduel,FanDuel,spreads,Minnesota Vikings,-115,3.5
+17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,fanduel,FanDuel,h2h,Buffalo Bills,-176,
+17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,fanduel,FanDuel,h2h,Minnesota Vikings,148,
+17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,fanduel,FanDuel,spreads,Buffalo Bills,-115,-3.0
+17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,fanduel,FanDuel,spreads,Minnesota Vikings,-105,3.0
 17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,fanduel,FanDuel,totals,Over,-102,45.5
 17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,fanduel,FanDuel,totals,Under,-120,45.5
-17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,betmgm,BetMGM,h2h,Buffalo Bills,-185,
+17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,betmgm,BetMGM,h2h,Buffalo Bills,-175,
 17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,betmgm,BetMGM,h2h,Minnesota Vikings,150,
-17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,betmgm,BetMGM,spreads,Buffalo Bills,-105,-3.5
-17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,betmgm,BetMGM,spreads,Minnesota Vikings,-112,3.5
+17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,betmgm,BetMGM,spreads,Buffalo Bills,-120,-3.0
+17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,betmgm,BetMGM,spreads,Minnesota Vikings,100,3.0
 17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,betmgm,BetMGM,totals,Over,-108,45.0
 17ad7eff2f7875e20a8109abe40470e3,2026-11-10T01:15:00Z,MIN,BUF,betmgm,BetMGM,totals,Under,-110,45.0
