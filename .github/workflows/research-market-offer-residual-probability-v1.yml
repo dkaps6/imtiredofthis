@@ -1,0 +1,115 @@
+name: Market Offer Residual Probability V1
+
+on:
+  pull_request:
+    paths:
+      - "docs/research/MARKET_OFFER_RESIDUAL_PROBABILITY_V1_PLAN.md"
+      - "scripts/research/build_market_offer_residual_source_v1.py"
+      - "scripts/research/market_offer_residual_probability_v1.py"
+      - "tests/test_market_offer_residual_probability_v1.py"
+      - ".github/workflows/research-market-offer-residual-probability-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow scikit-learn
+      - name: Run frozen mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q             tests/test_market_offer_residual_probability_v1.py             tests/test_build_authority_exact_vegas_projection_trace_v1.py             tests/test_benchmark_identity_v1.py
+      - name: Verify primary authority artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, subprocess
+          expected={
+            34122984048:(10018942911,"qb-pd3-internal-disagreement-reliability","sha256:cde910939dba0631a2a68e9acfbcafcdb90af1d1b2128627442073854bf3f849"),
+            34152797603:(10029942404,"te-r5p-production-contract-refit-v1","sha256:f9951441b748ef72514dbc81adf6fbe9cd023c9bf64ecb52a016840989ab4cdb"),
+          }
+          repo=os.environ["GITHUB_REPOSITORY"]
+          for run,(aid,name,digest) in expected.items():
+              obj=json.loads(subprocess.check_output(["gh","api",f"repos/{repo}/actions/runs/{run}/artifacts?per_page=100"],text=True))
+              m=[a for a in obj.get("artifacts",[]) if int(a.get("id",-1))==aid]
+              if len(m)!=1: raise SystemExit(f"FATAL artifact {aid} missing")
+              a=m[0]
+              if a.get("name")!=name or a.get("digest")!=digest or a.get("expired"):
+                  raise SystemExit(f"FATAL artifact drift {a}")
+              print("AUTHORITY_ARTIFACT_PASS",run,aid,name,digest)
+          PY
+      - name: Download exact QB authority
+        uses: actions/download-artifact@v4
+        with:
+          name: qb-pd3-internal-disagreement-reliability
+          path: /tmp/qb
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34122984048
+      - name: Download exact TE authority
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r5p-production-contract-refit-v1
+          path: /tmp/te
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34152797603
+      - name: Build leakage-safe historical schedules
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/morp /tmp/hist_2024 /tmp/hist_2025
+          mkdir -p /tmp/morp /tmp/hist_2024 /tmp/hist_2025
+          python scripts/backtest/build_historical_inputs.py             --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py             --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+      - name: Build exact football source rows
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/build_market_offer_residual_source_v1.py             --qb-casebook /tmp/qb/data/backtests/qb_pd3_internal_disagreement_reliability/qb_pd3_casebook.csv             --te-casebook /tmp/te/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_oos_player_casebook.csv             --schedule-file /tmp/hist_2024/schedule_history.csv             --schedule-file /tmp/hist_2025/schedule_history.csv             --out /tmp/morp/authority_projection_trace.csv
+      - name: Rebuild free historical market archive
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/prepare_free_market_prop_archive_v1.py             --projection-file /tmp/morp/authority_projection_trace.csv             --out-dir /tmp/morp/market_archive
+      - name: Run frozen two-direction residual probability study once
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/market_offer_residual_probability_v1.py             --source /tmp/morp/authority_projection_trace.csv             --props /tmp/morp/market_archive/historical_market_props.csv             --out-dir /tmp/morp/result
+          echo "--- DISPOSITION ---"
+          cat /tmp/morp/result/disposition.json
+          echo "--- SUMMARY ---"
+          cat /tmp/morp/result/summary.csv
+      - name: Upload immutable evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-offer-residual-probability-v1
+          retention-days: 30
+          path: |
+            /tmp/morp/authority_projection_trace.csv
+            /tmp/morp/market_relative_market_offer_source_audit.csv
+            /tmp/morp/market_archive/market_archive_source_audit.csv
+            /tmp/morp/market_archive/historical_market_props.csv
+            /tmp/morp/result/offer_population.csv
+            /tmp/morp/result/summary.csv
+            /tmp/morp/result/detail.csv
+            /tmp/morp/result/disposition.json
+          if-no-files-found: warn
