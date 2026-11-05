@@ -29,7 +29,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from scripts._opponent_map import canon_team
 from scripts.artifact_contracts import get_contract
+from scripts.operations.quarantine_final_priced_props_v1 import _load_quarantine_keys
+from scripts.repair_live_prop_identity_v1 import _name_keys
 
 ROOT = Path(__file__).resolve().parents[2]
 LEDGER_DIR = ROOT / "data" / "market_track_record" / "boards"
@@ -109,12 +112,44 @@ def archive(*, priced_path: Path, season: int, week: int, run_id: str, git_sha: 
     ledger_path = _ledger_path(season, week)
     existing = pd.read_csv(ledger_path) if ledger_path.exists() else pd.DataFrame()
     merged = merge_into_ledger(existing, stamped)
+
+    # A final-board quarantine is a removal, and a union-by-key ledger cannot
+    # express a removal: this capture simply has no row for the withheld key,
+    # so an EARLIER capture's row survives the merge untouched.
+    #
+    # 2026 Week 9 did exactly that. Run 42102376747 archived 1,544 rows before
+    # the MIN starter conflict was understood; the certified re-run archived
+    # 1,538 with Carson Wentz withheld, and the ledger came back to 1,544 --
+    # republishing the 229.45-against-207.5 row that certification had
+    # explicitly refused to publish. A reader of the durable board could not
+    # tell it apart from a certified row.
+    #
+    # The quarantine file is scoped to a season and week, not to a run, so it
+    # is a statement about what may appear on THIS WEEK's published board.
+    # Enforce it on the ledger too. Dropping rows here can only ever remove
+    # what a verified, human-sourced quarantine row names.
+    quarantine_keys = _load_quarantine_keys(season=season, week=week)
+    quarantined_rows = 0
+    if quarantine_keys and not merged.empty and {"team", "player"}.issubset(merged.columns):
+        teams = merged["team"].map(canon_team)
+        name_keys = merged["player"].map(_name_keys)
+        drop = pd.Series(
+            [
+                bool({(team, key) for key in keys} & quarantine_keys)
+                for team, keys in zip(teams, name_keys)
+            ],
+            index=merged.index,
+        )
+        quarantined_rows = int(drop.sum())
+        merged = merged.loc[~drop].copy()
+
     merged.to_csv(ledger_path, index=False)
 
     return {
         "status": "archived",
         "ledger_path": str(ledger_path),
         "rows_in_this_capture": int(len(stamped)),
+        "final_board_quarantined_rows_dropped": quarantined_rows,
         "rows_in_ledger_after_merge": int(len(merged)),
     }
 
