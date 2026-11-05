@@ -420,6 +420,27 @@ jobs:
           python scripts/operations/apply_qb_c2_active_schedule_context_seam_v1.py
           python -m py_compile scripts/run_pricing_with_full_roster_universe_v1.py scripts/modeling/rb_r26_receptions_production_adapter_v1.py scripts/modeling/qb_c2_production_adapter_v1.py
 
+      - name: Audit provider name parity BEFORE paying for odds
+        # Week 9 lost two paid runs to one tight end. Ourlads lists the BAL
+        # TE2 as "Matt Hibner"; nflverse and the sportsbooks say "Matthew
+        # Hibner". Run 42094118645 bought the Thursday odds and failed closed
+        # in repair_live_prop_identity; run 42099277230 bought the full slate
+        # and failed closed five steps later in materialize_live_props_for_model
+        # on the same name. Both gates were right -- the discovery was late.
+        #
+        # This needs no sportsbook data, so there is no reason to find out
+        # after the money is gone. Strict only when a paid fetch is about to
+        # happen; informational otherwise. Soft-returns if nflverse is
+        # unreachable, so it adds no new failure mode of its own.
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          STRICT=""
+          if [ "${FETCH_LIVE_ODDS}" = "true" ]; then STRICT="--strict"; fi
+          python scripts/audit_provider_name_parity_v1.py \
+            --season "${SEASON}" \
+            --roles data/roles_current_production_eligible_v1.csv ${STRICT}
+
       - name: Fetch and gate player props and game odds after football eligibility
         id: live_odds
         if: ${{ env.FETCH_LIVE_ODDS == 'true' }}
