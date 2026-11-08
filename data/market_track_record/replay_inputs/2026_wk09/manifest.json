@@ -1,12 +1,6 @@
 {
-  "complete": true,
+  "complete": false,
   "files": {
-    "data/metrics_ready.csv": {
-      "archived_as": "metrics_ready.csv.gz",
-      "bytes_gz": 88438,
-      "bytes_raw": 2862246,
-      "sha256_raw": "1b15c1900c3aaded059c616f0f8d4dd361e50d87d322f21e04b415f823caff99"
-    },
     "data/model_ensemble_diagnostics.csv": {
       "archived_as": "model_ensemble_diagnostics.csv.gz",
       "bytes_gz": 393,
@@ -24,12 +18,6 @@
       "bytes_gz": 25684,
       "bytes_raw": 108491,
       "sha256_raw": "335c23af52bf1b18dd9e7b3c8d1377b03365671856381d4b5639caab729ccc2a"
-    },
-    "data/model_rule_simulation_inputs.csv": {
-      "archived_as": "model_rule_simulation_inputs.csv.gz",
-      "bytes_gz": 150336,
-      "bytes_raw": 3641688,
-      "sha256_raw": "b8f4d6f75fdaafdbc358b62965aba53ceb807e784622f33ad0bcba4cd057b01b"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
@@ -49,12 +37,6 @@
       "bytes_raw": 12278,
       "sha256_raw": "74848a58469c622a211bb2d7220bc7f78c16b527789ca68978ff0618d392681c"
     },
-    "data/rb_rush_synthesis_context.csv": {
-      "archived_as": "rb_rush_synthesis_context.csv.gz",
-      "bytes_gz": 143,
-      "bytes_raw": 157,
-      "sha256_raw": "4a07c70be06434c6cb44e7e77416e7881519c95ce64a448f19e0def102b3785d"
-    },
     "data/team_week_map.csv": {
       "archived_as": "team_week_map.csv.gz",
       "bytes_gz": 5913,
@@ -69,9 +51,12 @@
     }
   },
   "required_column_stripped": {},
-  "required_missing": [],
-  "source_git_sha": "a52e8d14eed493dc62274c152f8bd07223e91cb3",
-  "source_run_id": "42491323360",
+  "required_missing": [
+    "data/metrics_ready.csv",
+    "data/model_rule_simulation_inputs.csv"
+  ],
+  "source_git_sha": "4205d663908f1eeaa2603a457dcb3d4a62103f76",
+  "source_run_id": "42493502179",
   "stem": "2026_wk09",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
