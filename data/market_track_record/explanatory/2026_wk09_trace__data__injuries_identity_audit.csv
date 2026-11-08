@@ -30,7 +30,9 @@ Nate Wiggins,BAL,nfl.com
 Jonathan Allen,CIN,nfl.com
 Jordan Battle,CIN,nfl.com
 Kyle Dugger,CIN,nfl.com
+B.J. Hill,CIN,nfl.com
 Cedric Johnson,CIN,nfl.com
+Dexter Lawrence,CIN,nfl.com
 DJ Turner II,CIN,nfl.com
 Yasir Abdullah,ATL,nfl.com
 Billy Bowman Jr.,ATL,nfl.com
@@ -49,6 +51,7 @@ Malachi Lawrence,DAL,nfl.com
 Marist Liufau,DAL,nfl.com
 P.J. Locke,DAL,nfl.com
 Von Miller,DAL,nfl.com
+DeMarvion Overshown,DAL,nfl.com
 George Pickens,DAL,nfl.com
 Joey Porter Jr.,DAL,nfl.com
 Luke Schoonmaker,DAL,nfl.com
@@ -60,7 +63,10 @@ Keenan Allen,IND,nfl.com
 Bryce Boettcher,IND,nfl.com
 Akeem Davis-Gaither,IND,nfl.com
 Anthony Gould,IND,nfl.com
+A.J. Haulcy,IND,nfl.com
+Will Mallory,IND,nfl.com
 Andrew Ogletree,IND,nfl.com
+Grover Stewart,IND,nfl.com
 Jonathan Taylor,IND,nfl.com
 Jalen Travis,IND,nfl.com
 Justin Walley,IND,nfl.com
@@ -68,8 +74,10 @@ Charvarius Ward,IND,nfl.com
 Austin Barber,CLE,nfl.com
 Denzel Boston,CLE,nfl.com
 Maliek Collins,CLE,nfl.com
+Harold Fannin Jr.,CLE,nfl.com
 Myles Harden,CLE,nfl.com
 Elgton Jenkins,CLE,nfl.com
+Emmanuel McNeil-Warren,CLE,nfl.com
 Carson Schwesinger,CLE,nfl.com
 Jared Verse,CLE,nfl.com
 Deshaun Watson,CLE,nfl.com
@@ -77,6 +85,7 @@ Quincy Williams,CLE,nfl.com
 Kelvin Banks Jr.,NO,nfl.com
 CJ Donaldson,NO,nfl.com
 Martin Emerson,NO,nfl.com
+Davon Godchaux,NO,nfl.com
 Alvin Kamara,NO,nfl.com
 Justin Reid,NO,nfl.com
 Asim Richards,NO,nfl.com
@@ -89,11 +98,13 @@ Pat Bryant,DEN,nfl.com
 Talanoa Hufanga,DEN,nfl.com
 Brandon Jones,DEN,nfl.com
 Courtland Sutton,DEN,nfl.com
+Dondrea Tillman,DEN,nfl.com
 Eyioma Uwazurike,DEN,nfl.com
 Jaylen Waddle,DEN,nfl.com
 Bobby Brown III,CAR,nfl.com
 Corey Bullock,CAR,nfl.com
 Brady Christensen,CAR,nfl.com
+Trevis Gipson,CAR,nfl.com
 Will Lee III,CAR,nfl.com
 Damien Lewis,CAR,nfl.com
 Bobby Okereke,CAR,nfl.com
@@ -109,6 +120,7 @@ Harrison Phillips,NYJ,nfl.com
 Mason Taylor,NYJ,nfl.com
 Trevin Wallace,NYJ,nfl.com
 Garrett Wilson,NYJ,nfl.com
+Nahshon Wright,NYJ,nfl.com
 Nick Bolton,KC,nfl.com
 Mansoor Delane,KC,nfl.com
 Travis Kelce,KC,nfl.com
@@ -126,6 +138,7 @@ Amen Ogbongbemiga,DET,nfl.com
 D.J. Reed,DET,nfl.com
 Jacob Saylors,DET,nfl.com
 Amon-Ra St. Brown,DET,nfl.com
+Sione Vaki,DET,nfl.com
 DJ Wonnum,DET,nfl.com
 Rock Ya-Sin,DET,nfl.com
 Tucker Addington,MIA,nfl.com
@@ -143,30 +156,43 @@ Jaylen Wright,MIA,nfl.com
 Steve Avila,LAR,nfl.com
 Joe Cardona,LAR,nfl.com
 Kam Curl,LAR,nfl.com
+Aaron Donald,LAR,nfl.com
 Terrance Ferguson,LAR,nfl.com
 Myles Garrett,LAR,nfl.com
+Tyler Higbee,LAR,nfl.com
+Alaric Jackson,LAR,nfl.com
 Trent McDuffie,LAR,nfl.com
+Puka Nacua,LAR,nfl.com
 Colby Parkinson,LAR,nfl.com
 Ronnie Rivers,LAR,nfl.com
 Matthew Stafford,LAR,nfl.com
 Grant Stuard,LAR,nfl.com
 Jaylen Watson,LAR,nfl.com
 Jordan Whittington,LAR,nfl.com
+Byron Young,LAR,nfl.com
 John Bates,WAS,nfl.com
+Dyami Brown,WAS,nfl.com
 Treylon Burks,WAS,nfl.com
+Josh Conerly Jr.,WAS,nfl.com
 Sam Cosmi,WAS,nfl.com
 Jayden Daniels,WAS,nfl.com
 Stefon Diggs,WAS,nfl.com
 Jer'Zhan Newton,WAS,nfl.com
 Shy Tuttle,WAS,nfl.com
+Deatrich Wise,WAS,nfl.com
 Colson Yankoff,WAS,nfl.com
+Darius Alexander,NYG,nfl.com
 Abdul Carter,NYG,nfl.com
 Jermaine Eluemunor,NYG,nfl.com
+Thomas Fidone II,NYG,nfl.com
+Trace Ford,NYG,nfl.com
 Malik Harrison,NYG,nfl.com
 Colton Hood,NYG,nfl.com
 Theo Johnson,NYG,nfl.com
 Charlie Jones,NYG,nfl.com
 Marcus Mbow,NYG,nfl.com
+Micah McFadden,NYG,nfl.com
+Malik Nabers,NYG,nfl.com
 DJ Reader,NYG,nfl.com
 Cam Skattebo,NYG,nfl.com
 Andrew Thomas,NYG,nfl.com
@@ -183,7 +209,9 @@ Dallas Goedert,PHI,nfl.com
 Jonathan Greenard,PHI,nfl.com
 Jalyx Hunt,PHI,nfl.com
 Jonathan Jones,PHI,nfl.com
+Jordan Mailata,PHI,nfl.com
 Tanner McKee,PHI,nfl.com
+Elijah Moore,PHI,nfl.com
 Kenny Moore II,PHI,nfl.com
 Moro Ojomo,PHI,nfl.com
 DeVonta Smith,PHI,nfl.com
@@ -212,6 +240,7 @@ Jacoby Brissett,ARI,nfl.com
 Hjalte Froholdt,ARI,nfl.com
 Jon Gaines II,ARI,nfl.com
 Bam Knight,ARI,nfl.com
+Max Melton,ARI,nfl.com
 Walter Nolen,ARI,nfl.com
 Isaac Seumalo,ARI,nfl.com
 Josh Sweat,ARI,nfl.com
@@ -222,7 +251,9 @@ Anthony Bradford,SEA,nfl.com
 Charles Cross,SEA,nfl.com
 Sam Darnold,SEA,nfl.com
 Nick Emmanwori,SEA,nfl.com
+Derick Hall,SEA,nfl.com
 Tory Horton,SEA,nfl.com
+Ernest Jones,SEA,nfl.com
 Velus Jones Jr.,SEA,nfl.com
 Tyrice Knight,SEA,nfl.com
 Drew Lock,SEA,nfl.com
@@ -237,6 +268,7 @@ Thomas Booker,LV,nfl.com
 Foley Fatukasi,LV,nfl.com
 Darien Porter,LV,nfl.com
 Ian Thomas,LV,nfl.com
+Dont'e Thornton Jr.,LV,nfl.com
 Nick Bosa,SF,nfl.com
 Mike Evans,SF,nfl.com
 Luke Gifford,SF,nfl.com
@@ -253,8 +285,10 @@ Mykel Williams,SF,nfl.com
 Trent Williams,SF,nfl.com
 Aaron Banks,GB,nfl.com
 Chris Brooks,GB,nfl.com
+Javon Bullard,GB,nfl.com
 Zaire Franklin,GB,nfl.com
 Travis Glover,GB,nfl.com
+MarShawn Lloyd,GB,nfl.com
 Keisean Nixon,GB,nfl.com
 Micah Parsons,GB,nfl.com
 Sean Rhyan,GB,nfl.com
@@ -269,20 +303,61 @@ Hunter Henry,NE,nfl.com
 Mack Hollins,NE,nfl.com
 Gabe Jacas,NE,nfl.com
 Dre'Mont Jones,NE,nfl.com
+Marcus Jones,NE,nfl.com
 Drake Maye,NE,nfl.com
 Morgan Moses,NE,nfl.com
+Brenden Schooler,NE,nfl.com
 Greg Van Roten,NE,nfl.com
 Yaya Diaby,TB,nfl.com
 Emeka Egbuka,TB,nfl.com
 Kenny Gainwell,TB,nfl.com
+Chris Godwin Jr.,TB,nfl.com
+Bucky Irving,TB,nfl.com
 Cody Mauch,TB,nfl.com
 Baker Mayfield,TB,nfl.com
 Cade Otton,TB,nfl.com
 Elijah Roberts,TB,nfl.com
+A'Shawn Robinson,TB,nfl.com
 Tykee Smith,TB,nfl.com
+Tristan Wirfs,TB,nfl.com
 Theo Benedet,CHI,nfl.com
 T.J. Edwards,CHI,nfl.com
+D'Marco Jackson,CHI,nfl.com
 Grady Jarrett,CHI,nfl.com
 Kyle Monangai,CHI,nfl.com
 Malik Muhammad,CHI,nfl.com
 Zavier Scott,CHI,nfl.com
+Tyrique Stevenson,CHI,nfl.com
+Joe Thuney,CHI,nfl.com
+Alec Anderson,BUF,nfl.com
+Joe Andreessen,BUF,nfl.com
+Terrel Bernard,BUF,nfl.com
+Spencer Brown,BUF,nfl.com
+Bradley Chubb,BUF,nfl.com
+Keon Coleman,BUF,nfl.com
+Dion Dawkins,BUF,nfl.com
+Dee Alford,BUF,nfl.com
+Sam Franklin Jr.,BUF,nfl.com
+Greg Gaines,BUF,nfl.com
+Jordan Hancock,BUF,nfl.com
+Ty Johnson,BUF,nfl.com
+Dalton Kincaid,BUF,nfl.com
+DJ Moore,BUF,nfl.com
+Ed Oliver,BUF,nfl.com
+Josh Palmer,BUF,nfl.com
+TJ Parker,BUF,nfl.com
+Ar'maj Reed-Adams,BUF,nfl.com
+T.J. Sanders,BUF,nfl.com
+Khalil Shakir,BUF,nfl.com
+Tyrell Shavers,BUF,nfl.com
+Deone Walker,BUF,nfl.com
+Demond Claiborne,MIN,nfl.com
+Christian Darrisaw,MIN,nfl.com
+Jake Golday,MIN,nfl.com
+Theo Jackson,MIN,nfl.com
+Jauan Jennings,MIN,nfl.com
+Kyler Murray,MIN,nfl.com
+Isaiah Rodgers,MIN,nfl.com
+Harrison Smith,MIN,nfl.com
+Andrew Van Ginkel,MIN,nfl.com
+Jay Ward,MIN,nfl.com

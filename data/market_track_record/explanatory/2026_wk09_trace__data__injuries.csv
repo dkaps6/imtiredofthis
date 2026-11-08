@@ -30,7 +30,9 @@ Nate Wiggins,BAL,2026,9,nfl.com
 Jonathan Allen,CIN,2026,9,nfl.com
 Jordan Battle,CIN,2026,9,nfl.com
 Kyle Dugger,CIN,2026,9,nfl.com
+B.J. Hill,CIN,2026,9,nfl.com
 Cedric Johnson,CIN,2026,9,nfl.com
+Dexter Lawrence,CIN,2026,9,nfl.com
 DJ Turner II,CIN,2026,9,nfl.com
 Yasir Abdullah,ATL,2026,9,nfl.com
 Billy Bowman Jr.,ATL,2026,9,nfl.com
@@ -49,6 +51,7 @@ Malachi Lawrence,DAL,2026,9,nfl.com
 Marist Liufau,DAL,2026,9,nfl.com
 P.J. Locke,DAL,2026,9,nfl.com
 Von Miller,DAL,2026,9,nfl.com
+DeMarvion Overshown,DAL,2026,9,nfl.com
 George Pickens,DAL,2026,9,nfl.com
 Joey Porter Jr.,DAL,2026,9,nfl.com
 Luke Schoonmaker,DAL,2026,9,nfl.com
@@ -60,7 +63,10 @@ Keenan Allen,IND,2026,9,nfl.com
 Bryce Boettcher,IND,2026,9,nfl.com
 Akeem Davis-Gaither,IND,2026,9,nfl.com
 Anthony Gould,IND,2026,9,nfl.com
+A.J. Haulcy,IND,2026,9,nfl.com
+Will Mallory,IND,2026,9,nfl.com
 Andrew Ogletree,IND,2026,9,nfl.com
+Grover Stewart,IND,2026,9,nfl.com
 Jonathan Taylor,IND,2026,9,nfl.com
 Jalen Travis,IND,2026,9,nfl.com
 Justin Walley,IND,2026,9,nfl.com
@@ -68,8 +74,10 @@ Charvarius Ward,IND,2026,9,nfl.com
 Austin Barber,CLE,2026,9,nfl.com
 Denzel Boston,CLE,2026,9,nfl.com
 Maliek Collins,CLE,2026,9,nfl.com
+Harold Fannin Jr.,CLE,2026,9,nfl.com
 Myles Harden,CLE,2026,9,nfl.com
 Elgton Jenkins,CLE,2026,9,nfl.com
+Emmanuel McNeil-Warren,CLE,2026,9,nfl.com
 Carson Schwesinger,CLE,2026,9,nfl.com
 Jared Verse,CLE,2026,9,nfl.com
 Deshaun Watson,CLE,2026,9,nfl.com
@@ -77,6 +85,7 @@ Quincy Williams,CLE,2026,9,nfl.com
 Kelvin Banks Jr.,NO,2026,9,nfl.com
 CJ Donaldson,NO,2026,9,nfl.com
 Martin Emerson,NO,2026,9,nfl.com
+Davon Godchaux,NO,2026,9,nfl.com
 Alvin Kamara,NO,2026,9,nfl.com
 Justin Reid,NO,2026,9,nfl.com
 Asim Richards,NO,2026,9,nfl.com
@@ -89,11 +98,13 @@ Pat Bryant,DEN,2026,9,nfl.com
 Talanoa Hufanga,DEN,2026,9,nfl.com
 Brandon Jones,DEN,2026,9,nfl.com
 Courtland Sutton,DEN,2026,9,nfl.com
+Dondrea Tillman,DEN,2026,9,nfl.com
 Eyioma Uwazurike,DEN,2026,9,nfl.com
 Jaylen Waddle,DEN,2026,9,nfl.com
 Bobby Brown III,CAR,2026,9,nfl.com
 Corey Bullock,CAR,2026,9,nfl.com
 Brady Christensen,CAR,2026,9,nfl.com
+Trevis Gipson,CAR,2026,9,nfl.com
 Will Lee III,CAR,2026,9,nfl.com
 Damien Lewis,CAR,2026,9,nfl.com
 Bobby Okereke,CAR,2026,9,nfl.com
@@ -109,6 +120,7 @@ Harrison Phillips,NYJ,2026,9,nfl.com
 Mason Taylor,NYJ,2026,9,nfl.com
 Trevin Wallace,NYJ,2026,9,nfl.com
 Garrett Wilson,NYJ,2026,9,nfl.com
+Nahshon Wright,NYJ,2026,9,nfl.com
 Nick Bolton,KC,2026,9,nfl.com
 Mansoor Delane,KC,2026,9,nfl.com
 Travis Kelce,KC,2026,9,nfl.com
@@ -126,6 +138,7 @@ Amen Ogbongbemiga,DET,2026,9,nfl.com
 D.J. Reed,DET,2026,9,nfl.com
 Jacob Saylors,DET,2026,9,nfl.com
 Amon-Ra St. Brown,DET,2026,9,nfl.com
+Sione Vaki,DET,2026,9,nfl.com
 DJ Wonnum,DET,2026,9,nfl.com
 Rock Ya-Sin,DET,2026,9,nfl.com
 Tucker Addington,MIA,2026,9,nfl.com
@@ -143,30 +156,43 @@ Jaylen Wright,MIA,2026,9,nfl.com
 Steve Avila,LAR,2026,9,nfl.com
 Joe Cardona,LAR,2026,9,nfl.com
 Kam Curl,LAR,2026,9,nfl.com
+Aaron Donald,LAR,2026,9,nfl.com
 Terrance Ferguson,LAR,2026,9,nfl.com
 Myles Garrett,LAR,2026,9,nfl.com
+Tyler Higbee,LAR,2026,9,nfl.com
+Alaric Jackson,LAR,2026,9,nfl.com
 Trent McDuffie,LAR,2026,9,nfl.com
+Puka Nacua,LAR,2026,9,nfl.com
 Colby Parkinson,LAR,2026,9,nfl.com
 Ronnie Rivers,LAR,2026,9,nfl.com
 Matthew Stafford,LAR,2026,9,nfl.com
 Grant Stuard,LAR,2026,9,nfl.com
 Jaylen Watson,LAR,2026,9,nfl.com
 Jordan Whittington,LAR,2026,9,nfl.com
+Byron Young,LAR,2026,9,nfl.com
 John Bates,WAS,2026,9,nfl.com
+Dyami Brown,WAS,2026,9,nfl.com
 Treylon Burks,WAS,2026,9,nfl.com
+Josh Conerly Jr.,WAS,2026,9,nfl.com
 Sam Cosmi,WAS,2026,9,nfl.com
 Jayden Daniels,WAS,2026,9,nfl.com
 Stefon Diggs,WAS,2026,9,nfl.com
 Jer'Zhan Newton,WAS,2026,9,nfl.com
 Shy Tuttle,WAS,2026,9,nfl.com
+Deatrich Wise,WAS,2026,9,nfl.com
 Colson Yankoff,WAS,2026,9,nfl.com
+Darius Alexander,NYG,2026,9,nfl.com
 Abdul Carter,NYG,2026,9,nfl.com
 Jermaine Eluemunor,NYG,2026,9,nfl.com
+Thomas Fidone II,NYG,2026,9,nfl.com
+Trace Ford,NYG,2026,9,nfl.com
 Malik Harrison,NYG,2026,9,nfl.com
 Colton Hood,NYG,2026,9,nfl.com
 Theo Johnson,NYG,2026,9,nfl.com
 Charlie Jones,NYG,2026,9,nfl.com
 Marcus Mbow,NYG,2026,9,nfl.com
+Micah McFadden,NYG,2026,9,nfl.com
+Malik Nabers,NYG,2026,9,nfl.com
 DJ Reader,NYG,2026,9,nfl.com
 Cam Skattebo,NYG,2026,9,nfl.com
 Andrew Thomas,NYG,2026,9,nfl.com
@@ -183,7 +209,9 @@ Dallas Goedert,PHI,2026,9,nfl.com
 Jonathan Greenard,PHI,2026,9,nfl.com
 Jalyx Hunt,PHI,2026,9,nfl.com
 Jonathan Jones,PHI,2026,9,nfl.com
+Jordan Mailata,PHI,2026,9,nfl.com
 Tanner McKee,PHI,2026,9,nfl.com
+Elijah Moore,PHI,2026,9,nfl.com
 Kenny Moore II,PHI,2026,9,nfl.com
 Moro Ojomo,PHI,2026,9,nfl.com
 DeVonta Smith,PHI,2026,9,nfl.com
@@ -212,6 +240,7 @@ Jacoby Brissett,ARI,2026,9,nfl.com
 Hjalte Froholdt,ARI,2026,9,nfl.com
 Jon Gaines II,ARI,2026,9,nfl.com
 Bam Knight,ARI,2026,9,nfl.com
+Max Melton,ARI,2026,9,nfl.com
 Walter Nolen,ARI,2026,9,nfl.com
 Isaac Seumalo,ARI,2026,9,nfl.com
 Josh Sweat,ARI,2026,9,nfl.com
@@ -222,7 +251,9 @@ Anthony Bradford,SEA,2026,9,nfl.com
 Charles Cross,SEA,2026,9,nfl.com
 Sam Darnold,SEA,2026,9,nfl.com
 Nick Emmanwori,SEA,2026,9,nfl.com
+Derick Hall,SEA,2026,9,nfl.com
 Tory Horton,SEA,2026,9,nfl.com
+Ernest Jones,SEA,2026,9,nfl.com
 Velus Jones Jr.,SEA,2026,9,nfl.com
 Tyrice Knight,SEA,2026,9,nfl.com
 Drew Lock,SEA,2026,9,nfl.com
@@ -237,6 +268,7 @@ Thomas Booker,LV,2026,9,nfl.com
 Foley Fatukasi,LV,2026,9,nfl.com
 Darien Porter,LV,2026,9,nfl.com
 Ian Thomas,LV,2026,9,nfl.com
+Dont'e Thornton Jr.,LV,2026,9,nfl.com
 Nick Bosa,SF,2026,9,nfl.com
 Mike Evans,SF,2026,9,nfl.com
 Luke Gifford,SF,2026,9,nfl.com
@@ -253,8 +285,10 @@ Mykel Williams,SF,2026,9,nfl.com
 Trent Williams,SF,2026,9,nfl.com
 Aaron Banks,GB,2026,9,nfl.com
 Chris Brooks,GB,2026,9,nfl.com
+Javon Bullard,GB,2026,9,nfl.com
 Zaire Franklin,GB,2026,9,nfl.com
 Travis Glover,GB,2026,9,nfl.com
+MarShawn Lloyd,GB,2026,9,nfl.com
 Keisean Nixon,GB,2026,9,nfl.com
 Micah Parsons,GB,2026,9,nfl.com
 Sean Rhyan,GB,2026,9,nfl.com
@@ -269,20 +303,61 @@ Hunter Henry,NE,2026,9,nfl.com
 Mack Hollins,NE,2026,9,nfl.com
 Gabe Jacas,NE,2026,9,nfl.com
 Dre'Mont Jones,NE,2026,9,nfl.com
+Marcus Jones,NE,2026,9,nfl.com
 Drake Maye,NE,2026,9,nfl.com
 Morgan Moses,NE,2026,9,nfl.com
+Brenden Schooler,NE,2026,9,nfl.com
 Greg Van Roten,NE,2026,9,nfl.com
 Yaya Diaby,TB,2026,9,nfl.com
 Emeka Egbuka,TB,2026,9,nfl.com
 Kenny Gainwell,TB,2026,9,nfl.com
+Chris Godwin Jr.,TB,2026,9,nfl.com
+Bucky Irving,TB,2026,9,nfl.com
 Cody Mauch,TB,2026,9,nfl.com
 Baker Mayfield,TB,2026,9,nfl.com
 Cade Otton,TB,2026,9,nfl.com
 Elijah Roberts,TB,2026,9,nfl.com
+A'Shawn Robinson,TB,2026,9,nfl.com
 Tykee Smith,TB,2026,9,nfl.com
+Tristan Wirfs,TB,2026,9,nfl.com
 Theo Benedet,CHI,2026,9,nfl.com
 T.J. Edwards,CHI,2026,9,nfl.com
+D'Marco Jackson,CHI,2026,9,nfl.com
 Grady Jarrett,CHI,2026,9,nfl.com
 Kyle Monangai,CHI,2026,9,nfl.com
 Malik Muhammad,CHI,2026,9,nfl.com
 Zavier Scott,CHI,2026,9,nfl.com
+Tyrique Stevenson,CHI,2026,9,nfl.com
+Joe Thuney,CHI,2026,9,nfl.com
+Alec Anderson,BUF,2026,9,nfl.com
+Joe Andreessen,BUF,2026,9,nfl.com
+Terrel Bernard,BUF,2026,9,nfl.com
+Spencer Brown,BUF,2026,9,nfl.com
+Bradley Chubb,BUF,2026,9,nfl.com
+Keon Coleman,BUF,2026,9,nfl.com
+Dion Dawkins,BUF,2026,9,nfl.com
+Dee Alford,BUF,2026,9,nfl.com
+Sam Franklin Jr.,BUF,2026,9,nfl.com
+Greg Gaines,BUF,2026,9,nfl.com
+Jordan Hancock,BUF,2026,9,nfl.com
+Ty Johnson,BUF,2026,9,nfl.com
+Dalton Kincaid,BUF,2026,9,nfl.com
+DJ Moore,BUF,2026,9,nfl.com
+Ed Oliver,BUF,2026,9,nfl.com
+Josh Palmer,BUF,2026,9,nfl.com
+TJ Parker,BUF,2026,9,nfl.com
+Ar'maj Reed-Adams,BUF,2026,9,nfl.com
+T.J. Sanders,BUF,2026,9,nfl.com
+Khalil Shakir,BUF,2026,9,nfl.com
+Tyrell Shavers,BUF,2026,9,nfl.com
+Deone Walker,BUF,2026,9,nfl.com
+Demond Claiborne,MIN,2026,9,nfl.com
+Christian Darrisaw,MIN,2026,9,nfl.com
+Jake Golday,MIN,2026,9,nfl.com
+Theo Jackson,MIN,2026,9,nfl.com
+Jauan Jennings,MIN,2026,9,nfl.com
+Kyler Murray,MIN,2026,9,nfl.com
+Isaiah Rodgers,MIN,2026,9,nfl.com
+Harrison Smith,MIN,2026,9,nfl.com
+Andrew Van Ginkel,MIN,2026,9,nfl.com
+Jay Ward,MIN,2026,9,nfl.com

@@ -15,27 +15,27 @@
     },
     "data/model_ml_diagnostics.csv": {
       "archived_as": "model_ml_diagnostics.csv.gz",
-      "bytes_gz": 29989,
-      "bytes_raw": 126562,
-      "sha256_raw": "f34749e4502a071cbd94c538ca7246e0320b81a48ef7ad87b341f890a8973050"
+      "bytes_gz": 25693,
+      "bytes_raw": 108493,
+      "sha256_raw": "4cd81c69f52c106255288a3b91f24af84926864e2af0232f18164187ac3ad14a"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
-      "bytes_gz": 12206,
-      "bytes_raw": 184040,
-      "sha256_raw": "780c05ba6de4372f8cae730378644a627a3c0ce81fcfaad44472a16226f7977b"
+      "bytes_gz": 10978,
+      "bytes_raw": 156960,
+      "sha256_raw": "f065ddfb3cdf4505ec925fd1b37c50d3a7a7bcad04d7a77959946fd680312fe5"
     },
     "data/player_form_consensus.csv": {
       "archived_as": "player_form_consensus.csv.gz",
-      "bytes_gz": 54114,
-      "bytes_raw": 213800,
-      "sha256_raw": "fede0ee6acd748a3d7b2c1985771e5a5c183ae85ca9ed27225f55e84091bf706"
+      "bytes_gz": 45891,
+      "bytes_raw": 181744,
+      "sha256_raw": "41647f905cffcf241229dcc4689950ec385f2ae9196643d95fcc6f528e518d40"
     },
     "data/qb_promoted_team_context.csv": {
       "archived_as": "qb_promoted_team_context.csv.gz",
-      "bytes_gz": 4711,
-      "bytes_raw": 12282,
-      "sha256_raw": "826f993b61fa138738ab0f4f1773ce8b889e7b347d5352712f4c528724c0a2e5"
+      "bytes_gz": 4703,
+      "bytes_raw": 12278,
+      "sha256_raw": "74848a58469c622a211bb2d7220bc7f78c16b527789ca68978ff0618d392681c"
     },
     "data/team_week_map.csv": {
       "archived_as": "team_week_map.csv.gz",
@@ -45,9 +45,9 @@
     },
     "data/weather_week.csv": {
       "archived_as": "weather_week.csv.gz",
-      "bytes_gz": 1272,
-      "bytes_raw": 4206,
-      "sha256_raw": "a166166706686cdfb47310dc0bc81028d806ea0748edd16d66b0d07828da0d32"
+      "bytes_gz": 913,
+      "bytes_raw": 2997,
+      "sha256_raw": "e9110cd5916614d9802ce30576db312c6ef0d2e850d7981b732e9451a07e4852"
     }
   },
   "required_column_stripped": {},
@@ -55,8 +55,8 @@
     "data/metrics_ready.csv",
     "data/model_rule_simulation_inputs.csv"
   ],
-  "source_git_sha": "00ca7647cc4b0d30b51d3a4c4af8ea0c290a17f7",
-  "source_run_id": "42088454699",
+  "source_git_sha": "8413e550c2c678c43366e38b13d2154d0d9ed05a",
+  "source_run_id": "42487049330",
   "stem": "2026_wk09",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
