@@ -1,0 +1,25 @@
+tier,ticket_odds,ticket_win_pct,ticket_ev,market,player,team,opponent,event_id,threshold,price,breakeven_pct,table_pct,own_hits,own_games
+SAFE,+151,70.45,0.769,receptions,Braelon Allen,NYJ,KC,e354e6a04b1cb9c96e549b863debb92e,0.5,-275,73.3,89.0,7,8
+SAFE,+151,70.45,0.769,receptions,Dawson Knox,BUF,MIN,17ad7eff2f7875e20a8109abe40470e3,0.5,-280,73.7,89.0,7,7
+SAFE,+151,70.45,0.769,receptions,Mitchell Evans,CAR,DEN,014282b888c741b7d70c857c09f40aa7,0.5,-280,73.7,89.0,6,7
+MODERATE,+279,53.72,1.034,rec_yards,Ryan Flournoy,DAL,IND,415fc42e72888c63e82f7bce24c65391,19.5,-580,85.3,85.7,8,8
+MODERATE,+279,53.72,1.034,receptions,Braelon Allen,NYJ,KC,e354e6a04b1cb9c96e549b863debb92e,0.5,-275,73.3,89.0,7,8
+MODERATE,+279,53.72,1.034,receptions,Dawson Knox,BUF,MIN,17ad7eff2f7875e20a8109abe40470e3,0.5,-280,73.7,89.0,7,7
+MODERATE,+279,53.72,1.034,receptions,Mitchell Evans,CAR,DEN,014282b888c741b7d70c857c09f40aa7,0.5,-280,73.7,89.0,6,7
+MODERATE,+279,53.72,1.034,receptions,Foster Moreau,HOU,LAC,39aeac43cea7b12558b91cdab1255a10,0.5,-350,77.8,89.0,6,7
+MEDIUM,+1519,9.73,0.575,rec_yards,Noah Fant,NO,CLE,e571bab6736f9338130a78a4f75c3231,3.5,-107,51.7,59.6,4,6
+MEDIUM,+1519,9.73,0.575,rec_yards,Roschon Johnson,CHI,TB,9760d8f19f84bfee300a74ceb656c95d,2.5,-116,53.7,61.0,4,6
+MEDIUM,+1519,9.73,0.575,rush_yards,Emmett Johnson,KC,NYJ,e354e6a04b1cb9c96e549b863debb92e,14.5,114,46.7,51.3,4,7
+MEDIUM,+1519,9.73,0.575,rush_yards,MarShawn Lloyd,GB,NE,2922c573ec3df8466c4a34975e446898,9.5,110,47.6,52.2,7,8
+HIGH,+7515,2.58,0.962,rush_yards,Brock Purdy,SF,LV,ac9d38a18d5c92814233a31aa9a48d78,19.5,148,40.3,48.2,5,7
+HIGH,+7515,2.58,0.962,rush_yards,Tyler Shough,NO,CLE,e571bab6736f9338130a78a4f75c3231,19.5,154,39.4,47.0,3,7
+HIGH,+7515,2.58,0.962,rec_yards,Woody Marks,HOU,LAC,39aeac43cea7b12558b91cdab1255a10,19.5,169,37.2,42.5,3,7
+HIGH,+7515,2.58,0.962,rush_yards,Emmett Johnson,KC,NYJ,e354e6a04b1cb9c96e549b863debb92e,14.5,114,46.7,51.3,4,7
+HIGH,+7515,2.58,0.962,rush_yards,MarShawn Lloyd,GB,NE,2922c573ec3df8466c4a34975e446898,9.5,110,47.6,52.2,7,8
+LOTTERY,+50464972,0.0,0.694,pass_yards,Jordan Love,GB,NE,2922c573ec3df8466c4a34975e446898,374.5,850,10.5,12.6,1,8
+LOTTERY,+50464972,0.0,0.694,pass_yards,Patrick Mahomes,KC,NYJ,e354e6a04b1cb9c96e549b863debb92e,329.5,690,12.7,13.9,1,7
+LOTTERY,+50464972,0.0,0.694,pass_yards,Jared Goff,DET,MIA,44d8c37868b700e90f816db7c5df5cdd,349.5,630,13.7,14.7,1,7
+LOTTERY,+50464972,0.0,0.694,pass_yards,Kirk Cousins,LV,SF,ac9d38a18d5c92814233a31aa9a48d78,339.5,720,12.2,12.9,1,8
+LOTTERY,+50464972,0.0,0.694,rec_yards,Chuba Hubbard,CAR,DEN,014282b888c741b7d70c857c09f40aa7,24.5,164,37.9,39.6,4,7
+LOTTERY,+50464972,0.0,0.694,pass_yards,C.J. Stroud,HOU,LAC,39aeac43cea7b12558b91cdab1255a10,349.5,825,10.8,11.3,1,7
+LOTTERY,+50464972,0.0,0.694,rec_yards,CeeDee Lamb,DAL,IND,415fc42e72888c63e82f7bce24c65391,124.5,360,21.7,22.6,2,8
