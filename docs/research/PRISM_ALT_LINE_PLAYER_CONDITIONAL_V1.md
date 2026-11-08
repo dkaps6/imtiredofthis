@@ -7,6 +7,69 @@
 **Source boundary:** `data/market_track_record/alt_props/2026_wk09_full_edges.csv` (paid,
 captured 2026-11-05T20:03Z, archived in git).
 
+## CORRECTION 2026-11-08 — the calibration claim below is RETRACTED
+
+**What this document originally concluded, and what is wrong with it.**
+
+The grading section below reports 2026 Week 9 TNF at a realized 20.2% against a
+table prediction of 34.1%, with the 0-10%, 10-20% and 20-30% bands all at 0.0%.
+That was written up as evidence the table over-predicts and that the mid
+probability band is unusable. **It is not evidence of that.**
+
+Every alternate rung is an OVER, so a low-volume game depresses all of them
+together. TNF produced **27 total receptions, a maximum of 4 by any player, and
+only 14 of 72 players caught a pass.** One game is one draw of the game
+environment, not 84 independent cells. The shortfall was confounded with the
+environment and I treated it as a property of the table.
+
+**The out-of-sample test that should have been run first:**
+`scripts/research/backtest_alt_clearance_table_v1.py`, rows in
+`data/research/alt_clearance_backtest_2026_v1.csv`. The table was fit on
+2024+2025; 2026 is a genuine holdout. Archived paid boards for weeks 1, 2, 6, 7
+and 8 supply the main-line anchors, nflverse weekly stats supply the outcomes.
+
+**13,990 cells. The table is well calibrated in every band.**
+
+| predicted band | n | predicted | actual | deviation |
+|---|---|---|---|---|
+| 0-10%   |   159 | 4.8%  | 7.5%  | +2.8pp |
+| 10-20%  |   452 | 14.3% | 18.1% | +3.9pp |
+| 20-30%  | 1,036 | 26.8% | 26.6% | -0.2pp |
+| 30-50%  | 3,438 | 42.9% | 41.2% | -1.7pp |
+| 50-70%  | 4,953 | 60.2% | 57.9% | -2.2pp |
+| 70-100% | 3,952 | 80.6% | 80.3% | -0.3pp |
+
+Maximum deviation is 3.9pp and the two lowest bands come in *above* prediction.
+The >=70% band is stable week to week (83.1 / 79.6 / 80.9 / 76.9 / 81.0 against
+80.6 predicted), so TNF's 81.3% was never the anomaly -- the mid-band collapse
+was.
+
+By market, over the same 13,990 cells:
+
+| market | n | predicted | actual |
+|---|---|---|---|
+| rec_yards      | 6,430 | 57.5% | 57.1% |
+| receptions     | 2,640 | 55.5% | 55.8% |
+| rush_rec_yards | 1,480 | 58.2% | 60.3% |
+| rush_yards     | 3,440 | 57.1% | 52.2% |
+
+`rush_yards` is the weakest at -4.9pp and is the one market worth discounting.
+Nothing supports excluding the mid band, and nothing supports the 0.9578 or
+0.5833 haircuts that were derived from TNF and briefly applied to live tickets.
+
+**Consequences for how this file should be read:**
+
+1. The band table in the grading section is a single game. Use the backtest.
+2. `robust_all_weights` is not disqualified by probability band. A mid-band leg
+    is as usable as a high-band one.
+3. FINDING 2 below -- that the population table and a player's own 4-8 game
+    record disagree on ~23% of rows -- still stands and is unaffected. It is a
+    statement about small player samples, not about table calibration.
+4. The lesson is procedural: one game is a hypothesis, not a calibration. The
+    backtest cost nothing and existed to be run at any time.
+
+---
+
 ## Why this exists
 
 `scripts/price_alt_line_offers_v1.py` prices alternate rungs off the market-anchored
@@ -97,7 +160,9 @@ structurally long.
 
 ## NEXT
 
-1. **Grade this event at row level** once the nflverse week-9 feed refreshes. 735 alt rows with
+1. ~~Grade this event at row level once the nflverse week-9 feed refreshes.~~
+   DONE, and it produced the retracted claim above. Superseded by the 13,990-cell
+   backtest. Keep grading weekly, but never again generalise from one game. 735 alt rows with
    predictions recorded pre-kickoff, including the rows this audit called robust. That is a
    direct test of the audit method, not only of the table.
 2. Decide whether the clearance table should be rebuilt **player-conditionally** (role/target
