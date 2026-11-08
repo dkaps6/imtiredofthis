@@ -3,9 +3,9 @@
   "files": {
     "data/metrics_ready.csv": {
       "archived_as": "metrics_ready.csv.gz",
-      "bytes_gz": 88541,
-      "bytes_raw": 2868957,
-      "sha256_raw": "270755153398ed39cdbe99a726232dee4601937db8f8e5ddc2613bed455b0b2f"
+      "bytes_gz": 88443,
+      "bytes_raw": 2862246,
+      "sha256_raw": "26b2643d5928f1f5e90ebb0c67d1dfb5974a958649bfaff6dfa702723178ba6b"
     },
     "data/model_ensemble_diagnostics.csv": {
       "archived_as": "model_ensemble_diagnostics.csv.gz",
@@ -21,27 +21,27 @@
     },
     "data/model_ml_diagnostics.csv": {
       "archived_as": "model_ml_diagnostics.csv.gz",
-      "bytes_gz": 25693,
-      "bytes_raw": 108493,
-      "sha256_raw": "4cd81c69f52c106255288a3b91f24af84926864e2af0232f18164187ac3ad14a"
+      "bytes_gz": 25684,
+      "bytes_raw": 108491,
+      "sha256_raw": "335c23af52bf1b18dd9e7b3c8d1377b03365671856381d4b5639caab729ccc2a"
     },
     "data/model_rule_simulation_inputs.csv": {
       "archived_as": "model_rule_simulation_inputs.csv.gz",
-      "bytes_gz": 150612,
-      "bytes_raw": 3648399,
-      "sha256_raw": "8c7b992ebc9f355eff4641c8a3bc81b47480c53219077cc2f393a6efbf758aa0"
+      "bytes_gz": 150340,
+      "bytes_raw": 3641688,
+      "sha256_raw": "d8fb39e73c8ac5fe53c60c8b4a4dbb31e877172b071f6ba1d9eec47575062a47"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
-      "bytes_gz": 10978,
-      "bytes_raw": 156960,
-      "sha256_raw": "f065ddfb3cdf4505ec925fd1b37c50d3a7a7bcad04d7a77959946fd680312fe5"
+      "bytes_gz": 10970,
+      "bytes_raw": 156958,
+      "sha256_raw": "13706db6d095b8fd24a6c1d472c40fa8b7a4f785edf00f7d45eb6b7de8d2d526"
     },
     "data/player_form_consensus.csv": {
       "archived_as": "player_form_consensus.csv.gz",
-      "bytes_gz": 45891,
-      "bytes_raw": 181744,
-      "sha256_raw": "41647f905cffcf241229dcc4689950ec385f2ae9196643d95fcc6f528e518d40"
+      "bytes_gz": 45882,
+      "bytes_raw": 181739,
+      "sha256_raw": "fc9cd29dc44b7e001e86d8ea9efa24b9a58dd8ad45dd56c379b23440b8382df0"
     },
     "data/qb_promoted_team_context.csv": {
       "archived_as": "qb_promoted_team_context.csv.gz",
@@ -70,8 +70,8 @@
   },
   "required_column_stripped": {},
   "required_missing": [],
-  "source_git_sha": "246532bdc581248ba3df4966c012d31e3bb04321",
-  "source_run_id": "42487807719",
+  "source_git_sha": "45e0c9c6224942192c03c956357c37d3c49ceb33",
+  "source_run_id": "42490256283",
   "stem": "2026_wk09",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
