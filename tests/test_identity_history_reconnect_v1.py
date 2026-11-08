@@ -17,7 +17,20 @@ from scripts.validate_manual_name_overrides_v1 import validate
 
 # source spelling -> nflverse canonical, with the gsis_id the identity was verified against
 RECONNECTED = {
-    "Audric Estim": ("Audric Estimé", "00-0039373"),
+    # Target is the ASCII form, NOT "Audric Estimé", and that is deliberate.
+    # Four normalizers in this repo disagree on his acute e -- bayesian_v2._key
+    # keeps it, repair_live_prop_identity._name_keys strips it,
+    # player_identity_v3.player_name_key transliterates it, and
+    # simulation_v2._player_key passes a stored key through unchanged -- so an
+    # accented canonical target put four different keys into the artifacts and
+    # 2026 Week 9 run 42487807719 failed with "full football universe missing
+    # Bayesian context" for him after the odds were bought.
+    #
+    # History reconnection, which is what this file guards, is PRESERVED: the
+    # companion row below maps the nflverse spelling to the same ASCII target,
+    # so the roles side and the nflverse-logs side still canonicalize to one
+    # name. test_accented_and_stripped_spellings_converge pins that.
+    "Audric Estim": ("Audric Estime", "00-0039373"),
     "Deandre Carter": ("DeAndre Carter", "00-0031763"),
     "Drew Ogletree": ("Andrew Ogletree", "00-0037292"),
     "Hollywood Brown": ("Marquise Brown", "00-0035662"),
@@ -53,6 +66,26 @@ def test_override_carries_its_verification_provenance(overrides, source):
     assert gsis in str(row["verified_source"]), f"{source}: verified_source must cite its gsis_id"
     assert str(row["reason"]).strip()
     assert str(row["verified_date"]).strip()
+
+
+def test_accented_and_stripped_spellings_converge():
+    """Both spellings of Estime must canonicalize to one name, or history breaks.
+
+    This is the substance the accented target used to provide. Reconnection
+    needs the roles side and the nflverse side to agree -- it does NOT need the
+    agreed name to carry the diacritic, and carrying it broke the pricing
+    universe.
+    """
+    from scripts.utils.canonical_names import canonicalize_player_name
+
+    targets = {canonicalize_player_name(v) for v in ("Audric Estim", "Audric Estim\u00e9", "Audric Estime")}
+    assert targets == {"Audric Estime"}, f"spellings diverge: {sorted(targets)}"
+
+
+def test_no_reconnect_target_carries_a_diacritic():
+    """A canonical target must be ASCII, because the normalizers disagree otherwise."""
+    for source, (full, _gsis) in RECONNECTED.items():
+        assert full.isascii(), f"{source} -> {full!r} is not ASCII; see the Estime comment above"
 
 
 def test_source_names_are_unique(overrides):
