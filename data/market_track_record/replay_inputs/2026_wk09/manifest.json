@@ -1,6 +1,12 @@
 {
-  "complete": false,
+  "complete": true,
   "files": {
+    "data/metrics_ready.csv": {
+      "archived_as": "metrics_ready.csv.gz",
+      "bytes_gz": 88541,
+      "bytes_raw": 2868957,
+      "sha256_raw": "270755153398ed39cdbe99a726232dee4601937db8f8e5ddc2613bed455b0b2f"
+    },
     "data/model_ensemble_diagnostics.csv": {
       "archived_as": "model_ensemble_diagnostics.csv.gz",
       "bytes_gz": 393,
@@ -18,6 +24,12 @@
       "bytes_gz": 25693,
       "bytes_raw": 108493,
       "sha256_raw": "4cd81c69f52c106255288a3b91f24af84926864e2af0232f18164187ac3ad14a"
+    },
+    "data/model_rule_simulation_inputs.csv": {
+      "archived_as": "model_rule_simulation_inputs.csv.gz",
+      "bytes_gz": 150612,
+      "bytes_raw": 3648399,
+      "sha256_raw": "8c7b992ebc9f355eff4641c8a3bc81b47480c53219077cc2f393a6efbf758aa0"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
@@ -37,6 +49,12 @@
       "bytes_raw": 12278,
       "sha256_raw": "74848a58469c622a211bb2d7220bc7f78c16b527789ca68978ff0618d392681c"
     },
+    "data/rb_rush_synthesis_context.csv": {
+      "archived_as": "rb_rush_synthesis_context.csv.gz",
+      "bytes_gz": 143,
+      "bytes_raw": 157,
+      "sha256_raw": "4a07c70be06434c6cb44e7e77416e7881519c95ce64a448f19e0def102b3785d"
+    },
     "data/team_week_map.csv": {
       "archived_as": "team_week_map.csv.gz",
       "bytes_gz": 5913,
@@ -51,12 +69,9 @@
     }
   },
   "required_column_stripped": {},
-  "required_missing": [
-    "data/metrics_ready.csv",
-    "data/model_rule_simulation_inputs.csv"
-  ],
-  "source_git_sha": "8413e550c2c678c43366e38b13d2154d0d9ed05a",
-  "source_run_id": "42487049330",
+  "required_missing": [],
+  "source_git_sha": "246532bdc581248ba3df4966c012d31e3bb04321",
+  "source_run_id": "42487807719",
   "stem": "2026_wk09",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
