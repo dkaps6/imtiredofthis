@@ -1,3 +1,8 @@
+> **SUPERSEDED 2026-11-08 by `PRISM_ALT_PRICING_VALIDATION_2026_W9.md`.** The selection
+> method below could not establish a priced edge and the football model rejects 18
+> of its 24 legs. Use `data/research/alt_parlay_tickets_2026_wk09_v2.csv`. Retained
+> as lineage.
+
 # 2026 Week 9 — alternate-line parlay tickets, recorded pre-kickoff
 
 **Recorded:** 2026-11-08, before the 18:00Z kickoffs · **Rows:** `data/research/alt_parlay_tickets_2026_wk09_v1.csv`
