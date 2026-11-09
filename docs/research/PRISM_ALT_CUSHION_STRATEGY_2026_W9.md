@@ -163,3 +163,79 @@ forces them, which this capture cannot measure.
 `receptions`, require own_rate >= 0.75 as a floor screen, no per-game quota,
 3-5 legs per ticket, plus the injury gate and coverage manifest. Grade against
 archived prices alongside the triple-intersection.
+
+---
+
+## ADDENDUM 2 2026-11-09 — the main line is a usage statement, and it dominates the ratio
+
+Challenge raised: a 4.5-yard receiving rung means the book does not believe the
+player is in the passing game at all, so a large cushion ratio on such a player
+is not an edge — it is a bet that a marginal player gets involved. The data
+agrees, and this is the strongest refinement found.
+
+Cushion pool (cushion >= 1.5, price -130..-400, frac <= 1.5, no receptions),
+split by the book's own main line:
+
+**rec_yards**
+
+| main line | n | hit% | breakeven | ROI | zero rate |
+|---|---|---|---|---|---|
+| **0-10** | 17 | 64.7% | 65.1% | +2.3% | **29.4%** |
+| 10-20 | 67 | 82.1% | 67.8% | **+20.5%** | 14.9% |
+| 20-35 | 78 | 78.2% | 71.2% | **+10.8%** | 5.1% |
+| 35-60 | 63 | 71.4% | 75.4% | -4.7% | 3.2% |
+
+**rush_yards**
+
+| main line | n | hit% | breakeven | ROI | zero rate |
+|---|---|---|---|---|---|
+| 15-30 | 26 | 84.6% | 71.0% | **+19.2%** | **0.0%** |
+| 30-50 | 20 | **100.0%** | 73.4% | **+37.1%** | **0.0%** |
+
+By the absolute rung bet: `rush_yards` >20-35 hits 95.5% at +35.7%;
+`rec_yards` >5-10 hits 80.3% at +15.2%; `rec_yards` >0-5 hits 66.7% at +4.4%
+with a 27.8% zero rate.
+
+### Why this supersedes the ratio
+
+Cushion is a ratio, so it is maximised when the denominator is small — which
+selects players the book has priced as peripheral. Those players carry a
+29.4% (rec_yards, main <10) bust-to-zero rate. A main line of 30-50 rushing
+yards is a statement that the player is a starter who will receive carries;
+the floor is a role, not a hope. Zero rate in both rushing bands was 0.0%.
+
+Correct ordering: **establish the role from the absolute main line first, then
+require the rung to sit under the projection.** Not the reverse.
+
+| rule | n | hit% | ROI | zero% | top-10 |
+|---|---|---|---|---|---|
+| cushion >= 1.5, any main line | 108 | 75.9% | +6.0% | 10.2% | 8/10 |
+| **cushion >= 1.5 + main_line >= 10** | 95 | 78.9% | **+7.8%** | 7.4% | **9/10** |
+| cushion >= 1.5 + main_line >= 20 | 61 | 78.7% | +3.3% | 3.3% | 8/10 |
+| cushion >= 1.5 + main_line >= 30 | 40 | 80.0% | +3.4% | 2.5% | 8/10 |
+
+### Validated against a live fade
+
+The shipped SNF card offered Roschon Johnson alt receptions >=2 at +294 off a
+**0.5** receptions main line, described as a 3/3-method clear. That main line is
+the book stating he may not catch a pass. The bet was faded by the user on
+football grounds. The revised rule excludes it automatically: `receptions` is
+already out, and a 0.5 main line fails any absolute-role floor.
+
+### Sample-size caution
+
+The 100% / +37.1% rushing band is **n=20**. It is not 100% and will not repeat.
+`main_line >= 10` at +7.8% on 95 legs is the defensible version. What carries
+forward is the ordering — role first, ratio second, zero-floor players excluded
+— because it has a football mechanism, not because of these magnitudes.
+
+### Week 10 test rule (revised again)
+
+1. **Absolute role floor first:** `main_line >= 10` for `rec_yards`,
+   `main_line >= 15` for `rush_yards`. Exclude anything below.
+2. Then `cushion >= 1.5`, `frac_of_line <= 1.5`, price -130..-400.
+3. Prefer `rush_yards` with `main_line >= 20`; it had a 0% bust rate.
+4. Exclude `receptions` entirely.
+5. Own-record floor `own_rate >= 0.75`.
+6. No per-game quota. 3-5 legs.
+7. Injury gate and alt coverage manifest before selecting.
