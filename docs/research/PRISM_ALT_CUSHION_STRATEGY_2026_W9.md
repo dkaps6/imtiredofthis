@@ -239,3 +239,68 @@ forward is the ordering — role first, ratio second, zero-floor players exclude
 5. Own-record floor `own_rate >= 0.75`.
 6. No per-game quota. 3-5 legs.
 7. Injury gate and alt coverage manifest before selecting.
+
+---
+
+## ADDENDUM 3 2026-11-09 — role floor + cushion, tested ex ante at parlay length
+
+Combining the role floor (addendum 2) with the cushion rule and the own-record
+screen, then ranking **ex ante** by cushion — no outcome knowledge:
+
+Rule: `rec_yards` main >= F, `rush_yards` main >= 15, `pass/rush_rec` main >= 30,
+`cushion >= 1.5`, `frac_of_line <= 1.5`, `receptions` excluded,
+`own_rate >= 0.75`, one rung per player, no per-game quota.
+
+| rec_yards floor F | pool | hit% | ROI | ex-ante top-15 |
+|---|---|---|---|---|
+| 10 | 71 | 88.7% | +4.1% | 14/15 |
+| **15** | 69 | 89.9% | +4.9% | **15/15** |
+| 18 | 66 | **90.9%** | **+5.1%** | **15/15** |
+| 20 | 65 | 90.8% | +4.1% | **15/15** |
+| 25 | 63 | 90.5% | +3.2% | **15/15** |
+
+At F=10 the single miss in the top 15 was **Laquon Treadwell** (rec_yards >9.5,
+main 14.5, actual **0**) — the lowest main line in the set. Raising F to 15
+excludes him and the ticket completes.
+
+The ex-ante top-15 at F=15 pays **+1,935** ($10 -> $204) and went 15/15:
+Braelon Allen rush >14.5 (main 34.0), Hutchinson rec >9.5 (21.5), Fields rec
+>9.5 (23.5), Waller rec >9.5 (18.5, actual 90), Tucker rec >14.5 (34.5), Jeanty
+rush >14.5 (27.0), Dobbins rush >14.5 (25.0), Schultz rec >14.5 (35.0), Kolar
+rec >9.5 (15.5), Hampton rush >14.5 (35.5, actual 60), McMillan rec >24.5
+(60.5), White rush >14.5 (36.0), Okonkwo rec >14.5 (35.5), Diggs rec >19.5
+(46.5), Kiner rush >9.5 (21.5, actual 55).
+
+The highest-odds **15 winners** available under the same rule pay **+48,890**
+($10 -> $4,899), but that set is hindsight-selected by price and was not
+reachable.
+
+### Why this matters for ticket length
+
+The refined pool's per-leg rate is 89.9% against the crude cushion pool's 78.6%.
+If that rate held and legs were independent: 5 legs 59%, 10 legs 35%, 12 legs
+28%, **15 legs 20%**. Long tickets stop being lottery tickets once the per-leg
+floor is a role rather than a ratio. Neither assumption is safe on one slate —
+the rate is in-sample and the legs share a slate-level passing environment.
+
+### Overfitting disclosure
+
+The floor was moved from 10 to 15 **after** observing the Treadwell miss. That
+is tuning on one data point. Two things argue it is not purely curve-fitting:
+the mechanism (a 14.5-yard main line describes a marginal role, which is the
+same argument that produced addendum 2), and the stability of the result — the
+top-15 completes at F = 15, 18, 20 and 25, with ROI peaking at 18. It remains
+a single-slate result and must be re-tested before any production use.
+
+### Week 10 test rule (final form for the test)
+
+1. Role floor: `rec_yards` main >= 18, `rush_yards` main >= 15,
+   `pass_yards`/`rush_rec_yards` main >= 30. Exclude everything below.
+2. `cushion = model_proj / alt_threshold >= 1.5`; `frac_of_line <= 1.5`.
+3. Exclude `receptions`.
+4. `own_rate >= 0.75` with `own_games >= 5`, snap-count denominator.
+5. No per-game quota, one rung per player, rank by cushion.
+6. 5-15 legs; report 5, 10 and 15.
+7. Injury gate and alt coverage manifest before selecting.
+8. Grade against archived prices beside the triple-intersection and the crude
+   cushion rule, so all three are compared on identical rows.
