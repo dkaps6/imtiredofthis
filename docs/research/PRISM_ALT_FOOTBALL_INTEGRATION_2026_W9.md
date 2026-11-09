@@ -91,3 +91,82 @@ unaddressed and each is plausibly worth more than any cushion refinement:
    section 3).
 5. Re-test the whole stack on week 10 against the market-only rule on identical
    rows.
+
+---
+
+## ADDENDUM 2026-11-09 — snap share, and the Roschon Johnson failure
+
+A shipped SNF leg (Roschon Johnson, CHI, alt receptions >=2 at +294) was faded
+by the user on the grounds that he is the third-string back. He is:
+
+| CHI back, weeks 1-8 | snap share | carries/g | targets/g |
+|---|---|---|---|
+| D'Andre Swift | 63.5% | 17.9 | 3.5 |
+| Kyle Monangai | 40.5% | 15.0 | 1.2 |
+| **Roschon Johnson** | **15.6%** | **4.8** | 1.8 |
+
+~12 offensive snaps per game, and Monangai's emergence at 15 carries/game had
+compressed him further. Every layer of the shipped screen cleared him anyway:
+
+- `own_rate` 4/6 — the denominator counts any game with a recorded stat, so a
+  12-snap cameo with one catch for 5 yards registers as a hit. The screen
+  measured "did he clear a trivial number", not "is he involved".
+- `model_proj` 12.3 rec yards — PRISM over-projected a 15.6%-snap back. An
+  opportunity-allocation defect, not a usable read.
+- cushion 4.9x — large *because* the rung was trivial, i.e. because the book
+  had correctly priced him as irrelevant.
+
+`load_snap_counts` was used for the games-played denominator all session and
+never used as a screen. The data was in hand.
+
+### Snap share splits the pool harder than any other variable found
+
+Refined pool (n=258, baseline 87.6% hit / +5.5% ROI), snap share = mean
+`offense_pct` weeks 1-8, strictly prior:
+
+| snap share | n | hit% | breakeven | ROI |
+|---|---|---|---|---|
+| **25-40%** | 11 | **27.3%** | 69.8% | **-66.2%** |
+| 40-55% | 18 | 100.0% | 82.9% | +22.1% |
+| 55-70% | 77 | 89.6% | 79.9% | +12.0% |
+| 70-100% | 150 | 89.3% | 85.0% | +5.2% |
+
+Below 40% snaps the sign flips entirely. n=11 in that band, so the magnitude is
+unreliable; the direction is not, and it has an obvious mechanism.
+
+### A 30% snap floor is the only screen all session that cost nothing
+
+| rule | n | hit% | ROI | ex-ante top-15 | odds |
+|---|---|---|---|---|---|
+| role + cushion + softD | 45 | 91.1% | +7.2% | 15/15 | +1,659 |
+| **+ snap >= 30%** | 43 | **93.0%** | **+9.0%** | **15/15** | **+1,653** |
+| + snap >= 40% | 42 | 92.9% | +8.2% | 15/15 | +1,245 |
+| + snap >= 50% | 40 | 92.5% | +7.2% | 15/15 | +974 |
+| + snap >= 60% | 36 | 91.7% | +6.4% | 15/15 | +876 |
+
++1.9pp hit and +1.8pp ROI for 6 basis points of payout. Every other screen
+added tonight cost real odds; this one is free. Roschon at 15.6% is excluded by
+any floor at 20%+.
+
+### The deeper point
+
+The role floor (addendum 2 of the cushion doc) and the snap floor encode the
+same football fact — **is this player actually on the field** — and the shipped
+SNF card had neither, because `receptions` carried a 0.5 main line that no
+absolute floor was applied to. `data/roles_ourlads.csv` is a canonical
+production artifact described in AGENTS.md section 5 as "current roster/depth
+roles" and was never joined at any point in this work. It is not present in a
+local checkout (built in CI), but snap counts give the same signal and were
+already loaded.
+
+### Rule update
+
+Add to the week 10 test rule, between the role floor and the cushion test:
+
+- **`snap_pct >= 0.30`** (mean `offense_pct`, weeks strictly prior, from
+  `load_snap_counts`), and
+- recompute `own_rate` over games where the player actually played rather than
+  games where he recorded a stat — the current denominator rewards cameos.
+
+Join `data/roles_ourlads.csv` when running in CI, and treat an explicit
+third-string depth label as disqualifying regardless of snap share.
