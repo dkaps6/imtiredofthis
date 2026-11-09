@@ -99,3 +99,67 @@ way.
 5. Enforce the injury gate and an alt coverage manifest before selecting.
 6. Grade against archived prices and compare directly to the triple-intersection
    on the same slate.
+
+---
+
+## ADDENDUM 2026-11-09 — ex-ante test, and the zero-floor failure mode
+
+The parlay table above samples **winners**. An ex-ante test was run: rank the
+strict pool before kickoff with no outcome knowledge, take the top N, and count.
+
+Strict pool, one rung per player: 98 legs, 11 games, **78.6% hit**.
+
+| ranking (pre-kickoff) | 11 legs | 15 | 22 | 30 |
+|---|---|---|---|---|
+| biggest cushion | 5/11 | 9/15 | 16/22 | 24/30 |
+| shortest price | 9/11 | 10/15 | 17/22 | 23/30 |
+| own record (shrunk) | 9/11 | 12/15 | **19/22** | 25/30 |
+| lowest frac_of_line | 6/11 | 9/15 | 16/22 | 22/30 |
+
+**Every ranking loses every parlay size.** At a 78.6% leg rate, 22 consecutive
+is 0.786^22 = 0.5% and 12 consecutive is 5.3%. The "+1,818,000 22-leg ticket"
+was selected with hindsight and was not reachable.
+
+### Ranking by cushion alone selects zero-floor players
+
+Five of the six misses in the top-22 by cushion recorded a **literal zero**:
+Saquon Barkley (rec yds >4.5, cushion 2.98x, actual 0), Omarion Hampton (2.83x,
+0), Kyle Williams (2.78x, 0), Laquon Treadwell (2.76x, 0), Chris Bell (2.70x,
+0). Cushion is largest precisely when the rung is small relative to a modest
+projection — a low-volume receiver whose floor is zero. This is the 11.4%
+`rec_yards` zero rate (20% in the low-projection tercile) landing on the legs
+cushion ranks highest.
+
+### A floor screen helps but does not fix it
+
+| rule | pool | hit% | ROI | top-12 |
+|---|---|---|---|---|
+| cushion>=1.5 | 87 | 72.4% | +0.6% | 8/12 |
+| + own_rate>=0.60 | 64 | 76.6% | +3.8% | 7/12 |
+| + own_rate>=0.75 | 39 | 76.9% | +3.7% | 9/12 |
+| + own_rate>=0.85 | 28 | 75.0% | -0.3% | 9/12 |
+| + own_rate=1.00 | 9 | 66.7% | -10.9% | 6/9 |
+
+Even players with perfect 2026 records missed: Quinshon Judkins (7/7, needed
+4.5 rec yds, got 2), Devaughn Vele (7/7, needed 19.5, got 17), Tre Harris (6/6,
+needed 14.5, got 6). No ex-ante screen reached 12/12.
+
+### Correct conclusion
+
+The per-leg edge is real (+11.3% ROI, 79.5% hit on the strict pool). An n-leg
+parlay of independent +EV legs has *higher* expected value than n singles —
+1.11^n - 1 — so long parlays are not an EV mistake. They are a **realization**
+mistake: 17 slates a season cannot deliver the trials a 0.5%-probability ticket
+needs. Small parlays (3-5 legs, 38-48% win at this hit rate) capture most of
+the multiplicative edge while cashing often enough to be realized inside a
+season.
+
+Uniformity constraints (one leg per game) are **dropped** as a selection rule —
+they were a convenience for independence math, not a finding, and they cost
+real options. They are retained only where a book's same-game parlay pricing
+forces them, which this capture cannot measure.
+
+**Revised week 10 test:** cushion >= 1.5, price -130..-400, frac <= 1.5, exclude
+`receptions`, require own_rate >= 0.75 as a floor screen, no per-game quota,
+3-5 legs per ticket, plus the injury gate and coverage manifest. Grade against
+archived prices alongside the triple-intersection.
