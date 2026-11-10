@@ -53,6 +53,14 @@ CARD CONSTRUCTION
   * One rung per player per card.
   * Cards are built from the highest-cushion survivors outward.
 
+MARKET EVIDENCE (week 9, the builder's own gate-passing legs)
+  rec_yards  +5.0% ROI (n=48) · rush_yards +1.7% (n=16) · everything else
+  produced zero legs. Blind, the same markets returned +2.9%, -18.5%, and
+  -30.0%/-33.9%/-0.7%, so the gates are doing the work rather than the market
+  list. See PRISM_ALT_TABLE_SUPPORT_AUDIT_V1 for why the clearance table is
+  separately disqualified for most markets -- that audit constrains
+  table-priced selection, which this builder does not do.
+
 This script decides nothing. It reports what survives and what did not.
 """
 from __future__ import annotations
@@ -63,13 +71,38 @@ import pandas as pd
 
 SNAP_MIN = 0.30
 CUSHION_MIN = 1.50
+# Rung depth cap. PRISM_ALT_TABLE_SUPPORT_AUDIT_V1 measured rungs beyond 1.6x of
+# the line at -55.1% ROI across all markets (n=593), with the clearance table
+# overstating them by -0.0286. 1.50 already sits inside that and is kept.
 FRAC_MAX = 1.50
 NEAR_MAIN_LO, NEAR_MAIN_HI = 0.85, 1.15
 OWN_GAMES_MIN = 5
 OWN_RATE_MIN = 0.60
 DEF_EXCLUDE_Q = 0.25
 PRICE_MIN, PRICE_MAX = -2500, 130
-EXCLUDED_MARKETS = ("receptions", "anytime_td")
+# Markets this builder will not emit.
+#
+# Measured on week 9 with the exclusion lifted, so these are the builder's own
+# numbers rather than a verdict imported from the table audit:
+#
+#   rec_yards        48 legs, 87.5% hit vs 83.5% needed, +5.0% ROI
+#   rush_yards       16 legs, 87.5% hit vs 86.6% needed, +1.7% ROI
+#   pass_yards        0 legs -- eliminated by the role floor and cushion gates
+#   rush_rec_yards    0 legs -- same
+#   receptions        0 legs -- same
+#
+# `rush_yards` is NOT excluded despite returning -18.5% blind and being one of
+# the markets PRISM_ALT_TABLE_SUPPORT_AUDIT_V1 disqualifies for TABLE-priced
+# selection. That audit is about the clearance table's calibration; this builder
+# never reads the table. Gated, the market returned +1.7%, so excluding it would
+# discard a positive. n=16 is thin and that figure may not survive another slate.
+#
+# `rush_rec_yards` and `receptions` produce zero legs here anyway. They are
+# listed explicitly so that a future loosening of the role floor or cushion
+# cannot silently admit them: blind they returned -33.9% and -30.0%, and
+# rush_rec_yards is the worst-calibrated cell family in the repository at
+# -0.0809, every frac band negative from 0.7x upward.
+EXCLUDED_MARKETS = ("receptions", "rush_rec_yards", "anytime_td")
 MAIN_LINE_FLOOR = {"rec_yards": 18.0, "rush_yards": 15.0,
                    "pass_yards": 30.0, "rush_rec_yards": 30.0}
 

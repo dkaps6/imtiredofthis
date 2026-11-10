@@ -161,3 +161,48 @@ def test_one_rung_per_player_per_card():
                  frac_of_line=0.3, event_id="e1") for t in (5.0, 10.0, 15.0)]
     surv, _ = _gates(rows)
     assert len(surv) == 1, "multiple rungs of one player/market survived"
+
+
+# --- market exclusions and depth cap, from PRISM_ALT_TABLE_SUPPORT_AUDIT_V1 ---
+
+
+def test_rush_rec_yards_is_excluded():
+    """Worst-calibrated cell family in the repository.
+
+    Clearance table overstates it by -0.0809, every frac band negative from
+    0.7x upward, -33.9% ROI blind on 321 week-9 rungs. It produces zero legs
+    under the other gates anyway; the explicit exclusion exists so a future
+    loosening of the role floor or cushion cannot silently admit it.
+    """
+    from scripts.research.build_alt_cards_v1 import EXCLUDED_MARKETS
+    assert "rush_rec_yards" in EXCLUDED_MARKETS
+    surv, rej = _gates([_leg(market="rush_rec_yards", main_line=80.0,
+                             alt_threshold=40.0, model_proj=80.0, frac_of_line=0.5)])
+    assert surv.empty and rej.gate.iat[0] == "G5_market"
+
+
+def test_rush_yards_is_NOT_excluded(monkeypatch):
+    """Deliberate divergence from the table audit, and the reason is recorded.
+
+    PRISM_ALT_TABLE_SUPPORT_AUDIT_V1 disqualifies rush_yards for TABLE-priced
+    selection (-0.0367 calibration error, -18.5% ROI blind). This builder never
+    reads the table, and gated, rush_yards returned +1.7% on week 9. Excluding
+    it would discard a positive.
+    """
+    from scripts.research.build_alt_cards_v1 import EXCLUDED_MARKETS
+    assert "rush_yards" not in EXCLUDED_MARKETS
+    surv, _ = _gates([_leg(market="rush_yards", main_line=40.0, alt_threshold=20.0,
+                           model_proj=40.0, frac_of_line=0.5)])
+    assert len(surv) == 1
+
+
+def test_pass_yards_is_not_excluded_by_market_list():
+    """It produces zero legs via the role floor, not via a market ban."""
+    from scripts.research.build_alt_cards_v1 import EXCLUDED_MARKETS
+    assert "pass_yards" not in EXCLUDED_MARKETS
+
+
+def test_depth_cap_sits_inside_the_measured_cliff():
+    """Rungs beyond 1.6x returned -55.1% ROI on 593 week-9 rungs."""
+    from scripts.research.build_alt_cards_v1 import FRAC_MAX
+    assert FRAC_MAX <= 1.6
