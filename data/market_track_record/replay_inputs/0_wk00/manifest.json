@@ -7,6 +7,12 @@
       "bytes_raw": 1382,
       "sha256_raw": "92e41d154fc2ac643f9c572e4ff58df38a3370ada007ab09d8c8fb5efe48d6e5"
     },
+    "data/qb_promoted_team_context.csv": {
+      "archived_as": "qb_promoted_team_context.csv.gz",
+      "bytes_gz": 4725,
+      "bytes_raw": 12237,
+      "sha256_raw": "8c6de838281e2065dac42d7c8948c097e7eee5157167d1eb33aac643c1c503b6"
+    },
     "data/team_week_map.csv": {
       "archived_as": "team_week_map.csv.gz",
       "bytes_gz": 5913,
@@ -15,9 +21,9 @@
     },
     "data/weather_week.csv": {
       "archived_as": "weather_week.csv.gz",
-      "bytes_gz": 913,
-      "bytes_raw": 2997,
-      "sha256_raw": "e9110cd5916614d9802ce30576db312c6ef0d2e850d7981b732e9451a07e4852"
+      "bytes_gz": 1164,
+      "bytes_raw": 3900,
+      "sha256_raw": "6e48e19c7f8bc9da48a74c45dc62f1225e3d5f5eb284ba719af0b321649839b2"
     }
   },
   "required_column_stripped": {},
@@ -28,8 +34,8 @@
     "data/model_rule_simulation_inputs.csv",
     "data/player_form_consensus.csv"
   ],
-  "source_git_sha": "31b468d9535b6b066bae8b113f72c76cd50b7e16",
-  "source_run_id": "42489095499",
+  "source_git_sha": "6e1771a3be7a0af77ce001716ff5abfa890503b7",
+  "source_run_id": "42879649130",
   "stem": "0_wk00",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
