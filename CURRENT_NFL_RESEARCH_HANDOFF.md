@@ -1,164 +1,171 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-11-05 — V24 — **THE 2026 WEEK 9 PAID BOARD IS CERTIFIED AND IN GIT / ALTERNATE LINES WORK AND ARE PRICED / FOUR BOARD-KILLING GATES FIXED, TWO OF THEM OURS / MIN QB WITHHELD ON PURPOSE** / CLAUDE ISSUE #535
+## TOP CHECKPOINT — 2026-11-10 — V25 — **D3 REJECTED ON A CLEAN HOLDOUT / ALT RUNGS GRADED AGAINST REAL PRICES FOR THE FIRST TIME / THE SELECTION RULES ARE NOW CODE, NOT JUDGEMENT / TWO LIVE DISTRIBUTION DEFECTS NAMED**
 
 **Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.
-**Branch:** `claude/nice-cori-4qkwqs`. **PRs #701-#706 are MERGED to `main`.** Full Slate is
-dispatchable by anyone from `main`; nothing in this checkpoint lives only in a chat.
+**Branch:** `claude/nice-cori-4qkwqs`, synced to `main`.
 
-**V23 is superseded, not retracted.** Its findings all stand and are archived verbatim in
-`docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V23_PRE_V24_2026-11-05.md`: the main line is a
-near-perfect median (realized P(over) 0.476-0.508 in every quartile, so main-line side-picking
-is closed for good), compression is a slope rather than a level, the measured betting
-contribution is 0.56pp on `rec_yards` and 2.28pp on `receptions`, and W3-W5 2026 are closed
-forensically. **Do not re-derive them.**
+**V24 is superseded, not retracted.** Archived verbatim at
+`docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V24_PRE_V25_2026-11-10.md`: the certified Week 9
+paid board, the five alternate-line provider keys, the four board-killing gates and the
+durability fixes all stand. **Do not re-derive them.**
 
 ---
 
-### WHAT ACTUALLY SHIPPED AND IS LIVE
+### 1. THE V22 ITEM IS CLOSED — D3 IS NOT PROMOTED
 
-**1. The Week 9 2026 paid board is certified and committed.** Run 42105885230.
+`PRISM_D3_W9_HOLDOUT_RESULTS_V1.md`, rows `data/research/d3_w9_holdout_graded_v1.csv`.
 
-| artifact in git | contents |
-|---|---|
-| `data/market_track_record/boards/2026_wk09.csv` | priced board, **1,538 rows after quarantine**, 30 teams |
-| `data/market_track_record/alt_props/2026_wk09_full.csv` | **8,563 alternate offers** |
-| `data/market_track_record/alt_props/2026_wk09_full_edges.csv` | **8,563 priced alt edges** (4,644 priceable) |
-| `data/market_track_record/alt_props/2026_wk09_thu.csv` | 738 Thursday offers |
-| `raw_props/` + `game_odds/` `2026_wk09*` | the paid boundaries, non-clobbering |
+Holdout `data/market_track_record/w9_prospective_frozen_v1.csv` was captured
+**2026-11-04T00:41:10Z**, before any Week 9 game, reading stats no later than Week 8,
+478 players, arms `baseline` and `D3`. Graded on 314 frozen players with Week 9 offensive
+snaps.
 
-Board markets: `rec_yards` 516, `receptions` 512, `rush_yards` 286, `pass_yards` 116,
-`rush_rec_yards` 114.
+D3 wins MAE (receiving 13.604 vs 14.035, rushing 5.424 vs 6.197; closer per-player on 63.5%
+and 82.0%). **It is not a real win.** RMSE is unchanged and marginally worse in both. Bias
+worsens in both (receiving -3.308 to -3.984, rushing -1.362 to -2.346) on a slate whose
+realized means sat above both arms. D3 wins MAE by shrinking toward zero.
 
-**2. ALTERNATE LINES ARE CONFIRMED SERVED BY THE PLAN.** All five keys HTTP 200 on first live
-execution: `player_pass_yds_alternate`, `player_rush_yds_alternate`,
-`player_reception_yds_alternate`, `player_receptions_alternate`,
-`player_rush_reception_yds_alternate`. 738 rows for ONE game, 8,563 for a 15-game slate.
-`player_anytime_td` is OUT of the pull by standing instruction and must stay out.
+On the mandated metric — side accuracy against the line — the two arms are **the same model**:
 
-**3. `scripts/price_alt_line_offers_v1.py` prices them off realized clearance, never the
-model.** Deliberate: `pricing_v2._prob_over` is a Normal approximation wrong by up to +0.448
-in the tails, which is where every alt line lives.
+| market | baseline | D3 | n | disagreements |
+|---|---|---|---|---|
+| `rush_yards` | 52.7% | 52.7% | 74 | **0** |
+| `rec_yards` | 55.3% | 55.9% | 170 | **5** (D3 3/5) |
 
----
+**D1 overlay is UNTESTED, not rejected.** It depends on the `injuries.csv` schema repair that
+has not landed, so it was inert at capture. **That same defect is why a player who was Out in
+weeks 7 and 8 and Questionable in week 9 reached a shipped card.**
 
-### THE FOUR GATES THAT KILLED PAID RUNS, AND WHO CAUSED THEM
-
-Two were real gates catching real problems. Two were ours. Stated that way on purpose.
-
-**(a) THEIRS — provider name spelling. Cost TWO paid runs.** Ourlads says "Matt Hibner";
-nflverse and the books say "Matthew Hibner" (gsis 00-0040879, BAL TE). Run 42094118645 died in
-`repair_live_prop_identity`; run 42099277230 died five steps later in
-`materialize_live_props_for_model` on the same name. Fixed three ways:
-- three verified rows in `data/manual_name_overrides.csv` — Hibner, **Joshua->Josh Palmer**
-  (BUF, 00-0036988), **Mitch->Mitchell Tinsley** (CIN, 00-0038839). All three are nflverse
-  `player_display_name`, confirmed across 2025 AND 2026 weekly stats, which is the exact field
-  `player_form_v2` builds `player_game_logs` from. NOT roster `full_name`, NOT `football_name`
-  (which says "Mitch").
-- `scripts/audit_provider_name_parity_v1.py` runs in Full Slate **BEFORE the paid fetch**,
-  strict only when a paid fetch is imminent. It found Palmer and Tinsley, both Week 9 teams,
-  before they cost anything.
-- a namespaced `il:` initial+surname fallback in `_infer_team` only, which cannot widen the
-  quarantine or override matchers and still fails closed on a cross-team surname collision.
-
-**(b) THEIRS — the MIN starter conflict. The gate saved a bad bet.** Ourlads/C2 certify
-**Kyler Murray** QB1 and he started weeks 3-8 (29/37/30/24/29 attempts). DraftKings AND FanDuel
-post **only Carson Wentz**, at 207.5, and post no Murray offer at all. The nflverse week-9
-injury feed has **no MIN rows**, because MIN plays Monday and designations publish Friday.
-Nothing reconciles them, so per the AGENTS.md anomaly gate the state is `UNRESOLVED_CONTEXT`.
-Our row projected **229.45 against 207.5** — a +21.9 yard "edge" on a QB whose team's
-established starter has no prop posted. **Withheld via
-`data/manual_final_board_quarantine.csv` (MIN, 2026, wk9); NO starter override was added.**
-A Friday-or-later re-run resolves it. Same pattern as the Wentz MIN wk2 row and four other QBs.
-
-**(c) OURS — the alt pricer was validated against a schema production does not write.**
-It died on `KeyError: 'line'`. `outputs/props_raw.csv` is the GROUPED artifact, with per-book
-lines inside `offers_json` and no `line` column; the W8 archive it was tested against is the
-older FLAT shape. `flatten_main()` now reads either and fails loudly on neither. Also fixed
-there: `cleared_conservative` is a one-sided DOWNWARD haircut, so `1 - cleared` gave UNDERs no
-haircut at all and made every UNDER outrank every OVER on `ev_conservative`, the column the
-board sorts by.
-
-**(d) OURS — removing `player_anytime_td` orphaned a gate that required it.**
-`validate_anytime_td_model_status_v1` demanded >=1 priced ATD row. Now: not in `MARKETS` + zero
-rows -> labelled `ATD_MARKET_NOT_OFFERED_BY_CONFIGURATION`; **in `MARKETS` + zero rows -> still
-fails closed**; market list unreadable -> fails closed. `validate_certified_full_slate_stack_v1`
-GAINED an assertion: a not-offered claim is only valid with zero priced rows.
+**Bar for any future D-arm:** beat baseline on side accuracy by more than the disagreement
+count explains, do not worsen bias, and improve the **top usage quartile** specifically.
 
 ---
 
-### DURABILITY DEFECTS FOUND AND FIXED — AGENTS.md 5a
+### 2. ALT RUNGS GRADED AGAINST REAL PRICES — THE FIRST TIME THIS REPO HAS EVER DONE IT
 
-1. **The archiver's two-file allowlist** meant 738 paid alt rows existed only in a 90-day
-   artifact. It now carries `alt_props/` and `alt_edges/` and Full Slate's own label-bearing
-   filenames.
-2. **The archiver clobbered `${ARCH_STEM}.csv`**, so a Sunday capture would have silently
-   destroyed Thursday's `game_odds`/`raw_props` boundary. First capture keeps the canonical
-   stem (replay/parity tooling reads that exact name); later ones get `_partN`.
-3. **`workflow_dispatch` added to the archiver** so a past run's stranded artifact can be
-   re-archived. Used to rescue run 42094118645.
-4. **`boards/` is a union-by-key ledger, so a quarantine could not propagate.** The certified
-   1,538-row capture merged back to 1,544 and **republished the withheld Wentz row,
-   indistinguishable from a certified one**. The season/week-scoped final-board quarantine is
-   now enforced on the ledger after the merge, using the existing matcher.
+`PRISM_ALT_FIRST_PRICED_GRADING_2026_W9.md`, rows `data/research/alt_graded_2026_wk09_v1.csv`
+(4,306 rungs, 13 final Week 9 games).
 
----
+**`backtest_alt_clearance_table_v1.py` contains zero references to `offered_american`.** It
+validated P(clear) at synthetic rungs and never compared one to a price. "The table is
+calibrated" was true and **carried no profitability claim**. Week 9 is the first week alt
+prices were archived.
 
-### OPERATIONAL TRAPS — READ BEFORE DISPATCHING ANYTHING
+Flat 1u on every available alt OVER rung: **-13.4% ROI.** By market:
 
-- **Merging to `main` cancels an in-flight paid Full Slate run.** `concurrency` is
-  `full-slate-${{ github.ref }}` with `cancel-in-progress`, and it fires when the competing run
-  is **created**, not when it starts. Cancelling the push run afterwards is too late.
-  **Do not merge while a paid run is in flight.**
-- **The zero-credit replay path works and should be the default for a re-run.**
-  `reuse_paid_odds_run_id` + `_artifact_id` + `_artifact_digest`, `fetch_live_odds=false`. It
-  verifies run id, artifact id, digest and expiry before use. It requires
-  `outputs/props_raw_compact.csv`, which only exists if the compact step succeeded, so a run
-  that died before it cannot be replayed.
-- **Credits: ~193 remaining** after Week 9 (~109 used on the full-slate main-market fetch).
-  A Sunday main+alt run for the remaining games is roughly 160.
-- **`[LIVE_ODDS_AUTHORIZED]` in a push commit message to `main` spends paid credits**, since
-  `e0e6c832`. `test_full_slate_workflow_contract::test_full_slate_main_push_defaults_to_no_credit_mode`
-  is RED because of it and was left red deliberately — it is a user decision, not a bug to
-  paper over. **Never put that marker in a commit message.**
-- Four tests fail on a clean checkout and are NOT ours: that contract test, two `test_ml_v2`
-  cases, `test_slot_role_unreachable_v1`. They reproduce with all V24 changes stashed.
+| market | n | hit% | ROI |
+|---|---|---|---|
+| **`rec_yards`** | 1401 | 59.3% | **+2.9%** |
+| `pass_yards` | 651 | 46.9% | -0.7% |
+| `rush_yards` | 673 | 50.2% | -18.5% |
+| `rush_rec_yards` | 321 | 42.7% | -33.9% |
+| **`receptions`** | 1260 | 31.0% | **-30.0%** |
+
+**No price band is profitable blind** — every band from <=-250 through >+1000 loses, and deep
+OVER rungs are taxed hard (frac 1.5-2.0x returns -42.2%, >2.0x returns -59.4%). Price
+filtering is not a strategy.
 
 ---
 
-### NOT DONE — DO NOT PRESENT THESE AS FINISHED
+### 3. THE SELECTION RULES, IN THE ORDER FOOTBALL DEMANDS
 
-- **The 25 positive-EV-conservative alt rows are NOT a bet list.** They concentrate in
-  `receptions` at 0.5/1.5 main lines on long prices; the cell inspected had `n=122, players=77`
-  with `post_hoc_line_restriction=True`; and one row is `Kirk Cousins rush_yards OVER 0.5`,
-  the table applied to a population it was never fit on. **A per-cell table-support audit
-  (n, players, the post-hoc flag) is REQUIRED before any money.** Not run.
-- **Week 9 is not graded.** Grade after Monday 2026-11-09 from `boards/2026_wk09.csv`.
-- **MIN pass yards is absent from the Week 9 board by design**, not by failure.
-- **`injuries_source_status.json` still mislabels practice-only pulls as `official_report`.**
-  Root cause known since V22: NFL publishes game designations Friday, so `status` is null
-  midweek and `_injury_limited` can never fire. Tracked as P2
-  `injury_questionable_untreated`; it is also why (b) above could not be resolved.
-- **`anytime_td` must stay out of any ticket construction.**
+Each was found by a specific failure. All are enforced in
+`scripts/research/build_alt_cards_v1.py` with 24 regression tests in
+`tests/test_build_alt_cards_gates_v1.py`. **Plain-English statement for the user, who cannot
+read the code and should not have to: `docs/research/YOUR_RULES_PLAIN_ENGLISH.md`.**
 
-### IMMEDIATE NEXT ACTIONS, IN ORDER
+1. **ON THE FIELD** — `snap_pct >= 0.30`, strictly prior. Below 40% snaps the sign inverts:
+   **27.3% hit against a 69.8% breakeven, -66.2% ROI.** Found by shipping a 15.6%-snap RB3.
+   The only screen that cost nothing: +1.9pp hit and +1.8pp ROI for 6bp of payout.
+2. **REAL ROLE** — absolute `main_line` floor (`rec_yards` >= 18, `rush_yards` >= 15). The
+   book's small line is a usage statement. Sub-10 receiving lines **recorded zero 29.4%** of
+   the time.
+3. **NOT AGAINST OURSELVES** — `cushion = model_proj / alt_threshold >= 1.5`. Cushion < 1.0 is
+   a rung above our own projection and returns **-24.6%**. By band: 1.5-2.0x **+7.0%**,
+   2.0-3.0x +5.7%; restricted to -150..-400 prices, 1.5-2.0x returns **+13.5%**.
+4. **REAL ALTERNATE** — `frac_of_line` outside [0.85, 1.15] and <= 1.5.
+5. **OWN EVIDENCE** — `own_games >= 5`, `own_rate >= 0.60`, denominator **games played**
+   (`load_snap_counts`), never games with a recorded stat.
+6. **MATCHUP** — exclude the toughest defensive quartile. Toughest **-1.8%** (no edge at all),
+   softest **+16.9%**. Doubles ROI 4.4% -> 10.2%. Offensive pace is inert by comparison.
+7. **AVAILABLE** — Out/Doubtful/Questionable and manual quarantine.
+8. **ONE LEG PER CARD ACROSS TIERS.** Tiers sharing legs are one bet wearing five hats; a
+   single marginal leg removed 80% of a shipped board.
 
-1. Grade Week 9 after Monday from `boards/2026_wk09.csv` + `alt_props/2026_wk09_full_edges.csv`.
-   This is the first slate where alt edges can be graded at row level.
-2. Run the **per-cell alt table-support audit** before treating any alt row as bettable.
-3. If a Sunday/Friday re-run is wanted: dispatch Full Slate from `main` with
-   `fetch_live_odds=true`, `fetch_alt_lines=true`, an `event_window` covering only the
-   remaining games, and a fresh `odds_capture_label`. Check `~193` credits first.
-4. Re-examine MIN QB once Friday designations publish; remove the wk9 quarantine row only if
-   the football authority actually supersedes Murray.
-5. Then resume the V23 queue (archived): `rush_rec_yards` ensemble is fitted and live;
-   the volume-conditional and shrunk-volume-conditional lanes are CLOSED NEGATIVE.
+**Dropped as a rule:** one-leg-per-game. It was a convenience for independence maths, not a
+finding, and it cost real options.
 
+---
 
-### PROMOTED AT V22
+### 4. TWO LIVE DISTRIBUTION DEFECTS — THESE ARE PRODUCTION BUGS
 
-**Nothing.** No coefficient, weight, feature, artifact schema or pricing path changed. `D1--D3`
-for receiving is *ready* and awaits the W9 holdout.
+**(a) `model_sd` is far too narrow.** `PRISM_ALT_PRICING_VALIDATION_2026_W9.md`, rows
+`data/research/prism_probability_calibration_2026_v1.csv`. A gamma matched to
+(`model_proj`, `model_sd`) reproduces production `fair_prob` to MAE 0.009-0.048 across
+line/mean ratios 0.03x-22x, so the summary is faithful to the draws — and the draws are
+overconfident. Graded weeks 2/6/7/8 (n=1,447, snap denominator): the **0-10% band hits 39.5%**
+and the **70-100% band hits 49.3%**. Everything collapses toward 46%. Measured
+`actual/model_proj` for `rec_yards` runs 0.47 at p25 to 1.67 at p75 with an **11.4%
+literal-zero rate** the simulation does not represent. **Every `edge_pct` the board emits
+inherits this.**
+
+**(b) High-end ceiling compression, measured prospectively.**
+`PRISM_ALT_CEILING_AND_COVERAGE_2026_W9.md`. By main-line quartile, TOP tier bias is
+**-12.5 yards** (`rec_yards`) and **-7.3** (`rush_yards`) — where the market line ran **+8.1**
+on rushing TOP, so **PRISM is 15.4 yards worse than the line exactly where the big tickets
+are.** Largest misses: Lamb -128.0 (proj 67.0, actual 195), Golden -110.8, Watson -105.8,
+Boutte -101.3, Nacua -71.8 (proj 78.2, actual 150). This is the RB P3 limitation AGENTS.md §2
+requires be tracked prospectively; **it is at least as severe for WR `rec_yards`.**
+
+Consequence: because `p_prism` binds on 35.8% of `rec_yards` and 54.8% of `rush_yards` rungs,
+a filter requiring PRISM to beat the price **deletes the high-usage OVER rungs that pay**.
+Nacua produced zero eligible legs; all 24 of his rungs hit, to >139.5 at +429.
+
+---
+
+### 5. ANTI-FINDINGS — DO NOT RE-DERIVE
+
+- **Long parlays are not reachable ex ante.** Ranked before kickoff, the best any scheme
+  managed at 22 legs was 19/22. Hindsight-perfect tickets exist every week and are not
+  buyable. The published +1,818,000 figure was winners sorted by price.
+- **Price-ranking breaks tickets.** Within a qualifying pool, ranking by price goes 12/15 and
+  re-selects exactly the low-main-line players the role floor exists to kill.
+- **Cushion-ranking is correct but caps payout.** It always lands on the deepest, most
+  expensive rung. Hit rate and ROI both *rise* with cushion, so price and reliability are
+  aligned, not traded off. 15 legs cushion-ranked went **15/15 at +1,935**.
+- **Alt coverage had a 16% hole** (37 of 231 priced players), clustered by kickoff window —
+  BAL/JAX played Thursday, CIN/ATL kicked 09:30 ET against a 09:08 ET capture. Bijan Robinson
+  was never rejected by a filter; **he had no ladder to reject.** Emit a coverage manifest.
+
+---
+
+### 6. IMMEDIATE NEXT ACTIONS, IN ORDER
+
+1. **Repair `injuries.csv`.** `build_injuries_weekly` must emit its declared 11-column schema
+   and `audit_2026_production_readiness.py` must assert it so a file without `status` fails
+   closed. **This unblocks D1 and fixes the gate that let a returning-from-injury player onto
+   a shipped card.** Production repair, no preregistration needed.
+2. **Finish grading Week 9** — SNF (TB@CHI) and MNF (BUF@MIN) are now final and were excluded
+   from the 13-game grading above.
+3. **Run the per-cell alt table-support audit** (n, players, post-hoc flag) — still REQUIRED
+   before treating any alt row as bettable, still not run.
+4. **Week 10 head-to-head on identical rows:** gated cushion rule vs the triple-intersection
+   vs blind, with the matchup gate actually applied.
+5. **Resolve the MIN QB wk9 quarantine row** — Murray stayed Out, Wentz started.
+6. Then: widen simulation dispersion to the measured residual spread per market and projection
+   tercile, and model the bust rate explicitly. Re-audit every `edge_pct` consumer after.
+
+---
+
+### 7. PROMOTED AT V25
+
+**Nothing.** No coefficient, weight, feature, artifact schema or pricing path changed. D3 was
+tested and rejected. The selection gates are research tooling under `scripts/research/`, not a
+production path. `AGENTS.md` §3 holds throughout: `cushion` uses `model_proj` **ordinally**
+against a rung and no sportsbook variable constructs any projection.
+
+---
 
 ### NON-NEGOTIABLE USER SCIENCE
 **THE PLAYER SHOULD HAVE THE RULES, NOT THE POSITION HAVE THE PLAYER.** Named-individual
