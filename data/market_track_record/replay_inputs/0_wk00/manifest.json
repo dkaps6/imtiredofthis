@@ -1,6 +1,18 @@
 {
   "complete": false,
   "files": {
+    "data/injuries.csv": {
+      "archived_as": "injuries.csv.gz",
+      "bytes_gz": 111,
+      "bytes_raw": 105,
+      "sha256_raw": "ad0e2260bbb8e9485fce9c12fec0f137065e87f018d923523333140816914881"
+    },
+    "data/injuries_source_status.json": {
+      "archived_as": "injuries_source_status.json.gz",
+      "bytes_gz": 225,
+      "bytes_raw": 282,
+      "sha256_raw": "381aea975340ae3dbf5e46141e249e38006dee54541ff055b562533937360133"
+    },
     "data/model_ensemble_weights.csv": {
       "archived_as": "model_ensemble_weights.csv.gz",
       "bytes_gz": 668,
@@ -34,8 +46,8 @@
     "data/model_rule_simulation_inputs.csv",
     "data/player_form_consensus.csv"
   ],
-  "source_git_sha": "2d65b5078646522f56c28f11571c6cab5dfe5485",
-  "source_run_id": "42894769319",
+  "source_git_sha": "b6690eede53f7eb5325a36fb2b137b9105b14894",
+  "source_run_id": "42896062972",
   "stem": "0_wk00",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
