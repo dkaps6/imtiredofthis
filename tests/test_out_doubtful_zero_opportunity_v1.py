@@ -103,19 +103,17 @@ def test_no_designation_is_untouched(monkeypatch):
     assert out.loc["Fine", "rules_tgt_share"] > 0.0
 
 
-def test_out_alpha_still_uses_the_legacy_redistribution_rule(monkeypatch):
-    """KNOWN INCONSISTENCY, deliberately not changed here.
+def test_out_alpha_is_zeroed_and_his_share_is_redistributed(monkeypatch):
+    """The alpha path and the general path now agree that OUT means zero.
 
-    An OUT **WR1 alpha** goes through ``_injury_target_overrides`` instead, which
-    keeps half his share and redistributes the other half 60/30/10. So an OUT
-    WR1 retains opportunity while an OUT WR2 now gets zero.
-
-    That legacy rule is a separately promoted behaviour with its own test
-    (``test_alpha_injury_redistribution_preserves_legacy_60_30_10``) and it
-    REDISTRIBUTES, which is the D1 study's arm A3 — the arm that lost half of
-    A2's gain with a CI crossing zero. Replacing it is a real change that needs
-    its own preregistration, not a bundled edit. This test pins the
-    inconsistency so it stays visible instead of being discovered later.
+    They differ in what happens to the freed share, and that difference is
+    deliberate and measured. A non-alpha OUT player's share falls into
+    ``_allocate_counts``'s residual bucket and is discarded. An OUT alpha's
+    share is handed to his teammates, because team pass attempts come from
+    ``binomial(plays, pass_rate)`` and do not depend on shares -- the
+    quarterback throws the same number of passes either way. Across 14
+    OUT/DOUBTFUL alpha-WR vacancies in 2026 weeks 3-9, 100.0% of the vacated
+    aggregate target share landed on teammates (WR 73.7%, TE 22.5%, RB 4.9%).
     """
     players = [
         _p("Alpha", "LWR", "WR1", {"tgt_share": 0.30, "injury_status": "OUT"}),
@@ -124,6 +122,29 @@ def test_out_alpha_still_uses_the_legacy_redistribution_rule(monkeypatch):
         _p("Back", "RB", "RB1", {"tgt_share": 0.10}),
     ]
     out = _run(players, monkeypatch)
-    alpha = float(out.loc["Alpha", "rules_tgt_share"])
-    assert alpha > 0.0, "legacy alpha rule changed without a preregistration"
+    assert float(out.loc["Alpha", "rules_tgt_share"]) == pytest.approx(0.0)
+    assert float(out["rules_tgt_share"].sum()) == pytest.approx(0.80), "team mass not conserved"
     assert int(out["rules_injury_redistribution"].sum()) >= 1
+
+
+def test_alpha_vacancy_is_redistributed_not_discarded(monkeypatch):
+    """Guards the distinction from the non-alpha path.
+
+    If someone makes the alpha path discard like the general path, team target
+    mass drops and the model projects a team that simply throws fewer
+    completions to anybody. That is the failure this pins.
+    """
+    players = [
+        _p("Alpha", "LWR", "WR1", {"tgt_share": 0.30, "injury_status": "OUT"}),
+        _p("WR2", "RWR", "WR1_5", {"tgt_share": 0.20}),
+        _p("Slot", "SWR", "SLOT", {"tgt_share": 0.20}),
+        _p("Back", "RB", "RB1", {"tgt_share": 0.10}),
+    ]
+    out = _run(players, monkeypatch)
+    teammates = float(out.loc[["WR2", "Slot", "Back"], "rules_tgt_share"].sum())
+    assert teammates == pytest.approx(0.50 + 0.30), "vacated share was discarded, not redistributed"
+
+
+def test_alpha_redistribution_fraction_is_total():
+    from scripts.modeling.simulation_rules import ALPHA_VACANCY_REDISTRIBUTED_FRACTION
+    assert ALPHA_VACANCY_REDISTRIBUTED_FRACTION == 1.00

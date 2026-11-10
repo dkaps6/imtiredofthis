@@ -90,6 +90,34 @@ def _injury_limited(ctx: PlayerContext) -> bool:
     return any(token in text for token in ("OUT", "DOUBTFUL", "IR", "PUP"))
 
 
+# Fraction of an OUT alpha WR's target share handed to his teammates.
+#
+# This was 0.50, which left an OUT WR1 holding half his share while an OUT WR2
+# receives zero (OUT_DOUBTFUL_OPPORTUNITY_RETENTION). Two independent
+# measurements say 1.00:
+#
+#   1. Retention. OUT/DOUBTFUL players retain 0.0000 of their opportunity over
+#      387 prior 2026 cases, 0.0% of whom played
+#      (PRISM_D1_W9_HOLDOUT_RESULTS_V1). An OUT alpha is not a special case.
+#   2. Destination. Across 14 OUT/DOUBTFUL alpha-WR vacancies in 2026 weeks
+#      3-9, 100.0% of the vacated aggregate target share landed on teammates:
+#      WR 73.7% (13/14 teams), TE 22.5% (10/14), RB 4.9% (8/14), OTHER -1.1%.
+#      Rows: data/research/alpha_vacancy_destinations_2026_v1.csv.
+#
+# The second measurement is why this is redistribution and not the discard
+# applied elsewhere. The team's pass attempts come from
+# binomial(plays, pass_rate) and do not depend on shares, so the quarterback
+# throws the same number of passes whether or not his WR1 is active. Zeroing
+# the alpha without redistributing sends those targets to _allocate_counts's
+# residual bucket, which is discarded -- modelling a team that simply throws
+# 24% fewer completions to anyone. The data says the opposite happens.
+#
+# The 60/30/10 split below is NOT changed. Measured destinations are 74/23/5,
+# which is directionally the same, and n=14 is too thin to justify re-fitting
+# weights. That is a separate question with its own evidence bar.
+ALPHA_VACANCY_REDISTRIBUTED_FRACTION = 1.00
+
+
 def _injury_target_overrides(
     players: list[PlayerContext],
     labels: Dict[tuple[str, str], str],
@@ -113,7 +141,7 @@ def _injury_target_overrides(
         alpha_share = base_share(alpha)
         if alpha_share <= 0:
             continue
-        give = alpha_share * 0.50
+        give = alpha_share * ALPHA_VACANCY_REDISTRIBUTED_FRACTION
         overrides[(team, _key(alpha.player))] = alpha_share - give
 
         buckets = [

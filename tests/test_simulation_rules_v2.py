@@ -54,10 +54,20 @@ def test_alpha_injury_redistribution_preserves_legacy_60_30_10(monkeypatch):
     monkeypatch.setattr(simulation_rules, "load_model_contexts", lambda: ({"IND": ind, "HOU": hou}, players))
     metrics = pd.DataFrame([{"player": p.player, "team": "IND", "opponent": "HOU", "position": p.position, "tgt_share": p.features["tgt_share"]} for p in players])
     out = simulation_rules.apply_rules_to_metrics(metrics).set_index("player")
-    assert np.isclose(out.loc["Alpha", "rules_tgt_share"], 0.15)
-    assert out.loc["WR2", "rules_tgt_share"] > 0.20
-    assert out.loc["Slot", "rules_tgt_share"] > 0.20
-    assert out.loc["Back", "rules_tgt_share"] > 0.10
+    # The alpha is now ZEROED, not halved. OUT/DOUBTFUL players retain 0.0000
+    # of their opportunity over 387 prior 2026 cases, 0.0% of whom played, and
+    # an OUT alpha is not a special case
+    # (ALPHA_VACANCY_REDISTRIBUTED_FRACTION, PRISM_D1_W9_HOLDOUT_RESULTS_V1).
+    assert np.isclose(out.loc["Alpha", "rules_tgt_share"], 0.0)
+    # The 60/30/10 weights are UNCHANGED and now carry the full 0.30 share.
+    # Measured destinations are 74/23/5 across 14 vacancies, directionally the
+    # same; n is too thin to re-fit weights.
+    assert np.isclose(out.loc["WR2", "rules_tgt_share"], 0.20 + 0.30 * 0.60)
+    assert np.isclose(out.loc["Slot", "rules_tgt_share"], 0.20 + 0.30 * 0.30)
+    assert np.isclose(out.loc["Back", "rules_tgt_share"], 0.10 + 0.30 * 0.10)
+    # Team target mass must be conserved: the quarterback throws the same number
+    # of passes whether or not his WR1 is active.
+    assert np.isclose(out["rules_tgt_share"].sum(), 0.80)
     assert int(out["rules_injury_redistribution"].sum()) == 4
 
 
