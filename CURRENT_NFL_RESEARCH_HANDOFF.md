@@ -1,169 +1,192 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-11-10 — V25 — **D3 REJECTED ON A CLEAN HOLDOUT / ALT RUNGS GRADED AGAINST REAL PRICES FOR THE FIRST TIME / THE SELECTION RULES ARE NOW CODE, NOT JUDGEMENT / TWO LIVE DISTRIBUTION DEFECTS NAMED**
+## TOP CHECKPOINT — 2026-11-10 — V26 — **D1 TESTED AND SPLIT: OUT/DOUBTFUL ZEROING SHIPPED TO PRODUCTION, EDGE CLAIM REJECTED / THE INJURY STATE CONTRACT IS FIXED AND THE CHAIN IS VERIFIED END TO END**
 
 **Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.
 **Branch:** `claude/nice-cori-4qkwqs`, synced to `main`.
 
-**V24 is superseded, not retracted.** Archived verbatim at
-`docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V24_PRE_V25_2026-11-10.md`: the certified Week 9
-paid board, the five alternate-line provider keys, the four board-killing gates and the
-durability fixes all stand. **Do not re-derive them.**
+**V25 is superseded, not retracted.** Archived verbatim at
+`docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V25_PRE_V26_2026-11-10.md`. Its alt-line
+findings, the two distribution defects and the anti-findings all stand and are
+summarised in §5–§7 below. **V25 said D1 was "untested, not rejected" and listed the
+W10 capture as the step that would unblock it. Both are now wrong.**
 
 ---
 
-### 1. THE V22 ITEM IS CLOSED — D3 IS NOT PROMOTED
+### 1. PRODUCTION CHANGED — the first production change in several checkpoints
 
-`PRISM_D3_W9_HOLDOUT_RESULTS_V1.md`, rows `data/research/d3_w9_holdout_graded_v1.csv`.
+`scripts/modeling/simulation_rules.py`: `OUT_DOUBTFUL_OPPORTUNITY_RETENTION = 0.0`,
+previously `0.50`. A player carrying OUT / DOUBTFUL / IR / PUP now receives **zero**
+modeled target and rush share.
 
-Holdout `data/market_track_record/w9_prospective_frozen_v1.csv` was captured
-**2026-11-04T00:41:10Z**, before any Week 9 game, reading stats no later than Week 8,
-478 players, arms `baseline` and `D3`. Graded on 314 frozen players with Week 9 offensive
-snaps.
+**The next Full Slate board is therefore not directly comparable to weeks 1–9 for any
+aggregate diagnostic.** Expect lower team opportunity mass and lower positional means.
 
-D3 wins MAE (receiving 13.604 vs 14.035, rushing 5.424 vs 6.197; closer per-player on 63.5%
-and 82.0%). **It is not a real win.** RMSE is unchanged and marginally worse in both. Bias
-worsens in both (receiving -3.308 to -3.984, rushing -1.362 to -2.346) on a slate whose
-realized means sat above both arms. D3 wins MAE by shrinking toward zero.
+Evidence (`PRISM_D1_W9_HOLDOUT_RESULTS_V1`): OUT retention **0.0000** over 364 prior
+cases with **0.0% played**; DOUBTFUL **0.0000** over 23 cases, 0.0% played. The earlier
+study reached the same place independently — A2 (0.00) beat A1 (0.50) by +0.00257
+[+0.00139, +0.00392], CI excluding zero.
 
-On the mandated metric — side accuracy against the line — the two arms are **the same model**:
+At 0.50, production projected a mean **17.74 receiving and 8.55 rushing yards for 24
+players the league had publicly ruled out**, every one of whom recorded 0.0. Those 27
+OUT/DOUBTFUL players are 5.6% of the universe and contribute **7.4% of total receiving
+absolute error**. Promoted as a **correctness repair**; no statistical test is required
+to call that wrong.
 
-| market | baseline | D3 | n | disagreements |
-|---|---|---|---|---|
-| `rush_yards` | 52.7% | 52.7% | 74 | **0** |
-| `rec_yards` | 55.3% | 55.9% | 170 | **5** (D3 3/5) |
-
-**D1 overlay is UNTESTED, not rejected.** It depends on the `injuries.csv` schema repair that
-has not landed, so it was inert at capture. **That same defect is why a player who was Out in
-weeks 7 and 8 and Questionable in week 9 reached a shipped card.**
-
-**Bar for any future D-arm:** beat baseline on side accuracy by more than the disagreement
-count explains, do not worsen bias, and improve the **top usage quartile** specifically.
+Pinned by `tests/test_out_doubtful_zero_opportunity_v1.py` (12 tests).
 
 ---
 
-### 2. ALT RUNGS GRADED AGAINST REAL PRICES — THE FIRST TIME THIS REPO HAS EVER DONE IT
+### 2. THE INJURY STATE CONTRACT IS FIXED, AND THE CHAIN IS VERIFIED WITH REAL DATA
 
-`PRISM_ALT_FIRST_PRICED_GRADING_2026_W9.md`, rows `data/research/alt_graded_2026_wk09_v1.csv`
-(4,306 rungs, 13 final Week 9 games).
+`build_injuries_weekly` used to label **any** non-empty pull `official_report` — it
+branched on `if not df.empty` and never checked whether a row carried a designation.
+Clubs publish practice participation Wed/Thu and the game designation **Friday**, so a
+midweek pull said "official report", `status` was null, `_injury_limited` never fired,
+and every unavailable player kept full opportunity. **Production's implied retention was
+1.00 even though its code said 0.50.**
 
-**`backtest_alt_clearance_table_v1.py` contains zero references to `offered_american`.** It
-validated P(clear) at synthetic rungs and never compared one to a price. "The table is
-calibrated" was true and **carried no profitability claim**. Week 9 is the first week alt
-prices were archived.
+Now: `classify_report_state()` decides from the rows. New state **`practice_only_report`**.
+`VALID_STATES` pins four values. The three validators that hard-coded the old two-value
+set and would fail closed — `validate_2026_provider_artifacts`,
+`validate_full_slate_data_quality_v1`, `repair_injuries_nflcom_v1` — all accept it, and
+the first now **raises** when a status claims `official_report` with zero designations.
+`audit_2026_production_readiness` gains a P0 for that mislabel and for any unknown state.
+19 tests in `tests/test_injury_report_state_contract_v1.py`.
 
-Flat 1u on every available alt OVER rung: **-13.4% ROI.** By market:
-
-| market | n | hit% | ROI |
-|---|---|---|---|
-| **`rec_yards`** | 1401 | 59.3% | **+2.9%** |
-| `pass_yards` | 651 | 46.9% | -0.7% |
-| `rush_yards` | 673 | 50.2% | -18.5% |
-| `rush_rec_yards` | 321 | 42.7% | -33.9% |
-| **`receptions`** | 1260 | 31.0% | **-30.0%** |
-
-**No price band is profitable blind** — every band from <=-250 through >+1000 loses, and deep
-OVER rungs are taxed hard (frac 1.5-2.0x returns -42.2%, >2.0x returns -59.4%). Price
-filtering is not a strategy.
+**Verified end to end on real week 9 data, not by reading code:** builder emits 362 rows
+/ `official_report` / 154 designations → `context_bridge` populates `injury_status` and
+`injury_designation` → `_injury_limited` fires for Out and Doubtful and correctly does
+**not** fire for Questionable. **Week 9 would have zeroed 81 OUT/DOUBTFUL players.**
 
 ---
 
-### 3. THE SELECTION RULES, IN THE ORDER FOOTBALL DEMANDS
+### 3. D1 — TESTED. THE HOLDOUT DID NOT NEED TO WAIT, AND THAT MISTAKE COST THREE WEEKS
 
-Each was found by a specific failure. All are enforced in
-`scripts/research/build_alt_cards_v1.py` with 24 regression tests in
-`tests/test_build_alt_cards_gates_v1.py`. **Plain-English statement for the user, who cannot
-read the code and should not have to: `docs/research/YOUR_RULES_PLAIN_ENGLISH.md`.**
+A valid holdout needs a universe built from weeks ≤8, retention calibrated on weeks ≤8,
+real week 9 designations and week 9 actuals. **All four already existed.** Calibrating on
+≤8 and testing on 9 is out-of-sample; the original study's defect was fitting *and*
+testing on W7+W8, not a missing frozen file. **"Prospective capture" and "valid holdout"
+are not the same thing.** Do not repeat this.
 
-1. **ON THE FIELD** — `snap_pct >= 0.30`, strictly prior. Below 40% snaps the sign inverts:
-   **27.3% hit against a 69.8% breakeven, -66.2% ROI.** Found by shipping a 15.6%-snap RB3.
-   The only screen that cost nothing: +1.9pp hit and +1.8pp ROI for 6bp of payout.
-2. **REAL ROLE** — absolute `main_line` floor (`rec_yards` >= 18, `rush_yards` >= 15). The
-   book's small line is a usage statement. Sub-10 receiving lines **recorded zero 29.4%** of
-   the time.
-3. **NOT AGAINST OURSELVES** — `cushion = model_proj / alt_threshold >= 1.5`. Cushion < 1.0 is
-   a rung above our own projection and returns **-24.6%**. By band: 1.5-2.0x **+7.0%**,
-   2.0-3.0x +5.7%; restricted to -150..-400 prices, 1.5-2.0x returns **+13.5%**.
-4. **REAL ALTERNATE** — `frac_of_line` outside [0.85, 1.15] and <= 1.5.
-5. **OWN EVIDENCE** — `own_games >= 5`, `own_rate >= 0.60`, denominator **games played**
-   (`load_snap_counts`), never games with a recorded stat.
-6. **MATCHUP** — exclude the toughest defensive quartile. Toughest **-1.8%** (no edge at all),
-   softest **+16.9%**. Doubles ROI 4.4% -> 10.2%. Offensive pace is inert by comparison.
-7. **AVAILABLE** — Out/Doubtful/Questionable and manual quarantine.
-8. **ONE LEG PER CARD ACROSS TIERS.** Tiers sharing legs are one bet wearing five hats; a
-   single marginal leg removed 80% of a shipped board.
+**Grading population is the whole story.** Played-only (n=314, snap denominator) leaves
+12 designated players, **all QUESTIONABLE**, because every OUT and DOUBTFUL player is
+excluded for not playing — D1's main effect is structurally invisible and K4 fires. Full
+universe (n=478, non-producers at actual 0) has 48 designated across all three tiers and
+is the correct population for a projection claim.
 
-**Dropped as a rule:** one-leg-per-game. It was a convenience for independence maths, not a
-finding, and it cost real options.
+Full universe: `d1d3` improves receiving MAE 13.391 → **11.929**, RMSE 20.957 →
+**19.975**, rushing bias +1.111 → **+0.031**. **D1 improves RMSE, which D3 alone never
+did** (its RMSE was flat at 22.846 vs 22.841). D3 wins MAE by shrinking the middle; D1
+fixes the tails.
+
+**The edge claim is rejected and K1 fires.** Receiving side accuracy reads 54.8% → 58.1%,
+but `d1d3` vs base is **12 of 18 disagreements (binomial p = 0.238)** and **only 2 of
+those 18 involve a designated player** — the other 16 are undesignated players flipping on
+residual-mass perturbation of the multinomial draw. Only **8 of 186** priced receiving
+rows are designated at all, because books pull lines for players who are OUT.
+
+**Carry this forward: simulation noise moves more side calls than the arm does.** A
+single-week side-accuracy comparison on re-simulated universes has a noise floor wide
+enough to swallow a real effect.
+
+**NOT promoted: the QUESTIONABLE multiplier** (0.8535 targets / 0.5718 rush). n=21,
+2 of 18 disagreements, and the designation is applied inconsistently by club — the
+preregistered named risk. Needs weeks, not one slate.
+
+**D3 remains rejected** on its own holdout (`PRISM_D3_W9_HOLDOUT_RESULTS_V1`). Note
+`d1d3` beats `d1` on both markets, so the joint arm stays under test.
 
 ---
 
-### 4. TWO LIVE DISTRIBUTION DEFECTS — THESE ARE PRODUCTION BUGS
+### 4. KNOWN INCONSISTENCY, PINNED BY TEST RATHER THAN QUIETLY FIXED
 
-**(a) `model_sd` is far too narrow.** `PRISM_ALT_PRICING_VALIDATION_2026_W9.md`, rows
-`data/research/prism_probability_calibration_2026_v1.csv`. A gamma matched to
-(`model_proj`, `model_sd`) reproduces production `fair_prob` to MAE 0.009-0.048 across
-line/mean ratios 0.03x-22x, so the summary is faithful to the draws — and the draws are
-overconfident. Graded weeks 2/6/7/8 (n=1,447, snap denominator): the **0-10% band hits 39.5%**
-and the **70-100% band hits 49.3%**. Everything collapses toward 46%. Measured
+An OUT **WR1 alpha** still routes through `_injury_target_overrides`, which keeps half
+his share and redistributes the rest 60/30/10. **So an OUT WR1 retains opportunity while
+an OUT WR2 now gets zero.** That legacy rule is separately promoted, has its own test
+(`test_alpha_injury_redistribution_preserves_legacy_60_30_10`), and **redistributes** —
+the D1 study's arm A3, which lost half of A2's gain with a CI crossing zero. Replacing it
+needs its own preregistration. `test_out_alpha_still_uses_the_legacy_redistribution_rule`
+keeps it visible.
+
+**Also measured:** teammates of an OUT player are **not** under-projected (rec bias +0.06
+vs +0.50 for teams with nobody out) because `_allocate_counts` uses a residual bucket
+rather than redistributing zero-sum. But the **0.95 share cap** means zeroing an OUT
+player relieves a squeeze, so teammate bias moves +0.06 → **+1.79**. A real cost,
+outweighed in aggregate. The 0.95 cap stays untouched (V20 §7 protects it).
+
+---
+
+### 5. ALT LINES — SELECTION RULES, ENFORCED IN CODE (unchanged from V25)
+
+`scripts/research/build_alt_cards_v1.py`, 24 tests, plain-English statement for the user
+at `docs/research/YOUR_RULES_PLAIN_ENGLISH.md`. In football order: **on the field**
+(`snap_pct >= 0.30`; below 40% snaps the sign inverts to −66.2% ROI) · **real role**
+(absolute `main_line` floor; sub-10 receiving lines record zero 29.4% of the time) ·
+**not against ourselves** (`cushion = model_proj / alt_threshold >= 1.5`; below 1.0
+returns −24.6%) · **real alternate** (`frac_of_line` outside [0.85, 1.15], ≤ 1.5) ·
+**own evidence** (games played, not games with a stat) · **matchup** (toughest quartile
+−1.8%, softest +16.9%) · **availability** · **no leg shared across tiers**.
+
+First grading against real prices (`PRISM_ALT_FIRST_PRICED_GRADING_2026_W9`, 4,306 rows,
+13 games): blind −13.4%; `rec_yards` the only profitable market (+2.9%), `receptions`
+worst (−30.0%); **no price band wins blind**. The old backtest never referenced
+`offered_american`, so no profitability claim had ever existed.
+
+---
+
+### 6. TWO LIVE DISTRIBUTION DEFECTS — STILL OPEN
+
+**(a) `model_sd` is far too narrow.** Graded weeks 2/6/7/8 (n=1,447): the 0–10% band hits
+**39.5%**, the 70–100% band hits **49.3%**. Everything collapses toward 46%. Measured
 `actual/model_proj` for `rec_yards` runs 0.47 at p25 to 1.67 at p75 with an **11.4%
 literal-zero rate** the simulation does not represent. **Every `edge_pct` the board emits
 inherits this.**
 
-**(b) High-end ceiling compression, measured prospectively.**
-`PRISM_ALT_CEILING_AND_COVERAGE_2026_W9.md`. By main-line quartile, TOP tier bias is
-**-12.5 yards** (`rec_yards`) and **-7.3** (`rush_yards`) — where the market line ran **+8.1**
-on rushing TOP, so **PRISM is 15.4 yards worse than the line exactly where the big tickets
-are.** Largest misses: Lamb -128.0 (proj 67.0, actual 195), Golden -110.8, Watson -105.8,
-Boutte -101.3, Nacua -71.8 (proj 78.2, actual 150). This is the RB P3 limitation AGENTS.md §2
-requires be tracked prospectively; **it is at least as severe for WR `rec_yards`.**
-
-Consequence: because `p_prism` binds on 35.8% of `rec_yards` and 54.8% of `rush_yards` rungs,
-a filter requiring PRISM to beat the price **deletes the high-usage OVER rungs that pay**.
-Nacua produced zero eligible legs; all 24 of his rungs hit, to >139.5 at +429.
+**(b) High-end ceiling compression.** TOP-quartile bias −12.5 (`rec_yards`) and −7.3
+(`rush_yards`), where the market line ran **+8.1** on rushing TOP — PRISM is **15.4 yards
+worse than the line** exactly where the big tickets are. Largest W9 misses: Lamb −128.0
+(proj 67.0, actual 195), Nacua −71.8 (proj 78.2, actual 150).
 
 ---
 
-### 5. ANTI-FINDINGS — DO NOT RE-DERIVE
+### 7. ANTI-FINDINGS — DO NOT RE-DERIVE (unchanged from V25)
 
-- **Long parlays are not reachable ex ante.** Ranked before kickoff, the best any scheme
-  managed at 22 legs was 19/22. Hindsight-perfect tickets exist every week and are not
-  buyable. The published +1,818,000 figure was winners sorted by price.
-- **Price-ranking breaks tickets.** Within a qualifying pool, ranking by price goes 12/15 and
-  re-selects exactly the low-main-line players the role floor exists to kill.
-- **Cushion-ranking is correct but caps payout.** It always lands on the deepest, most
-  expensive rung. Hit rate and ROI both *rise* with cushion, so price and reliability are
-  aligned, not traded off. 15 legs cushion-ranked went **15/15 at +1,935**.
-- **Alt coverage had a 16% hole** (37 of 231 priced players), clustered by kickoff window —
-  BAL/JAX played Thursday, CIN/ATL kicked 09:30 ET against a 09:08 ET capture. Bijan Robinson
-  was never rejected by a filter; **he had no ladder to reject.** Emit a coverage manifest.
+Long parlays are **not reachable ex ante** (best scheme went 19/22; the published
++1,818,000 was winners sorted by price) · **price-ranking breaks tickets** (12/15, and it
+re-selects the low-main-line players the role floor exists to kill) · **cushion-ranking is
+correct but caps payout** (hit rate and ROI both *rise* with cushion; 15 legs went 15/15
+at +1,935) · **alt coverage had a 16% hole** clustered by kickoff window — Bijan Robinson
+was never rejected by a filter, he had no ladder to reject.
 
 ---
 
-### 6. IMMEDIATE NEXT ACTIONS, IN ORDER
+### 8. IMMEDIATE NEXT ACTIONS, IN ORDER
 
-1. **Repair `injuries.csv`.** `build_injuries_weekly` must emit its declared 11-column schema
-   and `audit_2026_production_readiness.py` must assert it so a file without `status` fails
-   closed. **This unblocks D1 and fixes the gate that let a returning-from-injury player onto
-   a shipped card.** Production repair, no preregistration needed.
-2. **Finish grading Week 9** — SNF (TB@CHI) and MNF (BUF@MIN) are now final and were excluded
-   from the 13-game grading above.
-3. **Run the per-cell alt table-support audit** (n, players, post-hoc flag) — still REQUIRED
-   before treating any alt row as bettable, still not run.
-4. **Week 10 head-to-head on identical rows:** gated cushion rule vs the triple-intersection
-   vs blind, with the matchup gate actually applied.
+1. **The OUT WR1 alpha rule** (§4). The evidence is already in hand; it needs a short
+   preregistration because it replaces promoted behaviour. Highest value, smallest scope.
+2. **Finish grading Week 9** — SNF (TB@CHI) and MNF (BUF@MIN) are final and were excluded
+   from the 13-game alt grading.
+3. **Per-cell alt table-support audit** (n, players, post-hoc flag). Still REQUIRED before
+   treating any alt row as bettable, still not run. Everything in §5 ran ahead of it.
+4. **Friday 2026-11-13: run `capture_prospective_board_v2.py --week 10`** after
+   designations publish, before Sunday kickoff. **Now for accumulating QUESTIONABLE weeks,
+   not for unblocking D1.** K4 (<20 designated) is the binding constraint, so accumulate
+   weeks rather than expect one slate to settle it. TNF WAS@NYG is excluded automatically.
 5. **Resolve the MIN QB wk9 quarantine row** — Murray stayed Out, Wentz started.
-6. Then: widen simulation dispersion to the measured residual spread per market and projection
-   tercile, and model the bust rate explicitly. Re-audit every `edge_pct` consumer after.
+6. Then: widen simulation dispersion to the measured residual spread per market and
+   projection tercile, and model the bust rate explicitly. Re-audit every `edge_pct`
+   consumer after.
 
 ---
 
-### 7. PROMOTED AT V25
+### 9. PROMOTED AT V26
 
-**Nothing.** No coefficient, weight, feature, artifact schema or pricing path changed. D3 was
-tested and rejected. The selection gates are research tooling under `scripts/research/`, not a
-production path. `AGENTS.md` §3 holds throughout: `cushion` uses `model_proj` **ordinally**
-against a rung and no sportsbook variable constructs any projection.
+**`OUT_DOUBTFUL_OPPORTUNITY_RETENTION = 0.0`** in `scripts/modeling/simulation_rules.py`,
+as a correctness repair. Nothing else. The alt selection gates are research tooling under
+`scripts/research/`, not a production path. `AGENTS.md` §3 holds throughout: `cushion`
+uses `model_proj` **ordinally** against a rung, and no sportsbook variable constructs any
+projection anywhere in this work.
 
 ---
 
