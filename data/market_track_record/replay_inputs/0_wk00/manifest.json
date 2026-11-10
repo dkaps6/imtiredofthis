@@ -9,9 +9,9 @@
     },
     "data/injuries_source_status.json": {
       "archived_as": "injuries_source_status.json.gz",
-      "bytes_gz": 225,
+      "bytes_gz": 224,
       "bytes_raw": 282,
-      "sha256_raw": "381aea975340ae3dbf5e46141e249e38006dee54541ff055b562533937360133"
+      "sha256_raw": "9ab4e104477ca192cde7b7caf18cf3f6f32cdf39d18114f4ed350b4c55f302dd"
     },
     "data/model_ensemble_weights.csv": {
       "archived_as": "model_ensemble_weights.csv.gz",
@@ -46,8 +46,8 @@
     "data/model_rule_simulation_inputs.csv",
     "data/player_form_consensus.csv"
   ],
-  "source_git_sha": "b6690eede53f7eb5325a36fb2b137b9105b14894",
-  "source_run_id": "42896062972",
+  "source_git_sha": "d85c7fc868741a6441fda4acef185fc75569c05c",
+  "source_run_id": "42897709111",
   "stem": "0_wk00",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
