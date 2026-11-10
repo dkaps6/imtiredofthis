@@ -119,3 +119,60 @@ Not a lower in-sample error. On a season held out entirely:
 
 The post-hoc restriction should be re-derived on a clean split now that 2026
 provides a third season, exactly as the original results document asked.
+
+---
+
+# ADDENDUM — 2026-11-10: regraded on the complete slate
+
+The §3 table above was computed when 11 of the 13 alt-covered week-9 games were
+final. All 13 are now graded (5,115 rungs, up from 4,306). Rows:
+`data/market_track_record/graded/w9_2026_alt_board_graded_complete_v1.csv`.
+Full analysis: `PRISM_W9_COMPLETE_GRADING_V1`.
+
+**What survives, unchanged:**
+
+1. **The market ordering is identical.** `rec_yards` > `pass_yards` > `rush_yards` >
+   `rush_rec_yards` > `receptions`, exactly as §3 ranked them.
+2. **The sign rule holds, and strengthens.** `corr(signed error, ROI) = +0.860` across
+   the five markets. Both markets that understate are the two least-bad; all three
+   that overstate are catastrophic. The direction of the miss remains the single most
+   predictive property of a cell.
+3. **The 1.6x depth rule holds.** Rungs beyond 1.6x returned **-53.5%** (n=701) against
+   the -55.1% cited above.
+4. **Every exclusion in §4 stands.** The three excluded markets all got worse.
+
+**What is withdrawn:**
+
+The headline verdict said these tables are **"bettable"** where they understate. On
+the complete slate that word is wrong, and it is withdrawn.
+
+| market | n | signed | ROI as published | **ROI complete** |
+|---|---|---|---|---|
+| `rec_yards` | 1651 | +0.0329 | +2.9% | **-0.2%** |
+| `pass_yards` | 781 | +0.0298 | -0.7% | **-6.8%** |
+| `rush_yards` | 818 | -0.0557 | -18.5% | -22.0% |
+| `rush_rec_yards` | 379 | -0.0673 | -33.9% | -28.8% |
+| `receptions` | 1486 | -0.0225 | -30.0% | -30.7% |
+| **all** | 5115 | | -13.4% | **-15.7%** |
+
+**At table face value, no market on this board returned a profit.** The two late
+games (TB@CHI, BUF@MIN — both low-total and defensive) graded at -28.1% and took
+`rec_yards` from +2.9% to break-even-negative.
+
+**Corrected verdict:** the sign rule is a reliable *ranking* device and a reliable
+*exclusion* device. It is not a profitability certificate. A market where the table
+understates is one where the table is not actively lying to you — it is not thereby
+a bet. `rec_yards` and `pass_yards` are the only two cells worth building on top of,
+and **only with independent football gates applied above them**, never at face value.
+
+That qualification is now measured rather than asserted. On the same pool
+(FanDuel, builder price window), `rec_yards` returned **+0.5% blind** and **+6.2%
+under the nine gates** of `scripts/research/build_alt_cards_v1.py`; `rush_yards`
+returned **-15.8% blind** and **+0.3% gated**. The edge, such as it is, comes from
+the football gates — snap share, role floor, cushion, own-evidence, matchup — and
+not from the table. The table's remaining job is to say which markets to not bother
+with, and at that it works.
+
+**§5 is unchanged and now more pressing.** A rebuilt table must clear 0.03 weighted
+mean |error| on a true holdout with non-negative signed error per market. 2026 is now
+a usable third season for that split.
