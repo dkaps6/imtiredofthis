@@ -35,6 +35,42 @@ def _empty_injuries() -> pd.DataFrame:
     return pd.DataFrame({c: pd.Series(dtype="object") for c in SCHEMA})
 
 
+# Provider-health states. These are the ONLY values ``state`` may take, and the
+# downstream validators pin this set.
+STATE_OFFICIAL = "official_report"            # rows carry >=1 game designation
+STATE_PRACTICE_ONLY = "practice_only_report"  # rows exist, no designation yet
+STATE_NONE = "no_official_report"             # provider reachable, zero rows
+STATE_OUTAGE = "provider_outage"              # no provider completed a check
+VALID_STATES = (STATE_OFFICIAL, STATE_PRACTICE_ONLY, STATE_NONE, STATE_OUTAGE)
+
+# Game designations clubs publish on Friday. Practice participation is NOT one
+# of these and must never be mistaken for one.
+GAME_DESIGNATIONS = {"out", "doubtful", "questionable", "injured reserve", "ir", "pup", "did not play"}
+
+
+def designation_count(df: pd.DataFrame) -> int:
+    """Rows carrying an actual game designation in ``status``.
+
+    NFL clubs publish practice participation Wednesday/Thursday and the game
+    designation (Out / Doubtful / Questionable) on FRIDAY. A midweek pull is
+    therefore legitimately full of rows whose ``status`` is null. Labelling that
+    ``official_report`` is the defect this function exists to prevent: downstream
+    consumers trust the label, find ``status`` empty, and ``_injury_limited``
+    silently never fires, so every unavailable player keeps full opportunity.
+    """
+    if df is None or df.empty or "status" not in df.columns:
+        return 0
+    s = df["status"].astype("string").str.strip().str.lower()
+    return int(s.isin(GAME_DESIGNATIONS).sum())
+
+
+def classify_report_state(df: pd.DataFrame) -> str:
+    """Pick the state from the artifact's own contents, never from row count."""
+    if df is None or df.empty:
+        return STATE_NONE
+    return STATE_OFFICIAL if designation_count(df) > 0 else STATE_PRACTICE_ONLY
+
+
 def _to_pandas(value) -> pd.DataFrame:
     if isinstance(value, pd.DataFrame):
         return value.copy()
@@ -181,6 +217,10 @@ def build_injuries_with_status(season: int, week: int) -> tuple[pd.DataFrame, di
     An empty official report is valid before weekly reports exist, but it is not
     equivalent to a provider outage. At least one provider must have completed a
     successful check before ``no_official_report`` can be emitted.
+
+    The state is decided by ``classify_report_state`` from the rows themselves,
+    never from the row count. A pull that carries practice participation and no
+    game designation is ``practice_only_report``, NOT ``official_report``.
     """
     errors: list[str] = []
     successful_checks: list[str] = []
@@ -190,8 +230,10 @@ def build_injuries_with_status(season: int, week: int) -> tuple[pd.DataFrame, di
         successful_checks.append("nflverse")
         if not df.empty:
             status = {
-                "season": int(season), "week": int(week), "state": "official_report",
+                "season": int(season), "week": int(week),
+                "state": classify_report_state(df),
                 "source": "nflverse", "rows": int(len(df)),
+                "designation_rows": designation_count(df),
                 "successful_checks": successful_checks, "provider_errors": errors,
                 "generated_at_utc": datetime.now(timezone.utc).isoformat(),
             }
@@ -204,8 +246,10 @@ def build_injuries_with_status(season: int, week: int) -> tuple[pd.DataFrame, di
         successful_checks.append("nfl.com")
         if not df.empty:
             status = {
-                "season": int(season), "week": int(week), "state": "official_report",
+                "season": int(season), "week": int(week),
+                "state": classify_report_state(df),
                 "source": "nfl.com", "rows": int(len(df)),
+                "designation_rows": designation_count(df),
                 "successful_checks": successful_checks, "provider_errors": errors,
                 "generated_at_utc": datetime.now(timezone.utc).isoformat(),
             }
@@ -214,15 +258,15 @@ def build_injuries_with_status(season: int, week: int) -> tuple[pd.DataFrame, di
         errors.append(f"nfl.com={type(exc).__name__}: {exc}")
 
     if successful_checks:
-        state = "no_official_report"
-        source = "no_official_report"
+        state = STATE_NONE
+        source = STATE_NONE
     else:
-        state = "provider_outage"
-        source = "provider_outage"
+        state = STATE_OUTAGE
+        source = STATE_OUTAGE
 
     status = {
         "season": int(season), "week": int(week), "state": state,
-        "source": source, "rows": 0,
+        "source": source, "rows": 0, "designation_rows": 0,
         "successful_checks": successful_checks, "provider_errors": errors,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
     }

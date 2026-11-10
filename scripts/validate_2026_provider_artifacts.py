@@ -120,11 +120,11 @@ def validate_injuries(df: pd.DataFrame, status: dict, season: int, week: int) ->
     state = str(status.get("state", "")).strip()
     if state == "provider_outage":
         raise RuntimeError(f"injury provider outage: {status.get('provider_errors', [])}")
-    if state not in {"official_report", "no_official_report"}:
+    if state not in {"official_report", "practice_only_report", "no_official_report"}:
         raise RuntimeError(f"unknown injury provider state: {state}")
-    if state == "official_report":
+    if state in {"official_report", "practice_only_report"}:
         if df.empty:
-            raise RuntimeError("injury status says official_report but injuries.csv is empty")
+            raise RuntimeError(f"injury status says {state} but injuries.csv is empty")
         required = {"player", "team", "season", "week", "report_available"}
         missing = required - set(df.columns)
         if missing:
@@ -135,6 +135,16 @@ def validate_injuries(df: pd.DataFrame, status: dict, season: int, week: int) ->
             raise RuntimeError("injury rows contain stale season/week data")
         if not pd.to_numeric(df["report_available"], errors="coerce").fillna(0).eq(1).all():
             raise RuntimeError("official injury rows missing report_available=1")
+        # The label must match the artifact. A pull carrying no game designation
+        # is practice_only_report; calling it official_report is the mislabel
+        # that let _injury_limited silently never fire.
+        if state == "official_report":
+            from scripts.build.build_injuries_weekly import designation_count
+            if designation_count(df) == 0:
+                raise RuntimeError(
+                    "injury status says official_report but no row carries a game "
+                    "designation; this is a practice-only pull and must be labelled "
+                    "practice_only_report")
     elif not df.empty:
         raise RuntimeError("injury status says no_official_report but injuries.csv contains rows")
     return _result("injuries", state, f"rows={len(df)} source={status.get('source','')} errors={len(status.get('provider_errors', []))}")

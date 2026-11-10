@@ -269,9 +269,9 @@ def audit() -> dict:
     injuries = _read(DATA / "injuries.csv", required=False)
     injury_state = str(injury_status.get("state", ""))
     scope_proven = False
-    if injury_state == "official_report":
+    if injury_state in {"official_report", "practice_only_report"}:
         if injuries.empty:
-            raise RuntimeError("injury status says official_report but injury artifact is empty")
+            raise RuntimeError(f"injury status says {injury_state} but injury artifact is empty")
         injury_teams = set(injuries["team"].map(canon_team).dropna().astype(str))
         practice_nonblank = _nonblank_count(injuries.get("practice_status", pd.Series("", index=injuries.index)))
         game_status_nonblank = _nonblank_count(injuries.get("status", pd.Series("", index=injuries.index)))
@@ -331,6 +331,15 @@ def audit() -> dict:
         rows.append(_row("injuries", "NO_OFFICIAL_REPORT_CONFIRMED", "rows=0"))
     else:
         raise RuntimeError(f"injury provider state not usable: {injury_state}")
+
+    # Practice-only is a legitimate midweek state, but it must be visible: the
+    # injury rule reads `status` and cannot fire without a game designation.
+    if injury_state == "practice_only_report":
+        rows.append(_row(
+            "injuries", "PRACTICE_ONLY_NO_DESIGNATIONS",
+            f"rows={len(injuries)} game designations publish Friday; the injury rule "
+            f"cannot fire until they do",
+        ))
 
     # Direct WR/CB assignments are optional and fail-closed. Team scheme coverage
     # is production-available; direct shadow penalties activate only when the

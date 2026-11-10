@@ -418,14 +418,13 @@ def _injury_contract_findings() -> list[dict[str, str]]:
             # chain is severed.
             #
             # This discriminates on the artifact's own contents rather than on
-            # injuries_source_status.json. That file currently reports
-            # "official_report" for a practice-only pull, which is itself a
-            # mislabel under AGENTS.md section 7 -- but correcting it means
-            # introducing a new state value, and three validators
+            # injuries_source_status.json. As of 2026-11-10 that file no longer
+            # mislabels a practice-only pull: build_injuries_weekly emits
+            # ``practice_only_report`` via classify_report_state, and the three
+            # validators that hard-coded the permitted set
             # (validate_2026_provider_artifacts, validate_full_slate_data_quality_v1,
-            # repair_injuries_nflcom_v1) hard-code the permitted set and fail
-            # closed on anything else. That fix is real and is tracked
-            # separately; it is deliberately not bundled in here.
+            # repair_injuries_nflcom_v1) accept it. The label/artifact agreement
+            # itself is asserted below.
             practice = df.get("practice_status")
             has_practice = practice is not None and bool(
                 practice.notna().any() and practice.astype(str).str.strip().ne("").any()
@@ -471,6 +470,39 @@ def _injury_contract_findings() -> list[dict[str, str]]:
                                     "recognise it, so those players keep 100% of opportunity; "
                                     "measured 2026 W1-8 retention is 0.8535 target / 0.5718 rush; "
                                     "OPEN research item, tracked not blocking"))
+
+    # The status label must agree with the artifact. A pull carrying no game
+    # designation is practice_only_report; calling it official_report is the
+    # mislabel that let _injury_limited silently never fire while every
+    # downstream consumer trusted the label.
+    sj = ROOT / "data" / "injuries_source_status.json"
+    if sj.exists() and sj.stat().st_size:
+        import json as _json
+        try:
+            st = _json.loads(sj.read_text(encoding="utf-8"))
+        except Exception as exc:
+            out.append(_finding("P1", "injury_status_json_unreadable",
+                                f"injuries_source_status.json unreadable: {type(exc).__name__}"))
+            return out
+        state = str(st.get("state", "")).strip()
+        try:
+            from scripts.build.build_injuries_weekly import VALID_STATES, designation_count
+        except Exception:
+            return out
+        if state and state not in VALID_STATES:
+            out.append(_finding("P0", "injury_state_unknown",
+                                f"injuries_source_status.json state={state!r} is not one of {VALID_STATES}"))
+        elif state == "official_report" and inj.exists() and inj.stat().st_size:
+            import pandas as _pd2
+            try:
+                d2 = _pd2.read_csv(inj)
+            except Exception:
+                return out
+            if designation_count(d2) == 0:
+                out.append(_finding("P0", "injury_state_mislabelled_official",
+                                    f"injuries_source_status.json claims official_report but none of "
+                                    f"{len(d2)} rows carries a game designation; this is a "
+                                    f"practice-only pull and must be labelled practice_only_report"))
     return out
 
 

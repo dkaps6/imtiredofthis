@@ -203,7 +203,11 @@ def repair_if_needed(season: int | None = None, week: int | None = None) -> dict
     if not current.empty and "team" in current.columns:
         team_missing = current["team"].map(_clean).eq("").any()
 
-    if state != "official_report":
+    # Team identity and scope must be repaired whenever rows exist, regardless of
+    # whether clubs have published game designations yet. practice_only_report
+    # carries real rows with real teams; skipping it here would leave midweek
+    # identity unresolved.
+    if state not in {"official_report", "practice_only_report"}:
         result = {
             "disposition": "INJURY_IDENTITY_NOT_REQUIRED",
             "state": state,
@@ -241,9 +245,15 @@ def repair_if_needed(season: int | None = None, week: int | None = None) -> dict
         )
         status["scope_ledger"] = str(SCOPE)
         STATUS.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        # Re-classify from the repaired rows rather than asserting a label.
+        from scripts.build.build_injuries_weekly import classify_report_state, designation_count
+        repaired_state = classify_report_state(repaired)
+        status["state"] = repaired_state
+        status["designation_rows"] = designation_count(repaired)
+        STATUS.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         result = {
             "disposition": "INJURY_IDENTITY_AND_SCOPE_CERTIFIED",
-            "state": "official_report",
+            "state": repaired_state,
             "source": status["source"],
             "rows": int(len(repaired)),
             "teams_with_rows": int(repaired["team"].nunique()),
