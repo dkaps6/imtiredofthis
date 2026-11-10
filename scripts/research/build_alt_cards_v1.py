@@ -53,13 +53,48 @@ CARD CONSTRUCTION
   * One rung per player per card.
   * Cards are built from the highest-cushion survivors outward.
 
-MARKET EVIDENCE (week 9, the builder's own gate-passing legs)
-  rec_yards  +5.0% ROI (n=48) · rush_yards +1.7% (n=16) · everything else
-  produced zero legs. Blind, the same markets returned +2.9%, -18.5%, and
-  -30.0%/-33.9%/-0.7%, so the gates are doing the work rather than the market
-  list. See PRISM_ALT_TABLE_SUPPORT_AUDIT_V1 for why the clearance table is
-  separately disqualified for most markets -- that audit constrains
-  table-priced selection, which this builder does not do.
+MARKET EVIDENCE (week 9 COMPLETE -- all 13 alt-covered games, 5115 rungs)
+  Paired on the same pool (FanDuel, this builder's price window), so blind and
+  gated describe the same takeable offers:
+
+                 blind n   blind ROI   gated n   gated ROI   gated hit
+    rec_yards        528       +0.5%        53       +6.2%       88.7%
+    rush_yards       247      -15.8%        23       +0.3%       87.0%
+    pass_yards       108       -2.6%         0          --          --
+    receptions       279       -8.0%         0          --          --
+
+  Whole pool: blind -5.3% (n=1162) -> gated +4.4% (n=76, 88.2% hit).
+
+  Cluster bootstrap by game (13 games, 20k draws, game as the resampling unit
+  because legs inside a game are correlated): gated +4.4% [-1.8%, +10.5%],
+  blind -4.9% [-16.7%, +3.7%], gap +9.3% [-2.1%, +23.7%], P(gap>0) = 93.8%.
+
+  READ THAT HONESTLY. +4.4% on n=76 over one week is NOT distinguishable from
+  zero, and neither is the gap at the 95% level. The gates move the board about
+  nine points in the right direction and 94% of draws agree on the sign. That is
+  not an established edge and nothing here is promotable until weeks 10+ confirm
+  it. This builder reports; it does not certify.
+
+  This block was previously written from a PARTIAL slate (11 of 13 games) and
+  cited rec_yards +5.0%/n=48 gated against +2.9% blind. The two late games graded
+  at -28.1% and moved blind rec_yards to +0.5%. Partial-slate numbers are not to
+  be cited as evidence again.
+
+  See PRISM_ALT_TABLE_SUPPORT_AUDIT_V1 (and its 2026-11-10 addendum) for why the
+  clearance table is separately disqualified for most markets -- that audit
+  constrains table-priced selection, which this builder does not do. Its
+  profitability claim is withdrawn; its ranking and depth rules held.
+
+KNOWN STRUCTURAL LIMIT -- THIS BUILDER CANNOT SERVE A LOTTERY TIER
+  All 76 week-9 survivors priced between -225 and -1800, median -590. ZERO
+  plus-money legs. A three-leg card from median gated legs pays about +60.
+  Cushion >= CUSHION_MIN plus the main-line floor mathematically selects heavy
+  favorites; a plus-money rung sits above the projection by construction, which
+  is what G3 exists to reject. SAFE/MODERATE tiers can be gate-certified.
+  HIGH/LOTTERY cannot be certified by anything validated in this repository --
+  they come from the >+300 price band (-46.5% on 1018 week-9 rungs) and the
+  >1.6x depth band (-53.5%). Label them as uncertified speculation; do not
+  present them as a deeper version of a gated leg.
 
 This script decides nothing. It reports what survives and what did not.
 """
@@ -85,21 +120,24 @@ PRICE_MIN, PRICE_MAX = -2500, 130
 # Measured on week 9 with the exclusion lifted, so these are the builder's own
 # numbers rather than a verdict imported from the table audit:
 #
-#   rec_yards        48 legs, 87.5% hit vs 83.5% needed, +5.0% ROI
-#   rush_yards       16 legs, 87.5% hit vs 86.6% needed, +1.7% ROI
+#   rec_yards        53 legs, 88.7% hit, +6.2% ROI
+#   rush_yards       23 legs, 87.0% hit, +0.3% ROI
 #   pass_yards        0 legs -- eliminated by the role floor and cushion gates
 #   rush_rec_yards    0 legs -- same
 #   receptions        0 legs -- same
 #
-# `rush_yards` is NOT excluded despite returning -18.5% blind and being one of
+# Regraded 2026-11-10 on the complete 13-game board. Both emitting markets are
+# >= 0 gated, so no exclusion change is warranted.
+#
+# `rush_yards` is NOT excluded despite returning -15.8% blind and being one of
 # the markets PRISM_ALT_TABLE_SUPPORT_AUDIT_V1 disqualifies for TABLE-priced
 # selection. That audit is about the clearance table's calibration; this builder
-# never reads the table. Gated, the market returned +1.7%, so excluding it would
-# discard a positive. n=16 is thin and that figure may not survive another slate.
+# never reads the table. Gated, the market returned +0.3%, so excluding it would
+# discard a non-negative. n=23 is thin and that figure may not survive a slate.
 #
 # `rush_rec_yards` and `receptions` produce zero legs here anyway. They are
 # listed explicitly so that a future loosening of the role floor or cushion
-# cannot silently admit them: blind they returned -33.9% and -30.0%, and
+# cannot silently admit them: blind they returned -28.8% and -30.7%, and
 # rush_rec_yards is the worst-calibrated cell family in the repository at
 # -0.0809, every frac band negative from 0.7x upward.
 EXCLUDED_MARKETS = ("receptions", "rush_rec_yards", "anytime_td")
