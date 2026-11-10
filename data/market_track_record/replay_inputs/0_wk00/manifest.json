@@ -34,8 +34,8 @@
     "data/model_rule_simulation_inputs.csv",
     "data/player_form_consensus.csv"
   ],
-  "source_git_sha": "c31b6b31dc15001ba909df2adac4b216024cdb7f",
-  "source_run_id": "42893136187",
+  "source_git_sha": "2d65b5078646522f56c28f11571c6cab5dfe5485",
+  "source_run_id": "42894769319",
   "stem": "0_wk00",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
