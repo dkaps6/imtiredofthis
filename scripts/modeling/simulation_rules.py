@@ -60,6 +60,29 @@ def _wr_role_labels(players: list[PlayerContext]) -> Dict[tuple[str, str], str]:
     return out
 
 
+# Opportunity retained by a player carrying OUT / DOUBTFUL / IR / PUP.
+#
+# This was 0.50 — the "intended rule" the D1 study calls arm A1. The W9 holdout
+# (``PRISM_D1_W9_HOLDOUT_RESULTS_V1``) measured the real figure on 2026 weeks
+# 2-8: OUT retention 0.0000 over 364 cases with 0.0% played, DOUBTFUL 0.0000
+# over 23 cases with 0.0% played. The earlier study reached the same place by a
+# different route — A2 (0.00) beat A1 (0.50) by +0.00257 [+0.00139, +0.00392],
+# a CI excluding zero.
+#
+# Promoted as a CORRECTNESS repair, not an edge claim. With the multiplier at
+# 0.50 production projected a mean 17.74 receiving and 8.55 rushing yards for 24
+# players the league had publicly ruled out, every one of whom recorded 0.0.
+# That contaminates team opportunity mass, every positional aggregate and the
+# ceiling-compression diagnostics, and it needs no statistical test to be wrong.
+#
+# Scope is deliberately narrow. ``_injury_limited`` matches only
+# OUT/DOUBTFUL/IR/PUP, so QUESTIONABLE is untouched: its measured retention
+# (0.8535 targets / 0.5718 rush) is real but rests on n=21 in the holdout and
+# the designation is applied inconsistently by club. That multiplier is NOT
+# promoted and is tracked as ``injury_questionable_untreated``.
+OUT_DOUBTFUL_OPPORTUNITY_RETENTION = 0.0
+
+
 def _injury_limited(ctx: PlayerContext) -> bool:
     status = str(ctx.features.get("injury_status") or "").upper()
     designation = str(ctx.features.get("injury_designation") or "").upper()
@@ -219,9 +242,9 @@ def apply_rules_to_metrics(metrics: pd.DataFrame, bayes_baseline: pd.DataFrame |
 
         if _injury_limited(ctx) and (team, pkey) not in injury_overrides:
             if np.isfinite(base_tgt):
-                base_tgt *= 0.50
+                base_tgt *= OUT_DOUBTFUL_OPPORTUNITY_RETENTION
             if np.isfinite(base_rush):
-                base_rush *= 0.50
+                base_rush *= OUT_DOUBTFUL_OPPORTUNITY_RETENTION
 
         out.at[idx, "rules_plays_est"] = script.projected_plays
         out.at[idx, "rules_pass_rate"] = script.projected_pass_attempts / script.projected_plays if script.projected_plays else np.nan
