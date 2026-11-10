@@ -50,6 +50,11 @@ REQUIRED = {
 }
 # Useful for a replay but not fatal if a given run did not produce them.
 OPTIONAL = (
+    # The injury artifact had NO durable copy anywhere: the explanatory trace
+    # subsets it to 5 columns by allowlist and it was absent here, so
+    # production's actual injury state for a past slate could not be recovered.
+    "data/injuries.csv",
+    "data/injuries_source_status.json",
     "data/model_ensemble_weights.csv",
     "data/model_ensemble_diagnostics.csv",
     "data/weather_week.csv",

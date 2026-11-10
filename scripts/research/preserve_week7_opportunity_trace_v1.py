@@ -57,6 +57,16 @@ _WANTED = (
     # provenance / fallback reason
     "source", "fallback_reason", "evidence_state", "provenance",
     "sportsbook_inputs_used",
+    # injury / player state. These are FOOTBALL state, not market data -- the
+    # sportsbook denylist is enforced separately by _denied() and none of these
+    # trip it. Added 2026-11-10 after their absence produced a false alarm: the
+    # durable trace of data/injuries.csv carried only player/team/season/week/
+    # source, which reads exactly like a production artifact missing its status
+    # column. The injury designation is an INPUT to the opportunity path this
+    # trace exists to audit, so dropping it made the chain unauditable.
+    "status", "practice_status", "designation", "body_part",
+    "report_available", "injury_status", "injury_designation",
+    "rules_injury_redistribution",
 )
 
 # Columns that must never reach the durable trace. A sportsbook variable

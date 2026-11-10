@@ -13,7 +13,13 @@ from pathlib import Path
 import pandas as pd
 
 import scripts.repair_injuries_nflcom_v1 as nflcom
-from scripts.build.build_injuries_weekly import SCHEMA, detect_current_week_from_html, fetch_injuries_html
+from scripts.build.build_injuries_weekly import (
+    SCHEMA,
+    classify_report_state,
+    designation_count,
+    detect_current_week_from_html,
+    fetch_injuries_html,
+)
 from scripts.runtime_context import resolve_season, resolve_week
 
 DATA = Path("data")
@@ -40,10 +46,16 @@ def refresh() -> dict:
     audit_rows["team_identity_resolved"] = 1
     audit_rows.to_csv(nflcom.AUDIT, index=False)
 
+    # The state must describe the rows, not be asserted. This script overwrites
+    # data/injuries.csv on the production path (full-slate.yml), so hard-coding
+    # official_report here reintroduced the exact mislabel fixed in the builder:
+    # a practice-only pull would be published as an official report and
+    # _injury_limited would silently never fire.
     status = {
         "season": season,
         "week": week,
-        "state": "official_report",
+        "state": classify_report_state(repaired),
+        "designation_rows": designation_count(repaired),
         "source": "nfl.com_context_refresh",
         "rows": int(len(repaired)),
         "successful_checks": ["nfl.com"],
