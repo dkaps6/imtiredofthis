@@ -20,11 +20,39 @@ def text(v): return "" if v is None or pd.isna(v) else str(v).strip()
 def key(v): return player_name_key(v,strip_suffix=True)
 def norm_status(v): return " ".join(text(v).upper().replace("-"," ").split())
 
-def resolve_state(*,official_inactive,official_complete,injury_status,injury_designation,ourlads_status):
+PRACTICING={"FULL PARTICIPATION IN PRACTICE","LIMITED PARTICIPATION IN PRACTICE"}
+
+def resolve_state(*,official_inactive,official_complete,injury_status,injury_designation,ourlads_status,practice_status="",team_report_available=False):
     if bool(official_complete) and bool(official_inactive): return "UNAVAILABLE_OFFICIAL_INACTIVE","official_inactive","listed on complete official game-day inactive section"
     vals={norm_status(injury_status),norm_status(injury_designation)}-{""}
     if any(v in DEF_UNAVAILABLE or v.startswith("OUT ") for v in vals): return "UNAVAILABLE_REPORTED","weekly_injury_report","definitive reported non-participation"
-    if norm_status(ourlads_status)=="INACTIVE": return "UNAVAILABLE_DEPTH_SOURCE","ourlads_depth","Ourlads depth source marked inactive"
+    if norm_status(ourlads_status)=="INACTIVE":
+        # The club's own filing outranks a third-party depth scrape.
+        #
+        # Week 10 2026: Ourlads flagged Cam Skattebo INACTIVE, which made him
+        # definitively unavailable and removed NYG's RB1 from the universe --
+        # while the official report had him at FULL participation with no
+        # designation, nflverse had him active and RB1 on that day's depth
+        # chart, and the books were pricing him. Deshaun Watson, MarShawn Lloyd
+        # and Kaleb Johnson were in the same position with no report entry at
+        # all. Ourlads lags a return from injury: Skattebo had not played since
+        # week 7, and the scrape still carried the absence.
+        #
+        # Two forms of official evidence override it, and only these two:
+        prac=norm_status(practice_status)
+        if prac in PRACTICING:
+            return ("AVAILABLE_REPORT_OVERRIDES_DEPTH","weekly_injury_report",
+                    "official report shows full/limited practice with no definitive designation; depth-source INACTIVE is stale")
+        if bool(team_report_available) and not vals and not prac:
+            # The club filed a report for this team and did not list the player.
+            # Under NFL filing convention that IS the healthy signal -- there is
+            # nothing to report -- and it is stronger than a depth scrape.
+            return ("AVAILABLE_REPORT_OVERRIDES_DEPTH","weekly_injury_report",
+                    "club filed a report and did not list the player; depth-source INACTIVE is stale")
+        # A DNP, or no filing at all, leaves the depth source standing. A player
+        # who did not practise is genuinely doubtful and must not be promoted
+        # here: designations publish Friday and UNCERTAIN handles him below.
+        return "UNAVAILABLE_DEPTH_SOURCE","ourlads_depth","Ourlads depth source marked inactive"
     if any(v in UNCERTAIN for v in vals): return "UNCERTAIN","weekly_injury_report","non-definitive game-status uncertainty"
     if bool(official_complete) and official_inactive is False: return "AVAILABLE_OFFICIAL_ACTIVE","official_inactive","absent from complete official inactive section"
     if vals: return "AVAILABLE_REPORTED","weekly_injury_report","report present without definitive unavailable designation"
@@ -116,10 +144,20 @@ def build(depth:pd.DataFrame,injuries:pd.DataFrame,official:pd.DataFrame|None=No
         ]
     else:
         d["official_inactive_section_complete"]=0; d["official_inactive"]=pd.NA
+    # Did the club file an injury report for this team at all? Absence from a
+    # filed report is the healthy signal; absence of a filing says nothing.
+    reported_teams=set()
+    if "injury_source" in d.columns or "practice_status" in d.columns:
+        ev=pd.Series(False,index=d.index)
+        for c in ("injury_status","designation","practice_status","injury_source"):
+            if c in d.columns:
+                ev=ev | d[c].map(lambda v: bool(text(v)))
+        reported_teams={str(t) for t in d.loc[ev,"team"].unique()}
+    d["team_report_available"]=d.team.astype(str).isin(reported_teams).astype(int)
     states=[]
     for r in d.itertuples(index=False):
         oi=False if pd.isna(r.official_inactive) else bool(r.official_inactive)
-        states.append(resolve_state(official_inactive=oi,official_complete=bool(r.official_inactive_section_complete),injury_status=getattr(r,"injury_status",""),injury_designation=getattr(r,"designation",""),ourlads_status=r.ourlads_status))
+        states.append(resolve_state(official_inactive=oi,official_complete=bool(r.official_inactive_section_complete),injury_status=getattr(r,"injury_status",""),injury_designation=getattr(r,"designation",""),ourlads_status=r.ourlads_status,practice_status=getattr(r,"practice_status",""),team_report_available=bool(getattr(r,"team_report_available",0))))
     d[["final_availability_state","availability_authority","availability_reason"]]=pd.DataFrame(states,index=d.index)
     d["definitive_unavailable"]=d.final_availability_state.str.startswith("UNAVAILABLE_").astype(int)
     d=rerank(d); d["eligible_for_opportunity"]=(1-d.definitive_unavailable).astype(int); d["availability_generated_at_utc"]=datetime.now(timezone.utc).isoformat()
