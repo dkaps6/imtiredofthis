@@ -170,6 +170,40 @@ jobs:
             fi
           done
 
+          # The three inputs that make steps 33-38 reproducible OFF a paid run.
+          #
+          # materialize_live_props_for_model reads outputs/props_raw.csv (already
+          # preserved above as raw_props/), outputs/props_raw_compact.csv,
+          # data/live_odds_status.json and data/player_form.csv. Without the last
+          # three, a failure anywhere in validate/compact -> pricing can only be
+          # diagnosed by buying the odds again: the artifact is not reachable from
+          # a sandbox, and the replay path cannot help because its required-file
+          # list includes data/live_odds_placeholder_rows.csv, which
+          # materialize itself writes -- so replay needs a capture that already
+          # got past the step that is failing.
+          #
+          # Week 10 cost three paid alternate-line pulls to walk three steps for
+          # exactly this reason. These files are small, carry no sportsbook offer
+          # that is not already archived above, and turn every later failure into
+          # free local work.
+          RB_DIR="data/market_track_record/replay_boundary/${ARCH_STEM}"
+          for rel in outputs/props_raw_compact.csv data/live_odds_status.json \
+                     data/player_form.csv; do
+            SRC="/tmp/fs_artifact/${rel}"
+            if [ -s "${SRC}" ]; then
+              mkdir -p "${RB_DIR}/$(dirname "${rel}")"
+              T="${RB_DIR}/${rel}"
+              if [ -e "${T}" ] && cmp -s "${SRC}" "${T}"; then
+                echo "note: replay_boundary/${ARCH_STEM}/${rel} already identical"
+                continue
+              fi
+              cp "${SRC}" "${T}"
+              echo "preserved replay_boundary/${ARCH_STEM}/${rel} ($(wc -l < "${SRC}") lines)"
+            else
+              echo "note: ${rel} absent from this run's artifact"
+            fi
+          done
+
           # Full Slate also writes the alternate-line boundary to its own
           # durable path inside the run, with the capture label in the name
           # (2026_wk09_thu.csv). Carry those over verbatim: the label says
