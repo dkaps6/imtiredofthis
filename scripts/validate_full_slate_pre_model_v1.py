@@ -186,10 +186,50 @@ def audit(season: int, week: int, *, live_odds_enabled: bool) -> pd.DataFrame:
                 "injuries", "WARN_PARTIAL_SCOPE_UNPROVEN",
                 f"official_rows={len(injuries)} teams_with_rows={injury_teams.nunique()}/{len(teams)} source={injury_status.get('source','')}",
             ))
+    elif state == "practice_only_report":
+        # Clubs publish practice participation Wednesday/Thursday and the game
+        # designation on Friday. Before Friday the artifact legitimately carries
+        # participation rows with no designation. That is a usable football state,
+        # not a provider failure, so it is validated on identity/runtime exactly
+        # like an official report but without requiring any designation.
+        #
+        # This branch is the fix for a real outage: every Full Slate run from
+        # 2026-11-10 failed here with "injury provider state is not
+        # production-usable: practice_only_report", because the state was added
+        # to the builder and to three other validators but not to this one --
+        # which is the validator PlayerForm calls first. It is the second time
+        # that mistake broke this exact step; see the 2026-11-04 revert. The
+        # contract test test_injury_state_consumer_parity_v1 now pins every
+        # consumer against build_injuries_weekly.VALID_STATES so a new state
+        # cannot be added to the builder alone again.
+        if injuries.empty:
+            raise RuntimeError("injury provider says practice_only_report but injuries.csv has zero rows")
+        need = {"player", "team", "season", "week", "report_available"}
+        miss = need - set(injuries.columns)
+        if miss:
+            raise RuntimeError(f"injuries.csv missing columns: {sorted(miss)}")
+        injury_teams = injuries["team"].map(canon_team)
+        if _text(injuries["player"]).eq("").any() or injury_teams.eq("").any():
+            raise RuntimeError("practice injury report contains blank player/team identity")
+        if not set(injury_teams).issubset(teams):
+            raise RuntimeError("practice injury report contains non-scheduled team identity")
+        if (not pd.to_numeric(injuries["season"], errors="coerce").eq(season).all()
+                or not pd.to_numeric(injuries["week"], errors="coerce").eq(week).all()):
+            raise RuntimeError("injury rows contain stale season/week")
+        rows.append(_row(
+            "injuries", "PASS_PRACTICE_ONLY_REPORT",
+            f"practice_rows={len(injuries)} teams_with_rows={injury_teams.nunique()}/{len(teams)} "
+            f"designation_rows={int(injury_status.get('designation_rows', 0))} "
+            f"source={injury_status.get('source','')}",
+        ))
     elif state == "no_official_report":
         if not injuries.empty:
             raise RuntimeError("injury provider says no_official_report but injuries.csv contains rows")
         rows.append(_row("injuries", "PASS_NO_OFFICIAL_REPORT", "rows=0"))
+    elif state == "provider_outage":
+        # Fail closed and say so: an outage is visible, never silently reused.
+        rows.append(_row("injuries", "WARN_PROVIDER_OUTAGE",
+                         f"rows={len(injuries)} source={injury_status.get('source','')}"))
     else:
         raise RuntimeError(f"injury provider state is not production-usable: {state}")
 
