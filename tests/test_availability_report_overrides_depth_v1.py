@@ -26,7 +26,7 @@ from scripts.build.build_current_player_availability_v1 import resolve_state
 
 BASE = dict(official_inactive=False, official_complete=False,
             injury_status="", injury_designation="", ourlads_status="INACTIVE",
-            practice_status="", team_report_available=True)
+            practice_status="", team_report_available=True, roster_status="")
 
 
 def _state(**kw):
@@ -45,16 +45,48 @@ def test_practising_overrides_a_stale_depth_inactive(practice):
     assert _state(practice_status=practice) == "AVAILABLE_REPORT_OVERRIDES_DEPTH"
 
 
-def test_absence_from_a_filed_report_overrides_a_stale_depth_inactive():
-    """Watson, Lloyd, Kaleb Johnson. Under NFL filing convention a club that
-    files a report and omits a player is saying there is nothing to report."""
-    assert _state(team_report_available=True) == "AVAILABLE_REPORT_OVERRIDES_DEPTH"
+def test_active_roster_membership_overrides_a_stale_depth_inactive():
+    """Watson, Lloyd, Kaleb Johnson. OURLADS IS A DEPTH CHART, NOT AN
+    AVAILABILITY SOURCE. Its job is who is on the team and in what order; the
+    weekly roster decides membership and the injury report decides availability.
+
+    This replaced an earlier "the club filed a report and omitted him" rule,
+    which was wrong in a way this test now covers: a CUT or practice-squad
+    player never appears on an injury report either, so that heuristic promoted
+    exactly the players it should have excluded."""
+    assert _state(roster_status="ACT") == "AVAILABLE_ACTIVE_ROSTER"
+
+
+@pytest.mark.parametrize("status,label", [
+    ("DEV", "practice squad"), ("CUT", "released"),
+    ("RES", "reserve/IR"), ("RET", "retired"),
+])
+def test_a_non_member_is_unavailable_whatever_the_depth_chart_says(status, label):
+    """The case the report-omission heuristic got wrong. Week 10 had 24 CUT,
+    284 RES and 466 DEV players; Josh Johnson reads CUT."""
+    assert _state(roster_status=status) == "UNAVAILABLE_NOT_ON_ACTIVE_ROSTER"
+
+
+def test_membership_outranks_a_did_not_practise(monkeypatch):
+    """Consequence worth stating: an ACT player with a DNP and NO designation
+    resolves available. That is correct layering -- a depth scrape does not
+    decide availability and there is no club designation -- but it means a
+    midweek DNP is treated as fully available. That is the open P2
+    injury_questionable_untreated item, tracked not silently resolved here."""
+    assert _state(roster_status="ACT",
+                  practice_status="Did Not Participate In Practice") == "AVAILABLE_ACTIVE_ROSTER"
+
+
+def test_practice_evidence_still_applies_when_membership_is_unknown():
+    """Provider failure must degrade, not break."""
+    assert _state(roster_status="",
+                  practice_status="Full Participation in Practice") == "AVAILABLE_REPORT_OVERRIDES_DEPTH"
 
 
 # ------------------------------------------- what must NOT be overridden
 
-def test_a_did_not_practise_player_is_not_promoted():
-    """Burks. A DNP is genuinely doubtful; designations publish Friday."""
+def test_a_did_not_practise_player_is_not_promoted_without_membership():
+    """With no membership fact and only a DNP, the depth source stands."""
     assert _state(practice_status="Did Not Participate In Practice") == "UNAVAILABLE_DEPTH_SOURCE"
 
 
@@ -67,13 +99,13 @@ def test_no_filing_at_all_leaves_the_depth_source_standing():
 def test_a_hard_designation_still_wins_over_full_practice(status):
     """A player can practise and still be ruled out. The report's designation
     is the decision; practice participation is only evidence."""
-    assert _state(injury_status=status,
+    assert _state(injury_status=status, roster_status="ACT",
                   practice_status="Full Participation in Practice") == "UNAVAILABLE_REPORTED"
 
 
 def test_the_official_inactive_list_still_wins():
     """Game-day inactives are the last word and outrank everything."""
-    assert _state(official_inactive=True, official_complete=True,
+    assert _state(official_inactive=True, official_complete=True, roster_status="ACT",
                   practice_status="Full Participation in Practice") == "UNAVAILABLE_OFFICIAL_INACTIVE"
 
 
