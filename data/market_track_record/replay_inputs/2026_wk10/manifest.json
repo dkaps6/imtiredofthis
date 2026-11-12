@@ -67,7 +67,7 @@
     "data/metrics_ready.csv",
     "data/model_rule_simulation_inputs.csv"
   ],
-  "source_git_sha": "cecf2e3356fdce031d65697e7eaa1ff9f46efb90",
+  "source_git_sha": "56cd408be0305ddb93cc693ff989e6c64252760c",
   "source_run_id": "43273312751",
   "stem": "2026_wk10",
   "version": "REPLAY_INPUT_SET_V1",
