@@ -93,6 +93,11 @@ env:
   # Operational activation boundary: Week 2 can never become a prospective observation.
   RB_PD2_PROSPECTIVE_START_UTC: "2026-09-22T12:00:00Z"
   ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+  # Union the Ourlads availability-certified roles with the current nflverse
+  # depth chart. Week 10 2026 was missing NYG RB1 Cam Skattebo, who practised in
+  # full and started, and CLE QB1 Deshaun Watson. Off by default everywhere else
+  # so it can never mask the certified-team-scope gate in a test or a script.
+  SLATE_DEPTH_CHART_UNION: "1"
 
 jobs:
   full_slate:
