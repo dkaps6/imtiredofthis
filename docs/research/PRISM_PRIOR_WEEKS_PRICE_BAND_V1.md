@@ -4,6 +4,25 @@
 **Scripts:** `scripts/research/grade_mainline_board_v1.py`, `scripts/research/analyze_alt_ladder_depth_v1.py`
 **Rows:** `data/market_track_record/graded/2026_wk06_wk08_mainline_graded_v1.csv` (6,032 priced bets)
 
+> ## REVISION 2026-11-12: TD PROPS ARE EXCLUDED FROM ALL EVIDENCE
+>
+> `anytime_td` is **not a market we bet**, so it carries no weight on any decision
+> and is struck from the evidence base. It remains in the graded rows as a
+> measurement artifact only, and `build_alt_cards_v1.py` has always excluded it.
+>
+> **This costs a claim this document originally made.** Every price band above
+> +200 in weeks 6-8 was **100% `anytime_td`**, because main lines only reach
+> **-270 to +299** — there are **21 bets above +150 and zero above +300** on
+> bettable markets. So the "amplification law confirmed out-of-sample
+> (1.65x -> 21.59x)" in §5 and the "longshot collapse replicated on 825 bets" both
+> rested entirely on a market we do not play. **Both are withdrawn as evidence.**
+> §5 is rewritten below with what the bettable markets actually support.
+>
+> **What is unaffected**, because it was computed on yardage/receptions only from
+> the start: the +12.1-point overstatement (§2), the +3.48-point edge over a coin
+> flip (§3), the disagreement gradient and the 5-6x overdispersion factor (§4),
+> and weeks 1-2 (§6).
+
 ---
 
 ## 0. There is no alt ladder before week 9, and there never was
@@ -129,40 +148,41 @@ prior result: the nine-gate builder works by exclusion (blind -5.3% → gated
 +4.4%), the sign rule works by exclusion, and the table audit's surviving verdict
 was a list of exclusions.
 
-## 5. The amplification law replicates — on one-sided selections
+## 5. On bettable markets, the long end cannot be tested here at all
 
-`anytime_td` is the natural experiment: one market, binary outcome, **no UNDER
-price so every row is a genuine one-sided bet**, prices from -340 to +7500.
+**Withdrawn:** the `anytime_td` amplification table that stood here, and the
+"-33.5% on 825 bets" longshot result. TD props are not a market we play, and
+extrapolating their pricing behaviour onto alt yardage rungs was a cross-market
+inference this document should not have made.
 
-| band | n | claims | delivers | err | edge | ROI | **amp** |
-|---|---|---|---|---|---|---|---|
-| <=+100 | 134 | 56.6% | 47.8% | +8.8 | -11.6 | -19.2% | 1.65x |
-| +100..150 | 96 | 37.8% | 41.7% | -3.9 | -2.5 | -7.4% | 2.91x |
-| +150..300 | 315 | 25.1% | 32.4% | **-7.3** | +1.3 | **+4.7%** | 3.61x |
-| +300..500 | 378 | 16.0% | 19.3% | -3.3 | -0.9 | -5.2% | 6.04x |
-| +500..1k | 371 | 9.6% | 7.8% | +1.8 | -4.3 | **-32.9%** | 7.67x |
-| >+1k | 454 | 7.3% | 4.0% | +3.3 | -1.6 | **-33.9%** | **21.59x** |
+What the bettable markets (`pass_yards`, `rec_yards`, `receptions`,
+`rush_yards`, `rush_rec_yards`) support, on PRISM's picked side, n=2,142:
 
-**Amplification runs 1.65x → 21.59x, monotone.** The error stays in a 2-9 point
-band throughout; the ROI cost rises thirteenfold. Week 9's alt ladder measured
-1.27x → 14.34x on a completely different product. **The law is confirmed
-out-of-sample.**
+| band | n | edge | ROI | amp |
+|---|---|---|---|---|
+| -200..-150 | 110 | -3.5 | -5.6% | 1.63x |
+| -150..-130 | 137 | -1.1 | -1.8% | 1.69x |
+| -130..-110 | 1416 | -0.8 | -1.5% | 1.88x |
+| -110..+100 | 181 | -0.1 | -0.1% | — |
+| +100..+130 | 219 | -3.9 | -8.3% | 2.13x |
+| +130..+150 | 43 | -7.2 | -16.8% | 2.34x |
 
-Longshot collapse replicates and is now well powered: **+500 and up returns -33.5%
-on 825 bets across 42 games, P(>0) = 4.5%**; +300 and up returns -24.6%, P(>0) = 4.0%.
-Week 9's alt board said >+300 = -46.5%. Two unrelated products, one verdict.
+Amplification runs **1.63x -> 2.34x and is monotone**, which is consistent with the
+law — but over a price range of only -200 to +150, with the top band thin at
+n=43. Bands at `<=-200` (n=15) and `>+150` (n=21) are too thin to read.
 
-**Week 9's "+150 cliff" is neither confirmed nor contradicted — it is untestable
-here.** Weeks 6-8 contain only **36 yardage bets above +150**, because main lines
-do not run that long; every band above +200 is **100% `anytime_td`**. The apparent
-contradiction in an earlier pass (+6.2% at +150..+200) was `anytime_td` pooled with
-yardage. The +150 cliff is a property of **deep alt yardage rungs** and week 9 is
-still the only week that has them.
+**The available price range is the binding limit.** Main lines in weeks 6-8 span
+**-270 to +299**: 21 bets above +150, **zero above +300**. The long end simply does
+not exist on a main-line board.
 
-**`anytime_td` at +150..+300 is the one positive cell**, +4.7% with PRISM
-*understating* by 7.3 points. Not significant (CI [-15.6%, +24.8%], P(>0) = 67.6%),
-and weekly ROI was -0.4% / +2.8% / +10.5%, so it is carried as a hypothesis only.
-Note week 9's board dropped `anytime_td` entirely.
+So **week 9's alt ladder remains the only wide-range measurement of
+amplification on a product we actually bet** (1.27x -> 14.34x, `PRISM_ALT_LADDER_DEPTH_W9_V1` §3).
+The law is corroborated over a narrow range here and is **not** independently
+confirmed. It needs week 10 alt ladders to be tested properly.
+
+Likewise, **week 9's "+150 cliff" remains untestable on prior weeks**, and the
+week-9 alt board is still the only evidence for the longshot collapse on a
+bettable product (>+300 = -46.5%, >1.6x depth = -53.5%).
 
 ## 6. Weeks 1-2, kept separate
 
@@ -181,7 +201,6 @@ Consistent with weeks 6-8's picked-side -2.5% and week 9's near-even-money -2% t
 |---|---|---|---|
 | 1-2 | main lines, model-selected | 805 | -5.3% |
 | 6-8 | main lines, PRISM-picked side | 2142 | **-2.5%** (vs -5.9% coin flip) |
-| 6-8 | anytime_td, one-sided | 1748 | -17.9% |
 | 9 | alt ladders, whole board | 5115 | -15.7% |
 | 9 | alt, nine-gate survivors | 76 | +4.4% (CI straddles 0) |
 
@@ -202,10 +221,12 @@ graveyard at every price above +300.
    weeks 6-8 and validated on week 10, not fit and evaluated on the same rows** —
    the +10.5% that market-anchored shrinkage at k=0.10 returned on weeks 6-8 is
    in-sample and is not a result.
-2. **Stop spending research effort above +300.** 825 anytime_td bets and 5,115 alt
-   rungs agree.
-3. **The HIGH/LOTTERY tier question is now answered on evidence** from two
-   independent products. Those tiers lose 25-46%.
+2. **Stop spending research effort above +300.** This now rests on week 9's 5,115
+   alt rungs alone (>+300 = -46.5%), not on TD props. It is a one-week result on
+   the only week that has the product.
+3. **The HIGH/LOTTERY tier question rests on week 9 alone** after the TD-prop
+   withdrawal, not on two independent products. Those tiers lost 25-46% there.
+   Week 10 alt ladders would make it two.
 4. **Build selection around exclusion**, which is where the demonstrated skill is,
    rather than around finding plus-money winners.
 5. Week 10 is the first genuine out-of-sample test of the shrinkage factor, the
