@@ -1,0 +1,76 @@
+{
+  "complete": false,
+  "files": {
+    "data/injuries.csv": {
+      "archived_as": "injuries.csv.gz",
+      "bytes_gz": 3163,
+      "bytes_raw": 22933,
+      "sha256_raw": "071c65f18e2582bd68b28981065ac21988044b2954745eb64a46bffc0cab4038"
+    },
+    "data/injuries_source_status.json": {
+      "archived_as": "injuries_source_status.json.gz",
+      "bytes_gz": 335,
+      "bytes_raw": 583,
+      "sha256_raw": "42866d3eb257ecaba040e86c21e9673e0025a2b9340d0305d472a9b26514c65b"
+    },
+    "data/model_ensemble_diagnostics.csv": {
+      "archived_as": "model_ensemble_diagnostics.csv.gz",
+      "bytes_gz": 393,
+      "bytes_raw": 774,
+      "sha256_raw": "e3cf299079287c825a0b72ca07aa7f2f009e472288da64fa9f33bb1de003a857"
+    },
+    "data/model_ensemble_weights.csv": {
+      "archived_as": "model_ensemble_weights.csv.gz",
+      "bytes_gz": 664,
+      "bytes_raw": 1375,
+      "sha256_raw": "ceef91a0369e2ae82055f7fe949e4ad3e61e46c4b666504c7135709f1cb38f7d"
+    },
+    "data/model_ml_diagnostics.csv": {
+      "archived_as": "model_ml_diagnostics.csv.gz",
+      "bytes_gz": 27214,
+      "bytes_raw": 113839,
+      "sha256_raw": "f4ec2c2504ad42ae1b444a67a6c59e9c49616992e90046cac870dc5f7d80bab8"
+    },
+    "data/model_state_diagnostics.csv": {
+      "archived_as": "model_state_diagnostics.csv.gz",
+      "bytes_gz": 11412,
+      "bytes_raw": 165983,
+      "sha256_raw": "18f7884fc24e9ab4f678e05f9d3b36cf0019d69caf8100a881ff9f19dafab698"
+    },
+    "data/player_form_consensus.csv": {
+      "archived_as": "player_form_consensus.csv.gz",
+      "bytes_gz": 49130,
+      "bytes_raw": 193410,
+      "sha256_raw": "53e1174a64ca2efdf2ad5194993279f0c2a3be4af634bfd894056391496d3e68"
+    },
+    "data/qb_promoted_team_context.csv": {
+      "archived_as": "qb_promoted_team_context.csv.gz",
+      "bytes_gz": 4725,
+      "bytes_raw": 12237,
+      "sha256_raw": "16003685b5f9be71a435358581cf7fe73b22d3099df1e37197b71b1730774c75"
+    },
+    "data/team_week_map.csv": {
+      "archived_as": "team_week_map.csv.gz",
+      "bytes_gz": 5913,
+      "bytes_raw": 39326,
+      "sha256_raw": "c64d51441908d7c5009e39a82e4ae97ca5521626ea0dc76c0c360990b27d5c6e"
+    },
+    "data/weather_week.csv": {
+      "archived_as": "weather_week.csv.gz",
+      "bytes_gz": 1188,
+      "bytes_raw": 3941,
+      "sha256_raw": "49fa040524011839cada5257244df10d9f321813f79a710cae2a16794059cc07"
+    }
+  },
+  "required_column_stripped": {},
+  "required_missing": [
+    "data/metrics_ready.csv",
+    "data/model_rule_simulation_inputs.csv"
+  ],
+  "source_git_sha": "cecf2e3356fdce031d65697e7eaa1ff9f46efb90",
+  "source_run_id": "43273312751",
+  "stem": "2026_wk10",
+  "version": "REPLAY_INPUT_SET_V1",
+  "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
+  "week": "10"
+}

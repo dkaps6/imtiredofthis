@@ -3,15 +3,15 @@
   "files": {
     "data/injuries.csv": {
       "archived_as": "injuries.csv.gz",
-      "bytes_gz": 111,
-      "bytes_raw": 105,
-      "sha256_raw": "ad0e2260bbb8e9485fce9c12fec0f137065e87f018d923523333140816914881"
+      "bytes_gz": 3198,
+      "bytes_raw": 25099,
+      "sha256_raw": "bc4eb21b011c577e7f4902e0bebdfbfecca5594e614369e1792b1e707f82ff87"
     },
     "data/injuries_source_status.json": {
       "archived_as": "injuries_source_status.json.gz",
-      "bytes_gz": 224,
-      "bytes_raw": 282,
-      "sha256_raw": "514999e7512288c93290db4d9abcb940a8d6dd155b442300733c7ca83980f727"
+      "bytes_gz": 220,
+      "bytes_raw": 256,
+      "sha256_raw": "6f11f64abd1a9a2574248abdacf8a2c889eee1070e102f0f77a9bc06c728e417"
     },
     "data/model_ensemble_weights.csv": {
       "archived_as": "model_ensemble_weights.csv.gz",
@@ -21,9 +21,9 @@
     },
     "data/qb_promoted_team_context.csv": {
       "archived_as": "qb_promoted_team_context.csv.gz",
-      "bytes_gz": 4725,
+      "bytes_gz": 4724,
       "bytes_raw": 12237,
-      "sha256_raw": "8c6de838281e2065dac42d7c8948c097e7eee5157167d1eb33aac643c1c503b6"
+      "sha256_raw": "0cc261de8d6f7e297c495802f8523675766a9a686542779594c28a11485fa5e4"
     },
     "data/team_week_map.csv": {
       "archived_as": "team_week_map.csv.gz",
@@ -33,9 +33,9 @@
     },
     "data/weather_week.csv": {
       "archived_as": "weather_week.csv.gz",
-      "bytes_gz": 1181,
-      "bytes_raw": 3927,
-      "sha256_raw": "a0b410ae8210ce0c7ff6f8d3760f2c07628b50e2eff6cdd45274268cf92cdd72"
+      "bytes_gz": 1195,
+      "bytes_raw": 3945,
+      "sha256_raw": "10a771d9e1879c89a504a76a8b4f4d3b1c02cf0e762807b05c0d6d306eeb8637"
     }
   },
   "required_column_stripped": {},
@@ -46,8 +46,8 @@
     "data/model_rule_simulation_inputs.csv",
     "data/player_form_consensus.csv"
   ],
-  "source_git_sha": "c3a932a357dcbe6be3006eab584c32080059febf",
-  "source_run_id": "42903956190",
+  "source_git_sha": "0b15ad252d2c1a39e16f5e7658a76c60479f6496",
+  "source_run_id": "43259160577",
   "stem": "0_wk00",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
