@@ -644,7 +644,10 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/materialize_live_props_for_model_v1.py
+          mkdir -p data/_debug
+          set -o pipefail
+          python scripts/materialize_live_props_for_model_v1.py \
+            2>&1 | tee data/_debug/materialize_live_props.log
           test -s outputs/props_raw_compact.csv
           test -s data/live_odds_placeholder_rows.csv
           python - <<'EOF'
@@ -992,17 +995,21 @@ jobs:
                    data/team_week_map.csv data/player_form.csv; do
             if [ -e "$f" ]; then echo "  PRESENT $(wc -l < "$f") $f"; else echo "  MISSING $f"; fi
           done
-          echo "--- live odds GATE OUTPUT (the raise happens before the status file)"
-          if [ -s data/_debug/live_odds_gate.log ]; then
-            tail -30 data/_debug/live_odds_gate.log
+          # Only dump the gate status when the gate did NOT succeed. On success it
+          # is ~25 lines of noise that pushes the actually-failing step's output
+          # out of the log tail, which is all the GitHub API serves.
+          if [ -s data/live_odds_status.json ] && grep -q '"status": "available"' data/live_odds_status.json; then
+            echo "--- live odds gate: available (status suppressed; it is not the failure)"
           else
-            echo "  (absent: the gate step did not run)"
+            echo "--- live odds gate status / output (the gate did not reach available)"
+            if [ -s data/_debug/live_odds_gate.log ]; then tail -25 data/_debug/live_odds_gate.log; fi
+            if [ -s data/live_odds_status.json ]; then tail -c 2000 data/live_odds_status.json
+            else echo "  (status absent: the gate raised before writing it)"; fi
           fi
-          echo "--- live odds gate status (why an odds fetch failed) -- LAST so the"
-          echo "    log tail, which is all the GitHub API serves, always contains it"
-          if [ -s data/live_odds_status.json ]; then
-            tail -c 2500 data/live_odds_status.json
-          else
-            echo "  (absent: the gate raised before writing it)"
-          fi
+          echo "--- teed step logs, newest last -- LAST so the log tail always has them"
+          for f in data/_debug/*.log; do
+            [ -s "$f" ] || continue
+            echo "  ===== ${f} ====="
+            tail -22 "$f"
+          done
           echo "=============================================================="
