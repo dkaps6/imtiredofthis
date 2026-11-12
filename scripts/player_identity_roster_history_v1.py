@@ -102,6 +102,101 @@ def _load_one(season: int) -> pd.DataFrame:
     ]].drop_duplicates(["season", "week", "team", "player_identity_key"], keep="last")
 
 
+def _load_current_depth_charts(season: int) -> tuple[pd.DataFrame, dict]:
+    """Current-season depth-chart identity: who is on which team RIGHT NOW.
+
+    Weekly rosters are the historical identity spine, but they lag an in-season
+    signing and they carry the player under his RELEASING club. The depth chart
+    carries him under his new one, with the same stable GSIS id, which is the
+    only source that can resolve a mid-season move.
+
+    The defect this closes: Josh Johnson (QB, gsis 00-0026300, 18 seasons) was
+    cut by Cincinnati and signed by Arizona on 2026-11-10. His 2021-2025 weekly
+    roster teams are BAL/SF/WAS, never ARI, so the team-scoped lookup missed, the
+    resolver fell through to the global name, and it found two people -- him and
+    a 2021-2022 Seattle RB of the same name who has not been on a roster since.
+    resolve_slate_identities then correctly refused to guess, and every Full
+    Slate run from 2026-11-10 died at PlayerForm on "Ambiguous player identity:
+    team=ARI player=Josh Johnson". nflverse's own depth chart resolves the
+    Arizona player to 00-0026300 unambiguously.
+
+    Identity metadata only, exactly as this module's contract requires: gsis id,
+    team, name and position. No targets, carries, yards, routes or scoring, and
+    stamped week 0 like a verified alias so it can never be read as game
+    evidence or widen the model prior.
+
+    Only UNAMBIGUOUS facts are added. A (team, name) that the depth chart itself
+    maps to more than one GSIS id is dropped rather than inserted, so this source
+    can resolve an ambiguity but never manufacture one.
+    """
+    import nflreadpy as nfl
+
+    stats = {"available": False, "rows": 0, "teams": 0, "dropped_ambiguous": 0}
+    try:
+        raw = _to_pandas(nfl.load_depth_charts(seasons=[int(season)]))
+    except Exception as exc:  # pragma: no cover - provider/network dependent
+        stats["error"] = f"{type(exc).__name__}: {exc}"
+        return pd.DataFrame(), stats
+    if raw.empty:
+        stats["error"] = "provider returned zero rows"
+        return pd.DataFrame(), stats
+
+    x = raw.copy()
+    x.columns = [str(c).strip().lower() for c in x.columns]
+    x["team"] = _first(x, ["team", "team_abbr", "club_code"]).map(canon_team)
+    x["player_id"] = _first(x, ["gsis_id", "player_id"]).astype("string").fillna("").str.strip()
+    x["position"] = _first(x, ["pos_abb", "position", "pos_name", "pos"]).map(_position)
+    raw_name = _first(x, ["player_name", "full_name", "football_name", "player", "name"]).astype("string").fillna("").str.strip()
+    canon = raw_name.map(canonicalize_player_name_safe)
+    x["player"] = canon.map(lambda pair: pair[0])
+    x["player_clean_key"] = canon.map(lambda pair: pair[1])
+
+    x = x.loc[
+        x["position"].isin(SKILL_POSITIONS)
+        & x["player"].astype(str).str.len().gt(0)
+        & x["team"].astype(str).str.len().gt(0)
+        & x["player_id"].astype(str).str.len().gt(0)
+    ].copy()
+    if x.empty:
+        stats["error"] = "no stable skill identities in depth charts"
+        return pd.DataFrame(), stats
+
+    # Keep only the most recent snapshot per team. The provider accumulates every
+    # published chart for the season, so without this the frame is dominated by
+    # stale team placements that would reintroduce the very ambiguity this fixes.
+    if "dt" in x.columns:
+        order = pd.to_datetime(x["dt"], errors="coerce", utc=True)
+        x = x.assign(_dt=order).dropna(subset=["_dt"])
+        if x.empty:
+            stats["error"] = "depth charts carry no parseable dt"
+            return pd.DataFrame(), stats
+        latest = x.groupby("team")["_dt"].transform("max")
+        x = x.loc[x["_dt"].eq(latest)].drop(columns=["_dt", "dt"])
+
+    x = x.drop_duplicates(["team", "player_id"], keep="last")
+
+    # Never manufacture an ambiguity: drop any (team, name) the chart maps to more
+    # than one person.
+    name_key = x["player"].map(lambda v: player_name_key(v))
+    grp = x.assign(_k=name_key).groupby(["team", "_k"])["player_id"].transform("nunique")
+    ambiguous = grp.gt(1)
+    stats["dropped_ambiguous"] = int(ambiguous.sum())
+    x = x.loc[~ambiguous].copy()
+    if x.empty:
+        stats["error"] = "every depth-chart identity was ambiguous"
+        return pd.DataFrame(), stats
+
+    x["season"] = int(season)
+    x["week"] = 0
+    x = attach_historical_identity(x, id_col="player_id", name_col="player", team_col="team")
+    out = x[[
+        "season", "week", "team", "position", "player", "player_clean_key",
+        "player_id", "player_identity_key", "identity_full_name_key", "identity_base_name_key",
+    ]].drop_duplicates(["season", "team", "player_identity_key"], keep="last")
+    stats.update(available=True, rows=int(len(out)), teams=int(out["team"].nunique()))
+    return out, stats
+
+
 def _apply_verified_aliases(history: pd.DataFrame, current_season: int) -> tuple[pd.DataFrame, int]:
     """Append current identity aliases only after verifying their historical GSIS anchor.
 
@@ -186,7 +281,17 @@ def load_identity_roster_history(seasons: Iterable[int]) -> pd.DataFrame:
     if out.empty:
         raise RuntimeError("identity roster history produced zero rows")
 
-    out, alias_rows = _apply_verified_aliases(out, max(requested) + 1)
+    current_season = max(requested) + 1
+
+    # Current-season team placement. This is an identity ENRICHMENT: without it
+    # the registry resolves exactly as it did before, so a provider failure is
+    # visible in the audit rather than fatal. With it, an in-season signing whose
+    # name collides with another person resolves instead of killing the slate.
+    depth, depth_stats = _load_current_depth_charts(current_season)
+    if not depth.empty:
+        out = pd.concat([out, depth], ignore_index=True, sort=False)
+
+    out, alias_rows = _apply_verified_aliases(out, current_season)
 
     # Stable ID must remain one person identity. Multiple historical/current teams
     # are expected and are exactly what allows offseason-trade resolution.
@@ -206,6 +311,7 @@ def load_identity_roster_history(seasons: Iterable[int]) -> pd.DataFrame:
         "registry_rows": int(len(registry)),
         "season_rows": season_rows,
         "verified_alias_rows": int(alias_rows),
+        "current_depth_chart_identity": depth_stats,
         "model_feature_columns_supplied": [],
         "identity_only": True,
         "snapshot": str(SNAPSHOT),
