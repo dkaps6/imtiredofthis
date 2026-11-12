@@ -101,3 +101,62 @@ than to pick whichever haircut produces the preferred answer.
   product is never a takeable price.
 * A LOTTERY ticket at 0.11% is a 1-in-900 shot. A positive EV on it is a
   statement about the price, not a prediction, and it should be staked that way.
+
+---
+
+## ADDENDUM 2026-11-13 00:05Z -- own history must be per-opportunity, and two claims are withdrawn
+
+The operator doubted that Jayden Daniels had rushed for 103 yards or that Malik
+Nabers had a 160-yard receiving game. Both are real (nflverse rows, box-score
+arithmetic closing exactly, PFR snap counts, and outside game reports agree):
+
+* Week 5, 2026-10-11, NYG @ WAS, 27-27 tie: Daniels 17/25 199, **9 carries 103**;
+  Nabers **11-121 on 20 targets**; Jameis Winston 33/**54** for 326.
+* Week 6, 2026-10-18, NO @ NYG: Nabers **12-165 on 15 targets**; NYG **47**
+  pass attempts (Winston 26 + McCarthy 21).
+
+But the doubt was pointing at a real defect in the estimator above. Those
+outcomes came in opportunity contexts that tonight does not project:
+
+* Nabers' 121 and 165 came on **54 and 47** team pass attempts. The model
+  projects **29.8** for McCarthy tonight. Scaled per attempt, those are 67- and
+  105-yard games.
+* Daniels' 103 came on 9 carries in his first game back from an elbow injury.
+  His three games since: **4, 2, 4 carries** for 10, 23, 16 yards.
+
+This is the AGENTS.md anomaly gate -- "anomalies are questions, not trends" --
+and the version above broke it: own history was treated as eight exchangeable
+games with a single 0.901 total-ratio scalar. That scalar is replaced. Own
+history is now **per team pass attempt, scaled to tonight's projected attempts,
+times the matchup factor** -- opportunity x efficiency, which is the repo's own
+allocation principle.
+
+### Withdrawn
+
+| claim (made ~23:48Z) | corrected |
+|---|---|
+| Nabers o109.5 +430 is "+27.2% EV, best single on the board" | **+7.3%, and the sign flips with the weights (-19.5% to +34.1%)**. A fair-priced high-risk leg, not an edge. |
+| Nabers o99.5 +310 "+10.7% EV" | **-4.7%** (-23.7% to +14.4%). Fair-priced. |
+| Nabers o159.5 +2300 "+33.8% EV" lottery leg | **-56.2%**. It happened once, on 47 attempts; 0 of 8 at tonight's volume. Removed. |
+| Daniels rush o89.5 +1480 "+21.8% EV" lottery leg | **Unresolved context, fail closed.** The 9-carry usage has not existed for three games. Removed. |
+| SAFE ticket "+26.7% EV", LOTTERY "+91.2% EV" | SAFE **57.5% vs 52.7% breakeven**. Edges on this board are single digits. |
+
+### What survived every version of the estimator
+
+Diggs rec o24.5 (-270): positive under the floor test, the cushion gate
+(1.81x), all weight schemes, both own-history adjustments. Fields rec o9.5
+(-420) likewise. Fields o14.5 (-260) is positive but thin (+0.9% to +4.8%): he
+is 8 for 8 in reality, across three different quarterbacks, but 6 of 8 once the
+two 47+ attempt games are scaled to tonight's volume.
+
+Final legs: `data/research/tnf_2026_wk10_final_legs.csv`.
+
+### Also corrected in MODEL_CEILING_COMPRESSION_2026_W10_V1.md
+
+The Daniels rushing row (-21.0 mean gap, -47.4 p90 gap) is **not** ceiling
+compression. The model's 21.0 matches his last three games (10, 23, 16); it was
+tracking a usage change that the season mean hides. Nabers' mean gap shrinks
+from -25.1 to about -14 once his games are put on a per-attempt basis. The
+compression finding stands for Nabers and Likely at reduced size; it was
+overstated by comparing a current projection against opportunity-unadjusted
+season aggregates.

@@ -1,5 +1,15 @@
 # The model compresses ceilings, and that is why the gates only ever emit near-certainties
 
+> **CORRECTION 2026-11-13 00:05Z -- this document overstates its finding.** The
+> gaps below compare a current projection against season aggregates that were
+> not adjusted for opportunity. (1) The Jayden Daniels rushing rows are NOT
+> compression: his carries fell from 5/7/9 to 4/2/4 after an elbow injury, and
+> the model's 21.0 matches his last three games (10, 23, 16). (2) Nabers' 121
+> and 165 came on 54 and 47 team pass attempts; per attempt at tonight's
+> projected 29.8, his mean is about 70 against the model's 55.9, so the gap is
+> roughly -14, not -25. The direction of the finding stands for Nabers and
+> Likely; its size does not. See the addendum in `BLENDED_LEG_ESTIMATOR_V1.md`.
+
 **Board:** 2026 week 10 TNF (NYG @ WAS), run 43327080728, real `model_proj`/`model_sd`
 **Evidence:** `data/research/tnf_2026_wk10_gated_legs.csv`, `data/market_track_record/boards/2026_wk10.csv`
 
