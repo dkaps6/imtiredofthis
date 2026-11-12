@@ -329,6 +329,16 @@ def audit() -> dict:
             ))
     elif injury_state == "no_official_report":
         rows.append(_row("injuries", "NO_OFFICIAL_REPORT_CONFIRMED", "rows=0"))
+    elif injury_state == "provider_outage":
+        # An outage is a state the builder can emit, so it must be reported
+        # rather than raised on. It is a blocker: the injury rule cannot fire and
+        # the artifact must not be mistaken for "nobody is hurt".
+        rows.append(_row(
+            "injuries", "INJURY_PROVIDER_OUTAGE",
+            f"rows={len(injuries)} source={injury_status.get('source','')}; "
+            f"availability is unknown, not empty",
+            blocker=True,
+        ))
     else:
         raise RuntimeError(f"injury provider state not usable: {injury_state}")
 
