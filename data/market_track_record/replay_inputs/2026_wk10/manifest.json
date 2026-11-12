@@ -1,17 +1,23 @@
 {
-  "complete": false,
+  "complete": true,
   "files": {
     "data/injuries.csv": {
       "archived_as": "injuries.csv.gz",
-      "bytes_gz": 3197,
-      "bytes_raw": 23164,
-      "sha256_raw": "0a61ca08d25e7b0443070e470e3f20df80f0bb7ea2127417c8d6fcbc0b291a53"
+      "bytes_gz": 3381,
+      "bytes_raw": 24594,
+      "sha256_raw": "8a9f1adaab85d75af26882ae8bfaf47aa3c4465354f02958da5fd616c5b3c7b1"
     },
     "data/injuries_source_status.json": {
       "archived_as": "injuries_source_status.json.gz",
-      "bytes_gz": 337,
+      "bytes_gz": 336,
       "bytes_raw": 583,
-      "sha256_raw": "e938f87f2f438271cc77dd822d1a19366095da030a0e91b216628c6eeb22bb21"
+      "sha256_raw": "e9da44becaec819ed6e22904d94a5d5141b98337859c9889172648a59ea51dea"
+    },
+    "data/metrics_ready.csv": {
+      "archived_as": "metrics_ready.csv.gz",
+      "bytes_gz": 9004,
+      "bytes_raw": 252933,
+      "sha256_raw": "b0e774afc8c49e030fc4ac20ccf2b0231df7501bef9902cce03a6885bf7347cf"
     },
     "data/model_ensemble_diagnostics.csv": {
       "archived_as": "model_ensemble_diagnostics.csv.gz",
@@ -27,27 +33,39 @@
     },
     "data/model_ml_diagnostics.csv": {
       "archived_as": "model_ml_diagnostics.csv.gz",
-      "bytes_gz": 33311,
-      "bytes_raw": 142975,
-      "sha256_raw": "4abd95582ae7b9f70d1528cf158b57c5bd5d9ae278e9174b3ed0a0180a5d1edd"
+      "bytes_gz": 33853,
+      "bytes_raw": 145062,
+      "sha256_raw": "f276ffeae0059bbf601bb41b37c3d88145fabc18e12df29a1da9039d6a2776a3"
+    },
+    "data/model_rule_simulation_inputs.csv": {
+      "archived_as": "model_rule_simulation_inputs.csv.gz",
+      "bytes_gz": 14520,
+      "bytes_raw": 320858,
+      "sha256_raw": "ad8be79e314e406e39d1f06475113ad7bc8be783d23c85684c8864e55055908d"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
-      "bytes_gz": 13644,
-      "bytes_raw": 204872,
-      "sha256_raw": "ba3e550f8392f6154a9d46fba63915c47110e4341566660f783463d101ce8911"
+      "bytes_gz": 13795,
+      "bytes_raw": 208180,
+      "sha256_raw": "a61d554e1d1f4ab6a2ac52582b4238cae73c9b2c18e303f3ab514da33c19f32b"
     },
     "data/player_form_consensus.csv": {
       "archived_as": "player_form_consensus.csv.gz",
-      "bytes_gz": 60138,
-      "bytes_raw": 239563,
-      "sha256_raw": "c3314c82265c90d4806237c97d8909d6ddedc600ecae35e945fe8188b033454c"
+      "bytes_gz": 61078,
+      "bytes_raw": 243109,
+      "sha256_raw": "55f2598bbb87bb5a88f90ebc8721cc7beb385f3c4b9a514217586db8afc83445"
     },
     "data/qb_promoted_team_context.csv": {
       "archived_as": "qb_promoted_team_context.csv.gz",
       "bytes_gz": 4725,
       "bytes_raw": 12237,
       "sha256_raw": "16003685b5f9be71a435358581cf7fe73b22d3099df1e37197b71b1730774c75"
+    },
+    "data/rb_rush_synthesis_context.csv": {
+      "archived_as": "rb_rush_synthesis_context.csv.gz",
+      "bytes_gz": 143,
+      "bytes_raw": 157,
+      "sha256_raw": "4a07c70be06434c6cb44e7e77416e7881519c95ce64a448f19e0def102b3785d"
     },
     "data/team_week_map.csv": {
       "archived_as": "team_week_map.csv.gz",
@@ -63,12 +81,9 @@
     }
   },
   "required_column_stripped": {},
-  "required_missing": [
-    "data/metrics_ready.csv",
-    "data/model_rule_simulation_inputs.csv"
-  ],
-  "source_git_sha": "a8152e12b9364d41766a30830e16feb09be996f6",
-  "source_run_id": "43320022375",
+  "required_missing": [],
+  "source_git_sha": "fd7dead25e9564f82605a5001b84b931622ff5e1",
+  "source_run_id": "43327080728",
   "stem": "2026_wk10",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",

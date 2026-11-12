@@ -26,19 +26,19 @@ Carlton Davis III,NE,Out,Did Not Participate In Practice,Knee,nfl.com
 Reggie Gilliam,NE,,Limited Participation in Practice,,nfl.com
 TreVeyon Henderson,NE,Out,Did Not Participate In Practice,Illness,nfl.com
 Hunter Henry,NE,,Limited Participation in Practice,,nfl.com
-Cameron Latu,NE,,Did Not Participate In Practice,,nfl.com
+Cameron Latu,NE,,Limited Participation in Practice,,nfl.com
 Drake Maye,NE,,Full Participation in Practice,,nfl.com
 Morgan Moses,NE,,Limited Participation in Practice,,nfl.com
-Walter Rouse,NE,,Did Not Participate In Practice,,nfl.com
-Brenden Schooler,NE,,Did Not Participate In Practice,,nfl.com
-Rhamondre Stevenson,NE,,Did Not Participate In Practice,,nfl.com
+Walter Rouse,NE,,Limited Participation in Practice,,nfl.com
+Brenden Schooler,NE,,Limited Participation in Practice,,nfl.com
+Rhamondre Stevenson,NE,,Limited Participation in Practice,,nfl.com
 Greg Van Roten,NE,,Limited Participation in Practice,,nfl.com
 Charles Woods,NE,,Limited Participation in Practice,,nfl.com
-Brian Branch,DET,,Limited Participation in Practice,,nfl.com
-Jared Goff,DET,,Limited Participation in Practice,,nfl.com
-Kerby Joseph,DET,,Limited Participation in Practice,,nfl.com
-Cade Mays,DET,,Did Not Participate In Practice,,nfl.com
-D.J. Reed,DET,,Did Not Participate In Practice,,nfl.com
+Brian Branch,DET,,Full Participation in Practice,,nfl.com
+Jared Goff,DET,,Full Participation in Practice,,nfl.com
+Kerby Joseph,DET,Out,Full Participation in Practice,Knee,nfl.com
+Cade Mays,DET,Out,Did Not Participate In Practice,Ankle,nfl.com
+D.J. Reed,DET,Out,Did Not Participate In Practice,Hip,nfl.com
 Jacob Saylors,DET,,Full Participation in Practice,,nfl.com
 Amon-Ra St. Brown,DET,,Limited Participation in Practice,,nfl.com
 Sione Vaki,DET,,Did Not Participate In Practice,,nfl.com
@@ -51,15 +51,19 @@ Travis Kelce,KC,,Full Participation in Practice,,nfl.com
 Patrick Mahomes,KC,,Full Participation in Practice,,nfl.com
 Jaylon Moore,KC,,Did Not Participate In Practice,,nfl.com
 Omarr Norman-Lott,KC,,Limited Participation in Practice,,nfl.com
+Jaydn Ott,KC,,Limited Participation in Practice,,nfl.com
 Rashee Rice,KC,,Full Participation in Practice,,nfl.com
 Peter Woods,KC,,Did Not Participate In Practice,,nfl.com
 Xavier Worthy,KC,,Full Participation in Practice,,nfl.com
 Zachariah Branch,ATL,,Did Not Participate In Practice,,nfl.com
-Divine Deablo,ATL,,Limited Participation in Practice,,nfl.com
-Gervon Dexter Sr.,ATL,,Did Not Participate In Practice,,nfl.com
-James Pearce Jr.,ATL,,Did Not Participate In Practice,,nfl.com
-Za'Darius Smith,ATL,,Did Not Participate In Practice,,nfl.com
-Josh Woods,ATL,,Did Not Participate In Practice,,nfl.com
+Kendal Daniels,ATL,,Limited Participation in Practice,,nfl.com
+Divine Deablo,ATL,,Did Not Participate In Practice,,nfl.com
+Gervon Dexter Sr.,ATL,,Limited Participation in Practice,,nfl.com
+James Pearce Jr.,ATL,,Limited Participation in Practice,,nfl.com
+Za'Darius Smith,ATL,,Full Participation in Practice,,nfl.com
+Jawaan Taylor,ATL,,Did Not Participate In Practice,,nfl.com
+Cameron Thomas,ATL,,Limited Participation in Practice,,nfl.com
+Josh Woods,ATL,,Limited Participation in Practice,,nfl.com
 Blake Cashman,MIN,,Did Not Participate In Practice,,nfl.com
 T.J. Hockenson,MIN,,Did Not Participate In Practice,,nfl.com
 Tyrion Ingram-Dawkins,MIN,,Did Not Participate In Practice,,nfl.com
@@ -80,7 +84,7 @@ Bo Melton,GB,,Full Participation in Practice,,nfl.com
 Skyy Moore,GB,,Limited Participation in Practice,,nfl.com
 Micah Parsons,GB,,Limited Participation in Practice,,nfl.com
 Sean Rhyan,GB,,Did Not Participate In Practice,,nfl.com
-Trey Smack,GB,,Limited Participation in Practice,,nfl.com
+Trey Smack,GB,,Full Participation in Practice,,nfl.com
 Lukas Van Ness,GB,,Did Not Participate In Practice,,nfl.com
 Josh Whyle,GB,,Did Not Participate In Practice,,nfl.com
 Savion Williams,GB,,Limited Participation in Practice,,nfl.com
@@ -92,26 +96,27 @@ Jordan Davis,JAX,,Did Not Participate In Practice,,nfl.com
 BJ Green II,JAX,,Full Participation in Practice,,nfl.com
 Robert Hainsey,JAX,,Limited Participation in Practice,,nfl.com
 Antonio Johnson,JAX,,Limited Participation in Practice,,nfl.com
-Jakobi Meyers,JAX,,Did Not Participate In Practice,,nfl.com
+Jakobi Meyers,JAX,,Limited Participation in Practice,,nfl.com
 Chris Rodriguez Jr.,JAX,,Limited Participation in Practice,,nfl.com
 Bhayshul Tuten,JAX,,Did Not Participate In Practice,,nfl.com
-Travon Walker,JAX,,Did Not Participate In Practice,,nfl.com
+Travon Walker,JAX,,Limited Participation in Practice,,nfl.com
 Cody Barton,TEN,,Did Not Participate In Practice,,nfl.com
 John Franklin-Myers,TEN,,Full Participation in Practice,,nfl.com
 Marcus Harris,TEN,,Full Participation in Practice,,nfl.com
 Anthony Hill Jr.,TEN,,Did Not Participate In Practice,,nfl.com
 Jaylon Jones,TEN,,Full Participation in Practice,,nfl.com
 JC Latham,TEN,,Full Participation in Practice,,nfl.com
-Tony Pollard,TEN,,Full Participation in Practice,,nfl.com
+Tony Pollard,TEN,,Did Not Participate In Practice,,nfl.com
 Peter Skoronski,TEN,,Did Not Participate In Practice,,nfl.com
-Tyjae Spears,TEN,,Did Not Participate In Practice,,nfl.com
+Tyjae Spears,TEN,,Limited Participation in Practice,,nfl.com
 Carnell Tate,TEN,,Did Not Participate In Practice,,nfl.com
 Tommy Townsend,TEN,,Full Participation in Practice,,nfl.com
-Kevin Winston Jr.,TEN,,Full Participation in Practice,,nfl.com
+Kevin Winston Jr.,TEN,,Limited Participation in Practice,,nfl.com
 Alec Anderson,BUF,,Limited Participation in Practice,,nfl.com
 Christian Benford,BUF,,Limited Participation in Practice,,nfl.com
-Spencer Brown,BUF,,Limited Participation in Practice,,nfl.com
+Spencer Brown,BUF,,Did Not Participate In Practice,,nfl.com
 Dion Dawkins,BUF,,Limited Participation in Practice,,nfl.com
+Sam Franklin Jr.,BUF,,Limited Participation in Practice,,nfl.com
 Greg Gaines,BUF,,Full Participation in Practice,,nfl.com
 Jordan Hancock,BUF,,Full Participation in Practice,,nfl.com
 Dalton Kincaid,BUF,,Limited Participation in Practice,,nfl.com
@@ -119,6 +124,7 @@ Connor McGovern,BUF,,Limited Participation in Practice,,nfl.com
 Ar'maj Reed-Adams,BUF,,Full Participation in Practice,,nfl.com
 T.J. Sanders,BUF,,Full Participation in Practice,,nfl.com
 Tyrell Shavers,BUF,,Full Participation in Practice,,nfl.com
+Jarvis Brownlee Jr.,NYJ,,Did Not Participate In Practice,,nfl.com
 Omar Cooper Jr.,NYJ,,Limited Participation in Practice,,nfl.com
 Joseph Ossai,NYJ,,Limited Participation in Practice,,nfl.com
 VJ Payne,NYJ,,Full Participation in Practice,,nfl.com
@@ -129,12 +135,13 @@ Nahshon Wright,NYJ,,Limited Participation in Practice,,nfl.com
 Tucker Addington,MIA,,Limited Participation in Practice,,nfl.com
 Kaytron Allen,MIA,,Full Participation in Practice,,nfl.com
 Darrell Baker Jr.,MIA,,Limited Participation in Practice,,nfl.com
-Chris Bell,MIA,,Limited Participation in Practice,,nfl.com
+Chris Bell,MIA,,Did Not Participate In Practice,,nfl.com
 Aaron Brewer,MIA,,Did Not Participate In Practice,,nfl.com
 Malik Herring,MIA,,Limited Participation in Practice,,nfl.com
-Will Kacmarek,MIA,,Did Not Participate In Practice,,nfl.com
+Will Kacmarek,MIA,,Limited Participation in Practice,,nfl.com
 Michael Taaffe,MIA,,Full Participation in Practice,,nfl.com
 Dante Trader Jr.,MIA,,Full Participation in Practice,,nfl.com
+Jared Wayne,MIA,,Limited Participation in Practice,,nfl.com
 Jaylen Wright,MIA,,Full Participation in Practice,,nfl.com
 Mo Alie-Cox,IND,,Did Not Participate In Practice,,nfl.com
 CJ Allen,IND,,Full Participation in Practice,,nfl.com
@@ -152,25 +159,27 @@ Charvarius Ward,IND,,Full Participation in Practice,,nfl.com
 Jonathon Brooks,CAR,,Full Participation in Practice,,nfl.com
 Brady Christensen,CAR,,Full Participation in Practice,,nfl.com
 Trevor Etienne,CAR,,Full Participation in Practice,,nfl.com
-Chuba Hubbard,CAR,,Did Not Participate In Practice,,nfl.com
+Chuba Hubbard,CAR,,Full Participation in Practice,,nfl.com
 Lee Hunter,CAR,,Full Participation in Practice,,nfl.com
 Mike Jackson,CAR,,Full Participation in Practice,,nfl.com
 Will Lee III,CAR,,Full Participation in Practice,,nfl.com
 Xavier Legette,CAR,,Full Participation in Practice,,nfl.com
-Damien Lewis,CAR,,Full Participation in Practice,,nfl.com
+Damien Lewis,CAR,,Limited Participation in Practice,,nfl.com
 Bobby Okereke,CAR,,Did Not Participate In Practice,,nfl.com
-Jaelan Phillips,CAR,,Full Participation in Practice,,nfl.com
+Jaelan Phillips,CAR,,Limited Participation in Practice,,nfl.com
 Torricelli Simpkins III,CAR,,Full Participation in Practice,,nfl.com
 Kelvin Banks Jr.,NO,,Limited Participation in Practice,,nfl.com
 CJ Donaldson,NO,,Did Not Participate In Practice,,nfl.com
 David Edwards,NO,,Limited Participation in Practice,,nfl.com
 Martin Emerson,NO,,Limited Participation in Practice,,nfl.com
 Travis Etienne,NO,,Limited Participation in Practice,,nfl.com
-Noah Fant,NO,,Limited Participation in Practice,,nfl.com
-Alvin Kamara,NO,,Did Not Participate In Practice,,nfl.com
+Noah Fant,NO,,Full Participation in Practice,,nfl.com
+Taliese Fuaga,NO,,Limited Participation in Practice,,nfl.com
+Alvin Kamara,NO,,Full Participation in Practice,,nfl.com
 Erik McCoy,NO,,Did Not Participate In Practice,,nfl.com
-Christen Miller,NO,,Limited Participation in Practice,,nfl.com
+Christen Miller,NO,,Did Not Participate In Practice,,nfl.com
 Asim Richards,NO,,Full Participation in Practice,,nfl.com
+Quincy Riley,NO,,Limited Participation in Practice,,nfl.com
 Azeez Al-Shaair,HOU,,Did Not Participate In Practice,,nfl.com
 Reed Blankenship,HOU,,Limited Participation in Practice,,nfl.com
 Tank Dell,HOU,,Limited Participation in Practice,,nfl.com
@@ -191,7 +200,8 @@ Maliek Collins,CLE,,Limited Participation in Practice,,nfl.com
 Harold Fannin Jr.,CLE,,Limited Participation in Practice,,nfl.com
 Ronnie Hickman Jr.,CLE,,Did Not Participate In Practice,,nfl.com
 Tytus Howard,CLE,,Limited Participation in Practice,,nfl.com
-Elgton Jenkins,CLE,,Did Not Participate In Practice,,nfl.com
+Elgton Jenkins,CLE,,Limited Participation in Practice,,nfl.com
+Donovan McMillon,CLE,,Limited Participation in Practice,,nfl.com
 Carson Schwesinger,CLE,,Limited Participation in Practice,,nfl.com
 Denzel Ward,CLE,,Limited Participation in Practice,,nfl.com
 Quincy Williams,CLE,,Limited Participation in Practice,,nfl.com
@@ -205,20 +215,21 @@ Trent McDuffie,LAR,,Did Not Participate In Practice,,nfl.com
 Puka Nacua,LAR,,Did Not Participate In Practice,,nfl.com
 Colby Parkinson,LAR,,Limited Participation in Practice,,nfl.com
 Matthew Stafford,LAR,,Full Participation in Practice,,nfl.com
-Budda Baker,ARI,,Did Not Participate In Practice,,nfl.com
+Budda Baker,ARI,,Full Participation in Practice,,nfl.com
 Zachary Carter,ARI,,Limited Participation in Practice,,nfl.com
 Hjalte Froholdt,ARI,,Did Not Participate In Practice,,nfl.com
 Jon Gaines II,ARI,,Did Not Participate In Practice,,nfl.com
-Bam Knight,ARI,,Limited Participation in Practice,,nfl.com
+Bam Knight,ARI,,Full Participation in Practice,,nfl.com
 Hunter Long,ARI,,Limited Participation in Practice,,nfl.com
 Roy Lopez,ARI,,Did Not Participate In Practice,,nfl.com
 Max Melton,ARI,,Limited Participation in Practice,,nfl.com
-Isaac Seumalo,ARI,,Did Not Participate In Practice,,nfl.com
+Darius Robinson,ARI,,Did Not Participate In Practice,,nfl.com
+Isaac Seumalo,ARI,,Full Participation in Practice,,nfl.com
 Dante Stills,ARI,,Limited Participation in Practice,,nfl.com
 Josh Sweat,ARI,,Did Not Participate In Practice,,nfl.com
 Jayden Williams,ARI,,Limited Participation in Practice,,nfl.com
-Mack Wilson,ARI,,Did Not Participate In Practice,,nfl.com
-Andrew Wingard,ARI,,Limited Participation in Practice,,nfl.com
+Mack Wilson,ARI,,Full Participation in Practice,,nfl.com
+Andrew Wingard,ARI,,Did Not Participate In Practice,,nfl.com
 AJ Barner,SEA,,Full Participation in Practice,,nfl.com
 Anthony Bradford,SEA,,Limited Participation in Practice,,nfl.com
 Charles Cross,SEA,,Did Not Participate In Practice,,nfl.com
@@ -235,7 +246,7 @@ Rashid Shaheed,SEA,,Full Participation in Practice,,nfl.com
 Jaxon Smith-Njigba,SEA,,Did Not Participate In Practice,,nfl.com
 Leonard Williams,SEA,,Did Not Participate In Practice,,nfl.com
 Thomas Booker,LV,,Limited Participation in Practice,,nfl.com
-Foley Fatukasi,LV,,Limited Participation in Practice,,nfl.com
+Foley Fatukasi,LV,,Full Participation in Practice,,nfl.com
 Ian Thomas,LV,,Full Participation in Practice,,nfl.com
 Trey Zuhn III,LV,,Limited Participation in Practice,,nfl.com
 Mike Evans,SF,,Did Not Participate In Practice,,nfl.com
@@ -251,6 +262,7 @@ Upton Stout,SF,,Limited Participation in Practice,,nfl.com
 C.J. West,SF,,Limited Participation in Practice,,nfl.com
 Trent Williams,SF,,Did Not Participate In Practice,,nfl.com
 Jonathan Bullard,DAL,,Full Participation in Practice,,nfl.com
+Alijah Clark,DAL,,Did Not Participate In Practice,,nfl.com
 Donovan Ezeiruaku,DAL,,Did Not Participate In Practice,,nfl.com
 Jake Ferguson,DAL,,Did Not Participate In Practice,,nfl.com
 Tyler Goodson,DAL,,Did Not Participate In Practice,,nfl.com
@@ -260,21 +272,26 @@ P.J. Locke,DAL,,Did Not Participate In Practice,,nfl.com
 Von Miller,DAL,,Did Not Participate In Practice,,nfl.com
 Jonathan Mingo,DAL,,Did Not Participate In Practice,,nfl.com
 Devin Moore,DAL,,Full Participation in Practice,,nfl.com
-DeMarvion Overshown,DAL,,Limited Participation in Practice,,nfl.com
+DeMarvion Overshown,DAL,,Full Participation in Practice,,nfl.com
 George Pickens,DAL,,Limited Participation in Practice,,nfl.com
 Joey Porter Jr.,DAL,,Did Not Participate In Practice,,nfl.com
 Luke Schoonmaker,DAL,,Full Participation in Practice,,nfl.com
 Brevyn Spann-Ford,DAL,,Full Participation in Practice,,nfl.com
+Juanyeh Thomas,DAL,,Limited Participation in Practice,,nfl.com
 KaVontae Turpin,DAL,,Limited Participation in Practice,,nfl.com
 Brandin Echols,PIT,,Full Participation in Practice,,nfl.com
-DeShon Elliott,PIT,,Limited Participation in Practice,,nfl.com
+DeShon Elliott,PIT,,Full Participation in Practice,,nfl.com
 Derrick Harmon,PIT,,Limited Participation in Practice,,nfl.com
 Cameron Heyward,PIT,,Did Not Participate In Practice,,nfl.com
 Ben Skowronek,PIT,,Full Participation in Practice,,nfl.com
 Doneiko Slaughter,PIT,,Full Participation in Practice,,nfl.com
-Darnell Washington,PIT,,Did Not Participate In Practice,,nfl.com
-T.J. Watt,PIT,,Did Not Participate In Practice,,nfl.com
+Darnell Washington,PIT,,Full Participation in Practice,,nfl.com
+T.J. Watt,PIT,,Limited Participation in Practice,,nfl.com
 Jonathan Allen,CIN,,Did Not Participate In Practice,,nfl.com
+Jalen Davis,CIN,,Full Participation in Practice,,nfl.com
 Kyle Dugger,CIN,,Did Not Participate In Practice,,nfl.com
-Dylan Fairchild,CIN,,Limited Participation in Practice,,nfl.com
-DJ Turner II,CIN,,Limited Participation in Practice,,nfl.com
+Dylan Fairchild,CIN,,Full Participation in Practice,,nfl.com
+B.J. Hill,CIN,,Limited Participation in Practice,,nfl.com
+Andrei Iosivas,CIN,,Full Participation in Practice,,nfl.com
+Brian Parker II,CIN,,Full Participation in Practice,,nfl.com
+DJ Turner II,CIN,,Full Participation in Practice,,nfl.com

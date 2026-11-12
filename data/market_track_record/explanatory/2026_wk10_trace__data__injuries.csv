@@ -26,19 +26,19 @@ Carlton Davis III,NE,2026,10,Out,Did Not Participate In Practice,Knee,Out,nfl.co
 Reggie Gilliam,NE,2026,10,,Limited Participation in Practice,,,nfl.com,1
 TreVeyon Henderson,NE,2026,10,Out,Did Not Participate In Practice,Illness,Out,nfl.com,1
 Hunter Henry,NE,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Cameron Latu,NE,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Cameron Latu,NE,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Drake Maye,NE,2026,10,,Full Participation in Practice,,,nfl.com,1
 Morgan Moses,NE,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Walter Rouse,NE,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Brenden Schooler,NE,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Rhamondre Stevenson,NE,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Walter Rouse,NE,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Brenden Schooler,NE,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Rhamondre Stevenson,NE,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Greg Van Roten,NE,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Charles Woods,NE,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Brian Branch,DET,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Jared Goff,DET,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Kerby Joseph,DET,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Cade Mays,DET,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-D.J. Reed,DET,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Brian Branch,DET,2026,10,,Full Participation in Practice,,,nfl.com,1
+Jared Goff,DET,2026,10,,Full Participation in Practice,,,nfl.com,1
+Kerby Joseph,DET,2026,10,Out,Full Participation in Practice,Knee,Out,nfl.com,1
+Cade Mays,DET,2026,10,Out,Did Not Participate In Practice,Ankle,Out,nfl.com,1
+D.J. Reed,DET,2026,10,Out,Did Not Participate In Practice,Hip,Out,nfl.com,1
 Jacob Saylors,DET,2026,10,,Full Participation in Practice,,,nfl.com,1
 Amon-Ra St. Brown,DET,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Sione Vaki,DET,2026,10,,Did Not Participate In Practice,,,nfl.com,1
@@ -51,15 +51,19 @@ Travis Kelce,KC,2026,10,,Full Participation in Practice,,,nfl.com,1
 Patrick Mahomes,KC,2026,10,,Full Participation in Practice,,,nfl.com,1
 Jaylon Moore,KC,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Omarr Norman-Lott,KC,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Jaydn Ott,KC,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Rashee Rice,KC,2026,10,,Full Participation in Practice,,,nfl.com,1
 Peter Woods,KC,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Xavier Worthy,KC,2026,10,,Full Participation in Practice,,,nfl.com,1
 Zachariah Branch,ATL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Divine Deablo,ATL,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Gervon Dexter Sr.,ATL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-James Pearce Jr.,ATL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Za'Darius Smith,ATL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Josh Woods,ATL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Kendal Daniels,ATL,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Divine Deablo,ATL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Gervon Dexter Sr.,ATL,2026,10,,Limited Participation in Practice,,,nfl.com,1
+James Pearce Jr.,ATL,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Za'Darius Smith,ATL,2026,10,,Full Participation in Practice,,,nfl.com,1
+Jawaan Taylor,ATL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Cameron Thomas,ATL,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Josh Woods,ATL,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Blake Cashman,MIN,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 T.J. Hockenson,MIN,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Tyrion Ingram-Dawkins,MIN,2026,10,,Did Not Participate In Practice,,,nfl.com,1
@@ -80,7 +84,7 @@ Bo Melton,GB,2026,10,,Full Participation in Practice,,,nfl.com,1
 Skyy Moore,GB,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Micah Parsons,GB,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Sean Rhyan,GB,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Trey Smack,GB,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Trey Smack,GB,2026,10,,Full Participation in Practice,,,nfl.com,1
 Lukas Van Ness,GB,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Josh Whyle,GB,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Savion Williams,GB,2026,10,,Limited Participation in Practice,,,nfl.com,1
@@ -92,26 +96,27 @@ Jordan Davis,JAX,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 BJ Green II,JAX,2026,10,,Full Participation in Practice,,,nfl.com,1
 Robert Hainsey,JAX,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Antonio Johnson,JAX,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Jakobi Meyers,JAX,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Jakobi Meyers,JAX,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Chris Rodriguez Jr.,JAX,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Bhayshul Tuten,JAX,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Travon Walker,JAX,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Travon Walker,JAX,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Cody Barton,TEN,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 John Franklin-Myers,TEN,2026,10,,Full Participation in Practice,,,nfl.com,1
 Marcus Harris,TEN,2026,10,,Full Participation in Practice,,,nfl.com,1
 Anthony Hill Jr.,TEN,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Jaylon Jones,TEN,2026,10,,Full Participation in Practice,,,nfl.com,1
 JC Latham,TEN,2026,10,,Full Participation in Practice,,,nfl.com,1
-Tony Pollard,TEN,2026,10,,Full Participation in Practice,,,nfl.com,1
+Tony Pollard,TEN,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Peter Skoronski,TEN,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Tyjae Spears,TEN,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Tyjae Spears,TEN,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Carnell Tate,TEN,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Tommy Townsend,TEN,2026,10,,Full Participation in Practice,,,nfl.com,1
-Kevin Winston Jr.,TEN,2026,10,,Full Participation in Practice,,,nfl.com,1
+Kevin Winston Jr.,TEN,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Alec Anderson,BUF,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Christian Benford,BUF,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Spencer Brown,BUF,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Spencer Brown,BUF,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Dion Dawkins,BUF,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Sam Franklin Jr.,BUF,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Greg Gaines,BUF,2026,10,,Full Participation in Practice,,,nfl.com,1
 Jordan Hancock,BUF,2026,10,,Full Participation in Practice,,,nfl.com,1
 Dalton Kincaid,BUF,2026,10,,Limited Participation in Practice,,,nfl.com,1
@@ -119,6 +124,7 @@ Connor McGovern,BUF,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Ar'maj Reed-Adams,BUF,2026,10,,Full Participation in Practice,,,nfl.com,1
 T.J. Sanders,BUF,2026,10,,Full Participation in Practice,,,nfl.com,1
 Tyrell Shavers,BUF,2026,10,,Full Participation in Practice,,,nfl.com,1
+Jarvis Brownlee Jr.,NYJ,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Omar Cooper Jr.,NYJ,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Joseph Ossai,NYJ,2026,10,,Limited Participation in Practice,,,nfl.com,1
 VJ Payne,NYJ,2026,10,,Full Participation in Practice,,,nfl.com,1
@@ -129,12 +135,13 @@ Nahshon Wright,NYJ,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Tucker Addington,MIA,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Kaytron Allen,MIA,2026,10,,Full Participation in Practice,,,nfl.com,1
 Darrell Baker Jr.,MIA,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Chris Bell,MIA,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Chris Bell,MIA,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Aaron Brewer,MIA,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Malik Herring,MIA,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Will Kacmarek,MIA,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Will Kacmarek,MIA,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Michael Taaffe,MIA,2026,10,,Full Participation in Practice,,,nfl.com,1
 Dante Trader Jr.,MIA,2026,10,,Full Participation in Practice,,,nfl.com,1
+Jared Wayne,MIA,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Jaylen Wright,MIA,2026,10,,Full Participation in Practice,,,nfl.com,1
 Mo Alie-Cox,IND,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 CJ Allen,IND,2026,10,,Full Participation in Practice,,,nfl.com,1
@@ -152,25 +159,27 @@ Charvarius Ward,IND,2026,10,,Full Participation in Practice,,,nfl.com,1
 Jonathon Brooks,CAR,2026,10,,Full Participation in Practice,,,nfl.com,1
 Brady Christensen,CAR,2026,10,,Full Participation in Practice,,,nfl.com,1
 Trevor Etienne,CAR,2026,10,,Full Participation in Practice,,,nfl.com,1
-Chuba Hubbard,CAR,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Chuba Hubbard,CAR,2026,10,,Full Participation in Practice,,,nfl.com,1
 Lee Hunter,CAR,2026,10,,Full Participation in Practice,,,nfl.com,1
 Mike Jackson,CAR,2026,10,,Full Participation in Practice,,,nfl.com,1
 Will Lee III,CAR,2026,10,,Full Participation in Practice,,,nfl.com,1
 Xavier Legette,CAR,2026,10,,Full Participation in Practice,,,nfl.com,1
-Damien Lewis,CAR,2026,10,,Full Participation in Practice,,,nfl.com,1
+Damien Lewis,CAR,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Bobby Okereke,CAR,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Jaelan Phillips,CAR,2026,10,,Full Participation in Practice,,,nfl.com,1
+Jaelan Phillips,CAR,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Torricelli Simpkins III,CAR,2026,10,,Full Participation in Practice,,,nfl.com,1
 Kelvin Banks Jr.,NO,2026,10,,Limited Participation in Practice,,,nfl.com,1
 CJ Donaldson,NO,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 David Edwards,NO,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Martin Emerson,NO,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Travis Etienne,NO,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Noah Fant,NO,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Alvin Kamara,NO,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Noah Fant,NO,2026,10,,Full Participation in Practice,,,nfl.com,1
+Taliese Fuaga,NO,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Alvin Kamara,NO,2026,10,,Full Participation in Practice,,,nfl.com,1
 Erik McCoy,NO,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Christen Miller,NO,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Christen Miller,NO,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Asim Richards,NO,2026,10,,Full Participation in Practice,,,nfl.com,1
+Quincy Riley,NO,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Azeez Al-Shaair,HOU,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Reed Blankenship,HOU,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Tank Dell,HOU,2026,10,,Limited Participation in Practice,,,nfl.com,1
@@ -191,7 +200,8 @@ Maliek Collins,CLE,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Harold Fannin Jr.,CLE,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Ronnie Hickman Jr.,CLE,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Tytus Howard,CLE,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Elgton Jenkins,CLE,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Elgton Jenkins,CLE,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Donovan McMillon,CLE,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Carson Schwesinger,CLE,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Denzel Ward,CLE,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Quincy Williams,CLE,2026,10,,Limited Participation in Practice,,,nfl.com,1
@@ -205,20 +215,21 @@ Trent McDuffie,LAR,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Puka Nacua,LAR,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Colby Parkinson,LAR,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Matthew Stafford,LAR,2026,10,,Full Participation in Practice,,,nfl.com,1
-Budda Baker,ARI,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Budda Baker,ARI,2026,10,,Full Participation in Practice,,,nfl.com,1
 Zachary Carter,ARI,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Hjalte Froholdt,ARI,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Jon Gaines II,ARI,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Bam Knight,ARI,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Bam Knight,ARI,2026,10,,Full Participation in Practice,,,nfl.com,1
 Hunter Long,ARI,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Roy Lopez,ARI,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Max Melton,ARI,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Isaac Seumalo,ARI,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Darius Robinson,ARI,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Isaac Seumalo,ARI,2026,10,,Full Participation in Practice,,,nfl.com,1
 Dante Stills,ARI,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Josh Sweat,ARI,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Jayden Williams,ARI,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Mack Wilson,ARI,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Andrew Wingard,ARI,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Mack Wilson,ARI,2026,10,,Full Participation in Practice,,,nfl.com,1
+Andrew Wingard,ARI,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 AJ Barner,SEA,2026,10,,Full Participation in Practice,,,nfl.com,1
 Anthony Bradford,SEA,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Charles Cross,SEA,2026,10,,Did Not Participate In Practice,,,nfl.com,1
@@ -235,7 +246,7 @@ Rashid Shaheed,SEA,2026,10,,Full Participation in Practice,,,nfl.com,1
 Jaxon Smith-Njigba,SEA,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Leonard Williams,SEA,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Thomas Booker,LV,2026,10,,Limited Participation in Practice,,,nfl.com,1
-Foley Fatukasi,LV,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Foley Fatukasi,LV,2026,10,,Full Participation in Practice,,,nfl.com,1
 Ian Thomas,LV,2026,10,,Full Participation in Practice,,,nfl.com,1
 Trey Zuhn III,LV,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Mike Evans,SF,2026,10,,Did Not Participate In Practice,,,nfl.com,1
@@ -251,6 +262,7 @@ Upton Stout,SF,2026,10,,Limited Participation in Practice,,,nfl.com,1
 C.J. West,SF,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Trent Williams,SF,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Jonathan Bullard,DAL,2026,10,,Full Participation in Practice,,,nfl.com,1
+Alijah Clark,DAL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Donovan Ezeiruaku,DAL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Jake Ferguson,DAL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Tyler Goodson,DAL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
@@ -260,21 +272,26 @@ P.J. Locke,DAL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Von Miller,DAL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Jonathan Mingo,DAL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Devin Moore,DAL,2026,10,,Full Participation in Practice,,,nfl.com,1
-DeMarvion Overshown,DAL,2026,10,,Limited Participation in Practice,,,nfl.com,1
+DeMarvion Overshown,DAL,2026,10,,Full Participation in Practice,,,nfl.com,1
 George Pickens,DAL,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Joey Porter Jr.,DAL,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Luke Schoonmaker,DAL,2026,10,,Full Participation in Practice,,,nfl.com,1
 Brevyn Spann-Ford,DAL,2026,10,,Full Participation in Practice,,,nfl.com,1
+Juanyeh Thomas,DAL,2026,10,,Limited Participation in Practice,,,nfl.com,1
 KaVontae Turpin,DAL,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Brandin Echols,PIT,2026,10,,Full Participation in Practice,,,nfl.com,1
-DeShon Elliott,PIT,2026,10,,Limited Participation in Practice,,,nfl.com,1
+DeShon Elliott,PIT,2026,10,,Full Participation in Practice,,,nfl.com,1
 Derrick Harmon,PIT,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Cameron Heyward,PIT,2026,10,,Did Not Participate In Practice,,,nfl.com,1
 Ben Skowronek,PIT,2026,10,,Full Participation in Practice,,,nfl.com,1
 Doneiko Slaughter,PIT,2026,10,,Full Participation in Practice,,,nfl.com,1
-Darnell Washington,PIT,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-T.J. Watt,PIT,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Darnell Washington,PIT,2026,10,,Full Participation in Practice,,,nfl.com,1
+T.J. Watt,PIT,2026,10,,Limited Participation in Practice,,,nfl.com,1
 Jonathan Allen,CIN,2026,10,,Did Not Participate In Practice,,,nfl.com,1
+Jalen Davis,CIN,2026,10,,Full Participation in Practice,,,nfl.com,1
 Kyle Dugger,CIN,2026,10,,Did Not Participate In Practice,,,nfl.com,1
-Dylan Fairchild,CIN,2026,10,,Limited Participation in Practice,,,nfl.com,1
-DJ Turner II,CIN,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Dylan Fairchild,CIN,2026,10,,Full Participation in Practice,,,nfl.com,1
+B.J. Hill,CIN,2026,10,,Limited Participation in Practice,,,nfl.com,1
+Andrei Iosivas,CIN,2026,10,,Full Participation in Practice,,,nfl.com,1
+Brian Parker II,CIN,2026,10,,Full Participation in Practice,,,nfl.com,1
+DJ Turner II,CIN,2026,10,,Full Participation in Practice,,,nfl.com,1
