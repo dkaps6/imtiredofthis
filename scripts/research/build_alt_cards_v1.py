@@ -85,16 +85,26 @@ MARKET EVIDENCE (week 9 COMPLETE -- all 13 alt-covered games, 5115 rungs)
   constrains table-priced selection, which this builder does not do. Its
   profitability claim is withdrawn; its ranking and depth rules held.
 
-KNOWN STRUCTURAL LIMIT -- THIS BUILDER CANNOT SERVE A LOTTERY TIER
-  All 76 week-9 survivors priced between -225 and -1800, median -590. ZERO
-  plus-money legs. A three-leg card from median gated legs pays about +60.
-  Cushion >= CUSHION_MIN plus the main-line floor mathematically selects heavy
-  favorites; a plus-money rung sits above the projection by construction, which
-  is what G3 exists to reject. SAFE/MODERATE tiers can be gate-certified.
-  HIGH/LOTTERY cannot be certified by anything validated in this repository --
-  they come from the >+300 price band (-46.5% on 1018 week-9 rungs) and the
-  >1.6x depth band (-53.5%). Label them as uncertified speculation; do not
-  present them as a deeper version of a gated leg.
+STRUCTURAL LIMIT -- PARTLY AN ARTIFACT OF THE OLD RANKING RULE (CORRECTED)
+  This block previously read that the builder "cannot serve a lottery tier"
+  because all 76 week-9 survivors priced between -225 and -1800 with ZERO
+  plus-money legs, and concluded that cushion plus the main-line floor
+  "mathematically selects heavy favorites."
+
+  That was the RANKING rule, not the gates. Cushion-descending ordering keeps
+  the deepest rung on every ladder, and deepest is most expensive. Ranking by
+  leg_value instead (see leg_value) leaves every gate untouched and produces
+  materially cheaper cards from the same survivors -- on the week-10 TNF board,
+  +115 and +151 where cushion-ranking gave -506 and -466, needing 68-74% per
+  leg instead of 91-94%. The price distribution of SURVIVORS is a real
+  constraint; the price of the CARDS was mostly self-inflicted.
+
+  What stands unchanged: HIGH/LOTTERY still cannot be certified by anything
+  validated here. They come from the >+300 price band (-46.5% on 1018 week-9
+  rungs) and the >1.6x depth band (-53.5%), and FRAC_MAX/PRICE_MAX exclude both
+  by design. Label them as uncertified speculation; do not present them as a
+  deeper version of a gated leg. A five-tier ladder also needs 20 disjoint
+  players, which a single-game slate cannot supply.
 
 This script decides nothing. It reports what survives and what did not.
 """
@@ -143,6 +153,55 @@ PRICE_MIN, PRICE_MAX = -2500, 130
 EXCLUDED_MARKETS = ("receptions", "rush_rec_yards", "anytime_td")
 MAIN_LINE_FLOOR = {"rec_yards": 18.0, "rush_yards": 15.0,
                    "pass_yards": 30.0, "rush_rec_yards": 30.0}
+
+
+def _implied(american: float) -> float:
+    a = float(american)
+    return (-a) / ((-a) + 100.0) if a < 0 else 100.0 / (a + 100.0)
+
+
+def leg_value(row) -> float:
+    """Own-evidence edge over the offered price: own_rate - implied probability.
+
+    THIS IS THE RANKING KEY, AND CUSHION IS NOT.
+    ------------------------------------------------------------------
+    G3 cushion is a correct FILTER -- below CUSHION_MIN a leg is a bet against
+    our own projection and must go. But this builder also used cushion as the
+    ORDERING key, which selects, for every player, the DEEPEST rung on his
+    ladder. Deepest is also most expensive, so the ordering was
+    anti-correlated with value and the docstring's "structural limit" (all 76
+    week-9 survivors between -225 and -1800, zero plus-money legs, a three-leg
+    card paying about +60) was an artifact of the ranking rule rather than a
+    property of the gates.
+
+    Measured on the 2026 week-10 TNF board (run 43327080728, real model_proj,
+    all nine gates passed by every leg below), shrinking own_rate toward the
+    market price by the measured PRISM overdispersion slope (0.159):
+
+        cushion-ranked  2 legs   -506   needs 91.4%/leg   ROI  +3.0%
+        cushion-ranked  3 legs   -466   needs 93.7%/leg   ROI  +0.3%
+        value-ranked    2 legs   +115   needs 68.3%/leg   ROI +15.4%
+        value-ranked    3 legs   +151   needs 73.6%/leg   ROI +18.5%
+
+    Same gates, same board, same players. The cushion-ranked cards need per-leg
+    hit rates of 91-94% when the gates' own measured week-9 rate was 88.2%; the
+    value-ranked cards need 68-74%.
+
+    Ranking by the raw edge is deliberate even though week 9 showed own_rate
+    overstates by ~12 points: shrinkage toward market is a monotone transform of
+    (own_rate - implied), so it does not change the ORDER, only the magnitude.
+    The overstatement matters for sizing and for believing a quoted ROI. It does
+    not matter for choosing which rung on a ladder to take.
+    """
+    og = row.get("own_games")
+    oh = row.get("own_hits")
+    px = row.get("offered_american")
+    if not og or px is None:
+        return float("-inf")
+    try:
+        return ((oh or 0) / og) - _implied(px)
+    except Exception:
+        return float("-inf")
 
 
 def _fail(log, row, gate, detail):
@@ -210,10 +269,13 @@ def apply_gates(df: pd.DataFrame, book: str | None) -> tuple[pd.DataFrame, pd.Da
             _fail(log, row, "G8_quarantine", "manual quarantine"); continue
         row["cushion"] = cush
         row["own_rate"] = rate
+        row["leg_value"] = leg_value(row)
         keep.append(row)
     surv = pd.DataFrame(keep)
     if not surv.empty:
-        surv = surv.sort_values("cushion", ascending=False).drop_duplicates(["player", "market"])
+        # Cushion has already done its job as a gate. Order by value so the
+        # rung kept for each player is the one worth betting, not the deepest.
+        surv = surv.sort_values("leg_value", ascending=False).drop_duplicates(["player", "market"])
     return surv, pd.DataFrame(log)
 
 
@@ -221,7 +283,7 @@ def build_cards(surv: pd.DataFrame, sizes=(2, 3, 4, 5, 6)) -> pd.DataFrame:
     """Disjoint cards: no leg is reused across tiers."""
     if surv.empty:
         return pd.DataFrame()
-    pool = surv.sort_values("cushion", ascending=False).drop_duplicates("player").copy()
+    pool = surv.sort_values("leg_value", ascending=False).drop_duplicates("player").copy()
     names = ["SAFE", "MODERATE", "MEDIUM", "HIGH RISK", "LOTTERY"]
     out, used = [], set()
     for name, n in zip(names, sizes):
