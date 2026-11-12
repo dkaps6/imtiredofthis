@@ -155,7 +155,7 @@ GB,Bo Melton,LWR,bomelton,ourlads_depth,,,Full Participation in Practice
 GB,Christian Watson,LWR,christianwatson,ourlads_depth,,,
 GB,Coleman Owen,SWR,colemanowen,ourlads_depth,,,
 GB,Jordan Love,QB,jordanlove,ourlads_depth,,,
-GB,Josh Jacobs,RB,joshjacobs,ourlads_depth,,,Did Not Participate In Practice
+GB,Josh Jacobs,RB,joshjacobs,ourlads_depth,OUT,OUT,Did Not Participate In Practice
 GB,Josh Whyle,TE,joshwhyle,ourlads_depth,,,Did Not Participate In Practice
 GB,Mark Redman,TE,markredman,ourlads_depth,,,
 GB,Marshawn Lloyd,RB,marshawnlloyd,ourlads_depth,OUT,OUT,
@@ -169,7 +169,7 @@ HOU,Brevin Jordan,TE,brevinjordan,ourlads_depth,,,Did Not Participate In Practic
 HOU,CJ Stroud,QB,cjstroud,ourlads_depth,,,
 HOU,Dalton Schultz,TE,daltonschultz,ourlads_depth,,,
 HOU,Dare Ogunbowale,RB,dareogunbowale,ourlads_depth,,,
-HOU,David Montgomery,RB,davidmontgomery,ourlads_depth,OUT,OUT,Did Not Participate In Practice
+HOU,David Montgomery,RB,davidmontgomery,ourlads_depth,,,Did Not Participate In Practice
 HOU,Davis Mills,QB,davismills,ourlads_depth,,,
 HOU,Foster Moreau,TE,fostermoreau,ourlads_depth,,,
 HOU,Kayshon Boutte,LWR,kayshonboutte,ourlads_depth,,,
@@ -185,7 +185,7 @@ IND,Daniel Jones,QB,danieljones,ourlads_depth,,,
 IND,Deion Burks,SWR,deionburks,ourlads_depth,,,
 IND,DJ Giddens,RB,djgiddens,ourlads_depth,,,
 IND,Drew Ogletree,TE,drewogletree,ourlads_depth,,,
-IND,Jonathan Taylor,RB,jonathantaylor,ourlads_depth,,,Limited Participation in Practice
+IND,Jonathan Taylor,RB,jonathantaylor,ourlads_depth,,,Full Participation in Practice
 IND,Laquon Treadwell,LWR,laquontreadwell,ourlads_depth,,,
 IND,MO Alie-Cox,TE,moaliecox,ourlads_depth,,,Did Not Participate In Practice
 IND,Nick Westbrook-Ikhine,RWR,nickwestbrookikhine,ourlads_depth,,,
@@ -426,7 +426,7 @@ TB,Kameron Johnson,SWR,kameronjohnson,ourlads_depth,,,
 TB,Kenny Gainwell,RB,kennygainwell,ourlads_depth,,,
 TB,Payne Durham,TE,paynedurham,ourlads_depth,,,
 TB,Sean Tucker,RB,seantucker,ourlads_depth,,,
-TB,Ted Hurst,RWR,tedhurst,ourlads_depth,,,
+TB,Ted Hurst,LWR,tedhurst,ourlads_depth,,,
 TB,Tez Johnson,LWR,tezjohnson,ourlads_depth,,,
 TEN,Calvin Ridley,LWR,calvinridley,ourlads_depth,,,
 TEN,Cam Ward,QB,camward,ourlads_depth,,,

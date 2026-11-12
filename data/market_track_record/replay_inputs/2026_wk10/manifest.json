@@ -3,15 +3,15 @@
   "files": {
     "data/injuries.csv": {
       "archived_as": "injuries.csv.gz",
-      "bytes_gz": 3163,
-      "bytes_raw": 22933,
-      "sha256_raw": "071c65f18e2582bd68b28981065ac21988044b2954745eb64a46bffc0cab4038"
+      "bytes_gz": 3197,
+      "bytes_raw": 23164,
+      "sha256_raw": "0a61ca08d25e7b0443070e470e3f20df80f0bb7ea2127417c8d6fcbc0b291a53"
     },
     "data/injuries_source_status.json": {
       "archived_as": "injuries_source_status.json.gz",
-      "bytes_gz": 335,
+      "bytes_gz": 337,
       "bytes_raw": 583,
-      "sha256_raw": "42866d3eb257ecaba040e86c21e9673e0025a2b9340d0305d472a9b26514c65b"
+      "sha256_raw": "e938f87f2f438271cc77dd822d1a19366095da030a0e91b216628c6eeb22bb21"
     },
     "data/model_ensemble_diagnostics.csv": {
       "archived_as": "model_ensemble_diagnostics.csv.gz",
@@ -27,21 +27,21 @@
     },
     "data/model_ml_diagnostics.csv": {
       "archived_as": "model_ml_diagnostics.csv.gz",
-      "bytes_gz": 27214,
-      "bytes_raw": 113839,
-      "sha256_raw": "f4ec2c2504ad42ae1b444a67a6c59e9c49616992e90046cac870dc5f7d80bab8"
+      "bytes_gz": 33311,
+      "bytes_raw": 142975,
+      "sha256_raw": "4abd95582ae7b9f70d1528cf158b57c5bd5d9ae278e9174b3ed0a0180a5d1edd"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
-      "bytes_gz": 11412,
-      "bytes_raw": 165983,
-      "sha256_raw": "18f7884fc24e9ab4f678e05f9d3b36cf0019d69caf8100a881ff9f19dafab698"
+      "bytes_gz": 13644,
+      "bytes_raw": 204872,
+      "sha256_raw": "ba3e550f8392f6154a9d46fba63915c47110e4341566660f783463d101ce8911"
     },
     "data/player_form_consensus.csv": {
       "archived_as": "player_form_consensus.csv.gz",
-      "bytes_gz": 49130,
-      "bytes_raw": 193410,
-      "sha256_raw": "53e1174a64ca2efdf2ad5194993279f0c2a3be4af634bfd894056391496d3e68"
+      "bytes_gz": 60138,
+      "bytes_raw": 239563,
+      "sha256_raw": "c3314c82265c90d4806237c97d8909d6ddedc600ecae35e945fe8188b033454c"
     },
     "data/qb_promoted_team_context.csv": {
       "archived_as": "qb_promoted_team_context.csv.gz",
@@ -57,9 +57,9 @@
     },
     "data/weather_week.csv": {
       "archived_as": "weather_week.csv.gz",
-      "bytes_gz": 1188,
+      "bytes_gz": 1187,
       "bytes_raw": 3941,
-      "sha256_raw": "49fa040524011839cada5257244df10d9f321813f79a710cae2a16794059cc07"
+      "sha256_raw": "806b320be3388fbc61a891586d681f9c93c21aa1095b553f013048015e5855a9"
     }
   },
   "required_column_stripped": {},
@@ -67,8 +67,8 @@
     "data/metrics_ready.csv",
     "data/model_rule_simulation_inputs.csv"
   ],
-  "source_git_sha": "56cd408be0305ddb93cc693ff989e6c64252760c",
-  "source_run_id": "43273312751",
+  "source_git_sha": "a8152e12b9364d41766a30830e16feb09be996f6",
+  "source_run_id": "43320022375",
   "stem": "2026_wk10",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
