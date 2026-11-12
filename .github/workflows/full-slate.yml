@@ -452,7 +452,17 @@ jobs:
           EVENT_WINDOW_END: ${{ env.EVENT_WINDOW_END }}
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/run_live_odds_gate.py --season "${SEASON}" --date "${SLATE_DATE}"
+          # Capture the gate's own output. It raises BEFORE writing
+          # live_odds_status.json, so when it fails the reason exists only in this
+          # step's stdout -- and the GitHub logs API serves only a job log's tail,
+          # which is the diagnostic step far below. Run 43267020775 bought 453
+          # props, 253 game odds and 9112 alternate-line rows and then failed here
+          # with no reachable explanation. pipefail keeps the gate fail-closed
+          # through the pipe; without it tee's exit code would mask the failure.
+          mkdir -p data/_debug
+          set -o pipefail
+          python scripts/run_live_odds_gate.py --season "${SEASON}" --date "${SLATE_DATE}" \
+            2>&1 | tee data/_debug/live_odds_gate.log
           test -s data/live_odds_status.json
           python - <<'EOF'
           import json, os
@@ -982,6 +992,12 @@ jobs:
                    data/team_week_map.csv data/player_form.csv; do
             if [ -e "$f" ]; then echo "  PRESENT $(wc -l < "$f") $f"; else echo "  MISSING $f"; fi
           done
+          echo "--- live odds GATE OUTPUT (the raise happens before the status file)"
+          if [ -s data/_debug/live_odds_gate.log ]; then
+            tail -30 data/_debug/live_odds_gate.log
+          else
+            echo "  (absent: the gate step did not run)"
+          fi
           echo "--- live odds gate status (why an odds fetch failed) -- LAST so the"
           echo "    log tail, which is all the GitHub API serves, always contains it"
           if [ -s data/live_odds_status.json ]; then
