@@ -950,6 +950,14 @@ jobs:
         run: |
           export PYTHONPATH="${PWD}"
           echo "===================== FAILURE DIAGNOSTIC ====================="
+          echo "--- provider name parity (non-strict, so it reports instead of raising)"
+          if [ -s data/roles_current_production_eligible_v1.csv ]; then
+            python scripts/audit_provider_name_parity_v1.py --season "${SEASON}" \
+              --roles data/roles_current_production_eligible_v1.csv 2>&1 | tail -40 \
+              || echo "(parity audit exited non-zero)"
+          else
+            echo "  (no eligible roles artifact; parity cannot be evaluated)"
+          fi
           echo "--- PlayerForm re-run traceback (the step log tail is the only readable surface)"
           if [ ! -s data/player_form.csv ]; then
             export ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
