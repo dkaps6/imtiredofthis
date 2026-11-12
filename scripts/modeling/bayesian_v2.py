@@ -19,6 +19,7 @@ from typing import Iterable
 
 import numpy as np
 import pandas as pd
+from scripts.utils.player_identity_v3 import player_name_key
 
 from scripts._opponent_map import canon_team
 from scripts.utils.canonical_names import canonicalize_player_name_safe
@@ -232,9 +233,59 @@ def apply_bayesian_to_metrics(metrics: pd.DataFrame, baseline: pd.DataFrame | No
     out["team"] = out["team"].map(canon_team)
     source = out["player_clean_key"] if "player_clean_key" in out.columns else out["player"]
     out["_bayes_key"] = source.map(_key)
-    keep = [c for c in post.columns if c.startswith("bayes_")] + ["team", "player_clean_key"]
+    bayes_cols = [c for c in post.columns if c.startswith("bayes_")]
+    keep = bayes_cols + ["team", "player_clean_key"]
     joined = post[keep].rename(columns={"player_clean_key": "_bayes_key"})
     out = out.merge(joined, on=["team", "_bayes_key"], how="left", validate="many_to_one")
+
+    # SUFFIX CONVENTION FALLBACK.
+    #
+    # Two different keying conventions meet at this join and agree on every
+    # name without a suffix, which is why this went unnoticed:
+    #
+    #   _key("Brian Robinson Jr.")                      -> brianrobinsonjr
+    #   player_name_key("Brian Robinson Jr.", strip=True) -> brianrobinson
+    #   _key("Stefon Diggs") == player_name_key(...)    -> stefondiggs
+    #
+    # PlayerForm and Player Identity v3 key with the suffix stripped, so every
+    # suffixed player missed his Bayesian baseline and the full-universe
+    # pricing gate failed closed on exactly that set: Gardner Minshew II,
+    # Brian Robinson Jr., Erick All Jr., Travis Etienne Jr., Thomas Fidone II,
+    # Michael Pittman Jr. (2026 week 10, run 43324642471). Neither _key nor
+    # player_name_key can repair it after the fact, because a concatenated key
+    # has no suffix token left to strip.
+    #
+    # Retry ONLY the rows that found nothing, on the stripped form of both
+    # sides, so every join that already succeeded is left exactly as it was.
+    if bayes_cols:
+        unmatched = out[bayes_cols].isna().all(axis=1)
+        # The stripped key must come from the DISPLAY NAME on both sides. A
+        # concatenated key has no suffix token left to strip, so re-keying
+        # "brianrobinsonjr" is a no-op and the fallback would miss exactly the
+        # rows it exists to catch.
+        has_names = "player" in post.columns and "player" in out.columns
+        if bool(unmatched.any()) and has_names:
+            alt = post[keep + ["player"]].copy()
+            alt["_bayes_key"] = alt["player"].map(
+                lambda v: player_name_key(v, strip_suffix=True))
+            alt = alt.drop(columns=["player_clean_key", "player"])
+            # A stripped key can collide where a full key did not (a father/son
+            # or a same-named teammate). Dropping the ambiguous groups keeps the
+            # fallback from inventing a baseline for the wrong player -- such a
+            # row simply stays unmatched and the caller's gate still fires.
+            alt = alt.drop_duplicates(["team", "_bayes_key"], keep=False)
+            if not alt.empty:
+                probe = out.loc[unmatched, ["team", "player"]].copy()
+                probe["_alt_key"] = probe["player"].map(
+                    lambda v: player_name_key(v, strip_suffix=True))
+                probe = probe.drop(columns=["player"])
+                filled = probe.merge(
+                    alt.rename(columns={"_bayes_key": "_alt_key"}),
+                    on=["team", "_alt_key"], how="left", validate="many_to_one")
+                filled.index = probe.index
+                for c in bayes_cols:
+                    out.loc[unmatched, c] = filled[c].to_numpy()
+
     out["bayes_applied"] = pd.to_numeric(out.get("bayes_available", 0), errors="coerce").fillna(0).astype(int)
     out.drop(columns=["_bayes_key"], inplace=True)
     return out
