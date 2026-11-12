@@ -1023,10 +1023,14 @@ jobs:
             if [ -s data/live_odds_status.json ]; then tail -c 2000 data/live_odds_status.json
             else echo "  (status absent: the gate raised before writing it)"; fi
           fi
-          echo "--- teed step logs, newest last -- LAST so the log tail always has them"
-          for f in data/_debug/*.log; do
+          echo "--- teed step logs, NEWEST LAST so the failing step is inside the tail"
+          # ls -tr, not a glob: a glob is alphabetical, which put the long
+          # playerform_step.log after materialize_live_props.log and pushed the
+          # actually-failing step's output out of the window the API serves.
+          # The newest log is always the step that just failed.
+          for f in $(ls -tr data/_debug/*.log 2>/dev/null); do
             [ -s "$f" ] || continue
             echo "  ===== ${f} ====="
-            tail -22 "$f"
+            tail -18 "$f"
           done
           echo "=============================================================="
