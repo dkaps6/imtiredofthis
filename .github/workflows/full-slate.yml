@@ -950,6 +950,15 @@ jobs:
         run: |
           export PYTHONPATH="${PWD}"
           echo "===================== FAILURE DIAGNOSTIC ====================="
+          echo "--- PlayerForm re-run traceback (the step log tail is the only readable surface)"
+          if [ ! -s data/player_form.csv ]; then
+            export ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+            python scripts/run_player_form_current_roles_v1.py \
+              --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}" 2>&1 \
+              | tail -45 || echo "(playerform re-run exited non-zero: traceback above)"
+          else
+            echo "  (player_form.csv present; PlayerForm was not the failure)"
+          fi
           echo "--- python scripts/utils/audit_repo.py --strict"
           python scripts/utils/audit_repo.py --strict 2>&1 | tail -40 || echo "(audit_repo exited non-zero)"
           echo "--- python scripts/audit_2026_production_readiness.py --strict"
