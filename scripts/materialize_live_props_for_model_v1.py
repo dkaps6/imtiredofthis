@@ -30,6 +30,8 @@ STATUS = DATA / "live_odds_status.json"
 PROPS = OUTPUTS / "props_raw.csv"
 COMPACT = OUTPUTS / "props_raw_compact.csv"
 QUARANTINE = DATA / "live_odds_placeholder_rows.csv"
+# Above this share of model-facing rows, an "all ruled out" read is itself the bug.
+RULED_UNAVAILABLE_MAX_SHARE = 0.10
 
 SUPPORTED_MARKETS = {
     "player_pass_yds",
@@ -49,6 +51,42 @@ STRICT_PLAYER_MARKETS = {
 }
 
 PLAYER_FORM = DATA / "player_form.csv"
+
+
+def _ruled_unavailable_keys() -> set[tuple[str, str]]:
+    """(team, base name key) the football sources affirmatively rule unavailable.
+
+    An absence from PlayerForm has two very different causes, and the strict
+    gate below must not treat them alike:
+
+      * we LOST the player -- an identity collision, a name the overrides do not
+        carry, a signing the roster scrape missed. A real defect; fail closed.
+      * we RULED HIM OUT -- the official inactive section, the club's own
+        injury-report designation, or weekly roster non-membership says he is
+        not playing. Not a defect, and his offers simply do not belong on a
+        board we would bet.
+
+    Only the second is exempt, and only on AFFIRMATIVE evidence: a row in
+    data/current_player_availability.csv carrying definitive_unavailable == 1.
+    An absent, empty or schema-less artifact yields the empty set, so the gate
+    keeps its full strictness rather than softening when the evidence is
+    missing.
+
+    This reads a football artifact. The sportsbook offer is what gets dropped,
+    never what decides -- a book pricing a player we believe is out does not
+    make him available (AGENTS.md section 3).
+    """
+    path = DATA / "current_player_availability.csv"
+    if not path.exists() or not path.stat().st_size:
+        return set()
+    avail = pd.read_csv(path, low_memory=False)
+    if avail.empty or not {"team", "player", "definitive_unavailable"}.issubset(avail.columns):
+        return set()
+    flag = pd.to_numeric(avail["definitive_unavailable"], errors="coerce").fillna(0).eq(1)
+    rows = avail.loc[flag]
+    team = rows["team"].map(canon_team).astype("string").fillna("")
+    name = rows["player"].map(lambda v: player_name_key(v, strip_suffix=True))
+    return {(str(t), str(n)) for t, n in zip(team, name) if str(t) and str(n)}
 
 
 def _roster_keys() -> set[tuple[str, str]] | None:
@@ -283,6 +321,7 @@ def materialize() -> dict:
     # counted in the status artifact, exactly like the other identity defects
     # above. That keeps the gate strict everywhere the board is actually
     # priced, and keeps one unpriced row from destroying a paid slate.
+    ruled_out_removed: dict[str, int] = {}
     roster_keys = _roster_keys()
     if roster_keys:
         strict_mask = _text(model["market"]).isin(STRICT_PLAYER_MARKETS)
@@ -291,7 +330,36 @@ def materialize() -> dict:
             for t, pl in zip(model["team_abbr"], model["player"])
         ]
         unrostered = pd.Series([k not in roster_keys for k in row_keys], index=model.index)
-        strict_unrostered = unrostered & strict_mask
+        # Separate "ruled out" from "lost" before the strict gate fires.
+        ruled_out_keys = _ruled_unavailable_keys()
+        ruled_out = pd.Series([k in ruled_out_keys for k in row_keys], index=model.index)
+        ruled_out_unrostered = unrostered & ruled_out
+        if ruled_out_unrostered.any():
+            # A large exempted share means the availability builder is removing
+            # players wholesale rather than ruling out a handful, which is a
+            # defect in its own right and must not drain the board quietly.
+            share = float(ruled_out_unrostered.sum()) / max(1, len(model))
+            if share > RULED_UNAVAILABLE_MAX_SHARE:
+                raise RuntimeError(
+                    "too much of the board is exempted as definitively unavailable; "
+                    "the availability authority is almost certainly over-ruling players "
+                    f"rather than ruling out a few; share={share:.3f} "
+                    f"rows={int(ruled_out_unrostered.sum())} of {len(model)}"
+                )
+            _append_quarantine(
+                quarantine_parts,
+                model.loc[ruled_out_unrostered],
+                "RULED_UNAVAILABLE_BY_FOOTBALL_SOURCES",
+            )
+            # The strict-market row-loss guard below rejects ANY unexplained
+            # loss, which is why no priced row has ever been removable here.
+            # These removals are explained -- quarantined with a reason and
+            # counted in the status artifact -- so they are accounted for by
+            # market rather than exempted from the check.
+            ruled_out_removed = (
+                _text(model.loc[ruled_out_unrostered, "market"]).value_counts().to_dict()
+            )
+        strict_unrostered = unrostered & strict_mask & ~ruled_out
         if strict_unrostered.any():
             sample = model.loc[
                 strict_unrostered,
@@ -305,7 +373,7 @@ def materialize() -> dict:
             )
         _append_quarantine(
             quarantine_parts,
-            model.loc[unrostered & ~strict_mask],
+            model.loc[unrostered & ~strict_mask & ~ruled_out],
             "UNROSTERED_NONCORE_PLAYER",
         )
         model = model.loc[~unrostered].copy()
@@ -332,9 +400,20 @@ def materialize() -> dict:
     for m in sorted(STRICT_PLAYER_MARKETS):
         before = int((_text(actual["market"]) == m).sum())
         after = int((_text(model["market"]) == m).sum())
-        if after != before:
+        accounted = int(ruled_out_removed.get(m, 0))
+        if after + accounted != before:
             raise RuntimeError(
-                f"strict market row loss during model materialization market={m} before={before} after={after}"
+                "strict market row loss during model materialization "
+                f"market={m} before={before} after={after} "
+                f"ruled_unavailable={accounted}"
+            )
+        if accounted and after == 0:
+            # Every offer in a priced market belonged to a player the football
+            # sources rule out. That is not a board to price quietly.
+            raise RuntimeError(
+                f"strict market {m} is empty after removing {accounted} ruled-unavailable "
+                "rows; the market had no playable participant, which needs a look rather "
+                "than an empty board"
             )
 
     quarantine = (
