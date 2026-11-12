@@ -971,8 +971,6 @@ jobs:
           python scripts/utils/audit_repo.py --strict 2>&1 | tail -40 || echo "(audit_repo exited non-zero)"
           echo "--- python scripts/audit_2026_production_readiness.py --strict"
           python scripts/audit_2026_production_readiness.py --strict 2>&1 | tail -40 || echo "(readiness audit exited non-zero)"
-          echo "--- live odds gate status (why an odds fetch failed)"
-          if [ -s data/live_odds_status.json ]; then cat data/live_odds_status.json; else echo "  (absent: the gate raised before writing it)"; fi
           echo "--- alternate-line probe status"
           if [ -s data/alt_line_probe_status.json ]; then cat data/alt_line_probe_status.json; else echo "  (absent: the alt probe never ran)"; fi
           echo "--- odds artifact row counts"
@@ -984,4 +982,11 @@ jobs:
                    data/team_week_map.csv data/player_form.csv; do
             if [ -e "$f" ]; then echo "  PRESENT $(wc -l < "$f") $f"; else echo "  MISSING $f"; fi
           done
+          echo "--- live odds gate status (why an odds fetch failed) -- LAST so the"
+          echo "    log tail, which is all the GitHub API serves, always contains it"
+          if [ -s data/live_odds_status.json ]; then
+            tail -c 2500 data/live_odds_status.json
+          else
+            echo "  (absent: the gate raised before writing it)"
+          fi
           echo "=============================================================="
