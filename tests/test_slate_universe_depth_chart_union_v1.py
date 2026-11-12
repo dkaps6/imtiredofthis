@@ -202,3 +202,55 @@ def test_a_position_the_depth_chart_does_not_cover_keeps_its_roles(monkeypatch, 
         ("GB", "Tucker Kraft", "tuckerkraft", "TE", "TE1"),
     ]), 2026)
     assert dict(zip(out.player, out.role))["Tucker Kraft"] == "TE1"
+
+
+# ----------------------- the authoritative availability gate (regression)
+
+def test_a_definitively_unavailable_player_is_never_re_added(monkeypatch, tmp_path):
+    """Run 43317130244 leaked 15 identities into PlayerForm, including GB RB1
+    Josh Jacobs, because the guard read hard OUT designations from the injury
+    report while validate_playerform_runtime_strict_prior enforces
+    current_player_availability.definitive_unavailable -- a broader set that
+    also covers official inactives. Anything the union re-admits from that set
+    is a guaranteed step-17 failure."""
+    av = tmp_path / "current_player_availability.csv"
+    pd.DataFrame([
+        {"team": "GB", "player_clean_key": "joshjacobs", "definitive_unavailable": 1},
+        {"team": "GB", "player_clean_key": "marshawnlloyd", "definitive_unavailable": 0},
+    ]).to_csv(av, index=False)
+    monkeypatch.setattr(su, "AVAILABILITY_CSV", av)
+    monkeypatch.setattr(su, "_season_usage_keys", lambda season: set())
+    monkeypatch.setattr(su, "_unavailable_designation_keys", lambda: set())
+    _patch_depth(monkeypatch, [
+        ("GB", "Josh Jacobs", "joshjacobs", "RB", 1),
+        ("GB", "MarShawn Lloyd", "marshawnlloyd", "RB", 2),
+    ])
+    out, stats = su.augment_roles_with_depth_chart(
+        _roles([("GB", "Pierre Strong", "pierrestrong", "RB", "RB1")]), 2026)
+    assert stats["dropped_unavailable"] == 1
+    assert "Josh Jacobs" not in set(out.player)
+    assert "MarShawn Lloyd" in set(out.player)
+
+
+def test_availability_is_matched_per_team_not_globally(monkeypatch, tmp_path):
+    """A player ruled out for one team must not silence his namesake elsewhere."""
+    av = tmp_path / "av.csv"
+    pd.DataFrame([{"team": "GB", "player_clean_key": "joshjacobs",
+                   "definitive_unavailable": 1}]).to_csv(av, index=False)
+    monkeypatch.setattr(su, "AVAILABILITY_CSV", av)
+    monkeypatch.setattr(su, "_season_usage_keys", lambda season: set())
+    monkeypatch.setattr(su, "_unavailable_designation_keys", lambda: set())
+    _patch_depth(monkeypatch, [("LV", "Josh Jacobs", "joshjacobs", "RB", 1)])
+    out, _ = su.augment_roles_with_depth_chart(
+        _roles([("LV", "Other", "other", "RB", "RB1")]), 2026)
+    assert "Josh Jacobs" in set(out.player)
+
+
+def test_a_missing_availability_artifact_does_not_block_the_union(monkeypatch, tmp_path):
+    monkeypatch.setattr(su, "AVAILABILITY_CSV", tmp_path / "absent.csv")
+    monkeypatch.setattr(su, "_season_usage_keys", lambda season: set())
+    monkeypatch.setattr(su, "_unavailable_designation_keys", lambda: set())
+    _patch_depth(monkeypatch, [("NYG", "Cam Skattebo", "camskattebo", "RB", 1)])
+    out, _ = su.augment_roles_with_depth_chart(
+        _roles([("NYG", "Devin Singletary", "devinsingletary", "RB", "RB1")]), 2026)
+    assert "Cam Skattebo" in set(out.player)

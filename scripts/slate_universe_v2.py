@@ -79,6 +79,43 @@ def _depth_chart_universe(season: int) -> pd.DataFrame:
     return x[["team", "player", "player_clean_key", "position", "rank"]].reset_index(drop=True)
 
 
+AVAILABILITY_CSV = Path("data") / "current_player_availability.csv"
+
+
+def _definitively_unavailable() -> set[tuple[str, str]]:
+    """(team, player_clean_key) of everyone the availability certification has
+    ruled out.
+
+    THIS is the authority, not a hand-rolled read of the injury report.
+    validate_playerform_runtime_strict_prior enforces exactly this set against
+    PlayerForm's universe, so anything the union re-admits from here is a
+    guaranteed step-17 failure -- which is precisely how run 43317130244 died,
+    leaking 15 identities including GB RB1 Josh Jacobs, who availability had
+    removed and the depth chart put straight back.
+
+    An earlier attempt at this guard read data/injuries.csv for hard OUT
+    designations. That was too narrow: definitive_unavailable also covers
+    official inactives and other certified non-participation that never appears
+    as an OUT status, so it let most of the leak through.
+
+    Empty when the artifact is absent, which is the pre-availability state in
+    scripts that build no slate; the union then adds nothing it could not have
+    added before.
+    """
+    try:
+        if not AVAILABILITY_CSV.exists() or AVAILABILITY_CSV.stat().st_size == 0:
+            return set()
+        av = pd.read_csv(AVAILABILITY_CSV, low_memory=False)
+    except Exception:
+        return set()
+    need = {"team", "player_clean_key", "definitive_unavailable"}
+    if av.empty or not need.issubset(av.columns):
+        return set()
+    flag = pd.to_numeric(av["definitive_unavailable"], errors="coerce").fillna(0).eq(1)
+    return {(str(t), str(k)) for t, k in zip(av.loc[flag, "team"].map(canon_team),
+                                             av.loc[flag, "player_clean_key"])}
+
+
 UNAVAILABLE_DESIGNATIONS = {"out", "doubtful", "injured reserve", "ir", "pup",
                             "did not play"}
 
@@ -243,11 +280,21 @@ def augment_roles_with_depth_chart(roles: pd.DataFrame, season: int) -> tuple[pd
     # midweek practice as unavailability would drop genuine WR1s -- week 10 had
     # nine such, including Puka Nacua and Sam Darnold.
     if not add.empty:
-        unavailable = _unavailable_designation_keys()
-        if unavailable:
-            before_av = len(add)
-            add = add.loc[~add["base_key"].isin(unavailable)]
-            stats["dropped_unavailable"] = int(before_av - len(add))
+        before_av = len(add)
+        # The certified availability artifact is the authority the downstream
+        # validator enforces, so it is the one the union must respect.
+        certified_out = _definitively_unavailable()
+        if certified_out:
+            add = add.loc[[
+                (str(t), str(k)) not in certified_out
+                for t, k in zip(add["team"], add["player_clean_key"])
+            ]]
+        # Hard injury designations as a second line, for the case where the
+        # availability artifact is not on disk yet.
+        designated_out = _unavailable_designation_keys()
+        if designated_out:
+            add = add.loc[~add["base_key"].isin(designated_out)]
+        stats["dropped_unavailable"] = int(before_av - len(add))
 
     if not add.empty:
         new = pd.DataFrame({
