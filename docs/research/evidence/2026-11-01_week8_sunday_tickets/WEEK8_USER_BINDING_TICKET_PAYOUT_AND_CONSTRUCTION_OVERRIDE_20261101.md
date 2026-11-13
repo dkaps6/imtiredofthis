@@ -14,3 +14,20 @@ Restore the user's proven style from Oct19 2026 successful MNF ticket constructi
 - No player on more than two regular tickets absent an explicit exception; do not duplicate identical fragile scenarios across all five. Injury/weather and actual quote validation at lock; no one promises certainty or placed bets.
 
 **STATUS**: This documents required specifications, not successful or authorized ticket completion. Continue the hourly task until all six ticket cards and truthful price/availability gates are delivered; stop the task after that.
+
+---
+
+## ADDENDUM 2026-11-13 -- SAFE floor revised by the user
+
+Asked whether the +250 SAFE floor was still binding (week 9's SAFE paid +178),
+the user answered: **"+250 can be reevaluated. As long as it's over +150."**
+
+**SAFE: actual combined odds strictly over +150** (decimal above 2.50). The +250
+figure above is superseded. Every other specification in this document stands.
+
+Not answered in that exchange, so recorded as a working assumption only: HIGH and
+LOTTERY are kept as explicitly labelled uncertified speculation (V27 section 4's
+open decision), per the user's remarks on 2026-11-12 that those tiers are not
+supposed to be edge plays and "we gotta be able to take some risk."
+
+Enforced mechanically by `scripts/research/validate_ticket_card_v1.py`.
