@@ -160,3 +160,55 @@ from -25.1 to about -14 once his games are put on a per-attempt basis. The
 compression finding stands for Nabers and Likely at reduced size; it was
 overstated by comparing a current projection against opportunity-unadjusted
 season aggregates.
+
+---
+
+## ADDENDUM 2026-11-13 00:15Z -- condition receiver history on tonight's quarterback
+
+The operator's objection: J.J. McCarthy is the Giants' quarterback, the depth
+chart, practice report and model all know it, so why was receiver history still
+being read from Winston games?
+
+The system did have it right. Depth chart: McCarthy QB1, Winston QB2, Dart QB3.
+Practice report: McCarthy full participation, no designation. Model:
+`qb_pass_att_share = 1.0`, 29.8 projected attempts, 213.9 yards. The defect was
+in the own-history component of this estimator, which split by GAME when
+play-by-play can split by PASSER. Three of McCarthy's appearances were shared or
+relief games, so game-level history mixed two quarterbacks.
+
+Every McCarthy attempt this season (65 attempts, weeks 6, 7, 9), against
+Winston's 167:
+
+| receiver | share of McCarthy targets | share of Winston targets | exp. targets tonight | exp. yards | book line | model |
+|---|---|---|---|---|---|---|
+| Malik Nabers | 21/65 = **32.3%** | 29.3% | 9.6 | ~79 | 68.5 | 55.9 |
+| Malachi Fields | 13/65 = **20.0%** | 10.2% | 6.0 | ~49 | 27.5 | 33.1 |
+| Isaiah Likely | 12/65 = **18.5%** | 29.3% | 5.5 | ~35 | 46.5 | 43.7 |
+| Darnell Mooney | 6/65 = **9.2%** | 10.8% | 2.8 | ~18 | 13.5 | 20.1 |
+
+Expected yards = McCarthy target share x model-projected attempts x the
+player's season yards per target. Shares carry a binomial standard error of
+about five points on 65 attempts; these are estimates, not measurements.
+
+Consequences:
+
+* **Likely** was Winston's co-primary target (29.3%) and is McCarthy's third
+  (18.5%, exactly 4 targets in each of McCarthy's three appearances). ~35
+  expected yards against a 46.5 line: no over, and the under is not far enough
+  through the line to bet on 12 targets of evidence.
+* **Fields** doubled his share under McCarthy. That is the football reason his
+  floor leg holds, and it is a better reason than "8 for 8".
+* **Nabers** draws a third of McCarthy's throws. The model's 55.9 is low against
+  current-quarterback usage; the earlier per-attempt walk-back used Winston-era
+  volume and over-corrected.
+* **Mooney** has 6 targets on 65 McCarthy attempts. Fair-priced at best.
+
+The same split for Washington: Stefon Diggs with Jayden Daniels at quarterback
+is 55, 47, 44, 38, 51 -- lowest 38. His two lowest games of the season (33, 35)
+came with Mariota and Kaliakmanis starting. With tonight's quarterback he has
+not been under 38.
+
+**Rule going forward:** own history enters this estimator per target on the
+CURRENT quarterback's attempts, from play-by-play, not per game. This is the
+AGENTS.md current-role/state principle ("coaching/QB context") and the anomaly
+gate's quarterback-change trigger, applied where the data supports it.
