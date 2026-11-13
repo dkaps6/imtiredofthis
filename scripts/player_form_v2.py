@@ -17,6 +17,7 @@ import argparse
 from pathlib import Path
 from typing import Iterable
 
+import os
 import numpy as np
 import pandas as pd
 
@@ -348,7 +349,7 @@ def _blend(prior: pd.DataFrame, current: pd.DataFrame, universe: pd.DataFrame) -
         raise RuntimeError("PlayerForm universe must be resolved to player_identity_key before blending")
 
     p = (
-        prior[[join_key, "games", *metric_cols]].copy()
+        prior[[join_key, "games", *metric_cols, *(["historical_team"] if "historical_team" in prior.columns else [])]].copy()
         if not prior.empty
         else pd.DataFrame(columns=[join_key, "games", *metric_cols])
     )
@@ -357,7 +358,7 @@ def _blend(prior: pd.DataFrame, current: pd.DataFrame, universe: pd.DataFrame) -
         if not current.empty
         else pd.DataFrame(columns=[join_key, "games", *metric_cols])
     )
-    p = p.rename(columns={"games": "prior_games", **{m: f"{m}_prior" for m in metric_cols}})
+    p = p.rename(columns={"games": "prior_games", "historical_team": "prior_team", **{m: f"{m}_prior" for m in metric_cols}})
     c = c.rename(columns={"games": "current_games", **{m: f"{m}_current" for m in metric_cols}})
     out = universe.merge(p, on=join_key, how="left", validate="many_to_one").merge(
         c, on=join_key, how="left", validate="many_to_one"
@@ -366,7 +367,37 @@ def _blend(prior: pd.DataFrame, current: pd.DataFrame, universe: pd.DataFrame) -
     out["current_games"] = pd.to_numeric(out.get("current_games"), errors="coerce").fillna(0)
     # Four games of prior-season equivalent pseudo-sample gives meaningful Week 1
     # priors while allowing current evidence to take over quickly.
-    w_cur = out["current_games"] / (out["current_games"] + 4.0)
+    prior_k = pd.Series(4.0, index=out.index)
+    team_changed = pd.Series(False, index=out.index)
+    if "prior_team" in out.columns:
+        pt = out["prior_team"].astype("string").fillna("").map(lambda v: canon_team(v) if v else "")
+        ct = out["team"].astype("string").fillna("")
+        team_changed = (pt != "") & (ct != "") & (pt != ct)
+    # CANDIDATE, OFF BY DEFAULT: PLAYERFORM_TEAM_CHANGE_PRIOR_K.
+    #
+    # The fixed 4-game pseudo-sample is right for a player who stayed put and
+    # wrong for one who moved: last season's usage was earned in a different
+    # offense, with different teammates, quarterback and scheme, and the
+    # architecture doc says history must not be "a reason to ignore
+    # current-season/live role evidence". Walk-forward test on 2024-2025
+    # (4,072 WR/TE/RB player-games, 21.2% of them after a team change),
+    # error predicting that week's target share in points:
+    #
+    #                    k=0.5   k=1    k=2    k=4 (prod)   k=8   prior only
+    #   team-changers    6.172  6.177  6.212     6.301    6.472     7.458
+    #   same team        6.031  5.999  5.977     5.978    6.028     6.528
+    #   changers, prior >=8 pts from current:
+    #                    5.608  5.574  5.628     5.884    6.418    10.141
+    #
+    # Movers improve at k~1; stayers are best at k=2-4, so only movers change.
+    # This is a target-share test, not an end-to-end projection test, which is
+    # why it ships behind a flag until the second is run.
+    _flag = os.getenv("PLAYERFORM_TEAM_CHANGE_PRIOR_K", "").strip()
+    if _flag:
+        prior_k = prior_k.mask(team_changed, float(_flag))
+    out["prior_team_changed"] = team_changed.astype(int)
+    out["prior_k_applied"] = prior_k
+    w_cur = out["current_games"] / (out["current_games"] + prior_k)
     for m in metric_cols:
         pv = pd.to_numeric(out.get(f"{m}_prior"), errors="coerce")
         cv = pd.to_numeric(out.get(f"{m}_current"), errors="coerce")

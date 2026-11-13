@@ -78,3 +78,40 @@ findings justify the migration being the next research item, not an edit.
   component or from the player's current-season per-game mean -> flag it.
 * **No model UNDER on a top-usage pass catcher** without a stated football
   reason; the backtest shows no information in that signal.
+
+---
+
+## ADDENDUM -- in-season evidence must dominate after a team change (tested)
+
+`player_form_v2._blend` weights this season's usage by `games / (games + 4)` for
+every player. AGENTS.md and the architecture doc say history must not be "a
+reason to ignore current-season/live role evidence" and must lose weight on a
+material role change; the code had no team-change handling.
+
+Walk-forward on 2024-2025 (WR/TE/RB, 4,072 player-games, 21.2% after a team
+change; predicting that week's target share, error in points):
+
+| | k=0.5 | k=1 | k=2 | k=4 (production) | k=8 | prior only |
+|---|---|---|---|---|---|---|
+| team-changers (863) | 6.172 | 6.177 | 6.212 | 6.301 | 6.472 | 7.458 |
+| same team (3,209) | 6.031 | 5.999 | 5.977 | **5.978** | 6.028 | 6.528 |
+| changers, prior >=8 pts from current (118) | 5.608 | **5.574** | 5.628 | 5.884 | 6.418 | 10.141 |
+
+Movers do best at k~1; stayers are best at k=2-4. Production's rule is right for
+players who stayed and wrong for players who moved.
+
+Week-10 slate: 118 of 481 players changed teams since 2025; 7 pass catchers move
+by 1.5 points of target share or more at k=1 -- both directions: Likely +2.9
+(22.1% to 25.1%), Kolar +2.4, Moore +1.5; Jennings -3.4, Samuel -2.8, Harrison
+Jr. -2.0, Robinson -1.9 (their 2025 usage was propping them up).
+
+**Size, stated honestly:** for Likely this is about +0.9 targets and a few yards.
+It plausibly removes the under at 46.5; it does not by itself reach his ML
+component (59.5) or season mean (56.0). The rest of that gap is the simulation's
+volume assumption (29.8 projected attempts) and the 66% MC weight, which are
+separate items.
+
+**Status:** implemented behind `PLAYERFORM_TEAM_CHANGE_PRIOR_K` (unset = k=4,
+byte-identical; tested). Not promoted: this is a target-share test, and the
+promotion contract needs an end-to-end rec_yards/receptions projection test.
+Adds columns `prior_team_changed`, `prior_k_applied`; drops none.
