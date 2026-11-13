@@ -212,3 +212,52 @@ not been under 38.
 CURRENT quarterback's attempts, from play-by-play, not per game. This is the
 AGENTS.md current-role/state principle ("coaching/QB context") and the anomaly
 gate's quarterback-change trigger, applied where the data supports it.
+
+---
+
+## ADDENDUM 2026-11-13 00:20Z -- all markets on one board; receptions are not a banned market
+
+The operator's correction: receptions were never to be excluded. The rule is
+"no ticket made only of reception alternates", a ticket-construction cap.
+`build_alt_cards_v1.EXCLUDED_MARKETS` turned one blind week-9 number (-30.7%)
+into a market ban, and every card built tonight inherited it silently.
+**Follow-up owed:** remove `receptions` from that tuple, add a per-ticket cap,
+and update `test_value_ranking_does_not_admit_an_excluded_market`.
+
+`scripts/research/blend_all_markets_board_v1.py` now prices every market the
+book offers on one board with one estimator -- rec yards, receptions, rush
+yards, rush+rec, pass yards; alternates and main lines; overs AND unders (the
+model's strongest positions were main-line unders that no earlier card showed).
+Output: `data/research/tnf_2026_wk10_all_markets_board.csv` (607 legs).
+
+The opportunity component for pass catchers is a simulation conditioned on
+tonight's quarterback: targets ~ Binomial(projected attempts, share of that
+QB's targets in games the receiver played), receptions ~ Binomial(targets,
+catch rate), yards = sum of the player's own per-catch yards, with per-ATTEMPT
+pass-defense factors (YPA and completion rate allowed) so volume is not counted
+twice. Two bugs were caught before use and are worth remembering: the share
+denominator first included the QB's attempts in games the receiver missed, and
+efficiency was pooled across backup-quarterback games.
+
+Of 38 legs positive under every weighting, 12 are receptions.
+
+What the single board changed:
+
+* **Malachi Fields is the clearest role-versus-price gap.** 20% of McCarthy's
+  targets against 10% of Winston's; the book still lines him at 25.5-27.5 yards
+  and 2.5 receptions. Yards and receptions overs are positive up his ladder.
+  Evidence base is 13 targets.
+* **Isaiah Likely's play is the under**, reversing "nothing clears" from the
+  mixed-quarterback read: 18.5% of McCarthy's targets projects ~40 yards against
+  46.5. Modest (+5% to +10%); his per-target efficiency with McCarthy was high.
+* **Stefon Diggs o24.5 is no longer an anchor**: target-share opportunity
+  against NYG's pass defense projects ~32 yards and 56% to clear, while his
+  game log with Daniels is five for five at 38+. The sources disagree, so it is
+  not a clean leg at -270.
+* **Jayden Daniels rushing under 38.5 is a lean, not an anchor.** Play-by-play
+  shows his rushing is scrambles, not designed runs (scrambles by game: 3, 6, 7,
+  then 3, 2, 3). The last three games say under; the one meeting with this
+  defense was 7 scrambles for 103. Unresolved, so it is kept out of the anchor
+  slots per the anomaly gate.
+* Every earlier ticket mixed FanDuel and DraftKings prices in one parlay, which
+  cannot be placed. Tickets are now priced at a single book.
