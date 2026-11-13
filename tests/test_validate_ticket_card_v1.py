@@ -73,3 +73,21 @@ def test_tonights_card_would_have_been_rejected():
             (("SAFE", "SAFE", -260), ("MOD", "MODERATE", -260), ("MED", "MEDIUM", 134), ("HIGH", "HIGH", 320), ("LOT", "LOTTERY", 700))]
     e = errs(rows)
     assert any("appears on 5" in m for m in e) and any("250x" in m for m in e)
+
+
+def test_a_leg_without_an_edge_is_refused_on_every_tier():
+    # -300 has a breakeven of 0.75; a stated 0.70 is a bet against the price
+    for tier in ("SAFE", "MODERATE", "HIGH", "LOTTERY"):
+        rows = [leg("A", tier, "P1", -300, model_prob=0.70)]
+        assert any("does not exceed breakeven" in e for e in errs(rows)), tier
+
+def test_a_leg_with_an_edge_passes_the_edge_check():
+    rows = [leg("A", "HIGH", "P1", 200, model_prob=0.40)]      # breakeven 0.333
+    assert not [e for e in errs(rows) if "breakeven" in e]
+
+def test_missing_model_prob_warns_only_on_high_and_lottery():
+    base = dict(model_prob=None)
+    hi = [leg("A", "HIGH", "P1", 200, **base)]
+    mod = [leg("B", "MODERATE", "P1", 200, **base)]
+    assert any("no model probability" in m for m in warns(hi))
+    assert not any("no model probability" in m for m in warns(mod))

@@ -25,9 +25,21 @@ the user answered: **"+250 can be reevaluated. As long as it's over +150."**
 **SAFE: actual combined odds strictly over +150** (decimal above 2.50). The +250
 figure above is superseded. Every other specification in this document stands.
 
-Not answered in that exchange, so recorded as a working assumption only: HIGH and
-LOTTERY are kept as explicitly labelled uncertified speculation (V27 section 4's
-open decision), per the user's remarks on 2026-11-12 that those tiers are not
-supposed to be edge plays and "we gotta be able to take some risk."
+**HIGH and LOTTERY (user clarification, same day).** They are speculative only in
+the sense that the combined probability is low. They are NOT random shots and NOT
+"no-edge" tickets: every leg must still be a smart, model-backed football decision
+with a stated reason, and the ticket as a whole should still carry an edge at its
+price. This restates `MODEL_BACKED_ALT_LINE_PARLAY_CONSTRUCTION_V1` section 7
+("individual leg quality standard does **not** fall"; no arbitrary longshots just
+to raise payout) and the Nov 1 preference above for stacking many high-survival
+alternate legs to earn the odds. An earlier draft of this addendum called these
+tiers "uncertified speculation"; that framing is withdrawn. V27 section 4's
+>+300 band (-46.5%) measures blind board rungs, a different object from legs
+selected by this method, and does not describe it.
+
+The record to compare against: the week 9 LOTTERY went 1/6 with five of six legs in
+that >+300 band, and the week 7 LOTTERY legs hit 57.1% -- long-shot legs doing the
+work that leg count is supposed to do. The Oct 19 MNF 4/5/7/9-leg tickets (every
+reported leg hit) were stacks of high-survival alternates.
 
 Enforced mechanically by `scripts/research/validate_ticket_card_v1.py`.

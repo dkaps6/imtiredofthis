@@ -14,6 +14,10 @@ Input CSV, one row per leg:
   price_basis quote (a real book parlay quote) | naive_product (legs multiplied)
   state_label HEALTHY_FULL | INJURY_LIMITED | PARTIAL_GAME | DNP_INACTIVE |
               RETURN_FROM_INJURY | UNRESOLVED_CONTEXT
+Optional per-leg column `model_prob`: our stated probability that the leg hits. When
+present, a leg whose probability does not exceed its price's breakeven is refused on
+EVERY tier -- HIGH and LOTTERY lower the combined probability through leg count, they
+do not lower the standard each leg must meet.
 Optional per-ticket column `status` = UNSOLVED for a LOTTERY that cannot be built.
 
 Exit code 1 if any ERROR is raised. WARNINGs never fail the run but are printed.
@@ -77,6 +81,14 @@ def validate(df: pd.DataFrame, safe_floor: float = SAFE_FLOOR_AMERICAN) -> list[
         if (g.market == "receptions").all():
             E(t, "ticket is made only of reception lines")
         for r in g.itertuples():
+            mp = getattr(r, "model_prob", None)
+            if mp is None or pd.isna(mp):
+                if "model_prob" in g.columns and tier in {"HIGH", "LOTTERY"}:
+                    W(t, f"{r.player} {r.market}: no model probability stated on a {tier} leg")
+            elif float(mp) <= 1 / dec(r.price_american):
+                E(t, f"{r.player} {r.market}: model probability {float(mp):.3f} does not exceed "
+                     f"breakeven {1 / dec(r.price_american):.3f}; every leg needs an edge, "
+                     "including on HIGH and LOTTERY")
             if not str(r.football_reason).strip() or str(r.football_reason).strip().lower() == "nan":
                 E(t, f"{r.player} {r.market}: no football reason stated")
             if str(r.state_label).strip().upper() in BAD_STATES:
