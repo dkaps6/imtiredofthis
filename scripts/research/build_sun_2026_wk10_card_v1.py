@@ -23,6 +23,11 @@ REASON={
  ('Kayshon Boutte',24.5):"5/8 over 24.5; model 30 vs CLE.",
  ('Cooper Kupp',14.5):"SEA slot, 7/9 over 14.5; model 24 vs a rookie-QB LV team likely to trail.",
  ('Javonte Williams',39.5):"DAL lead back (72% snaps, 11-25 carries), 8/9 over 39.5 (floor 30, median 56); RB Goodson OUT; total 55.5. Replaced Keenan Allen (traded IND->SF, first SF game).",
+ ('Khalil Shakir',29.5):"Same Shakir thesis one rung up: 7/8 over 29.5 (median 54); Palmer on IR.",
+ ('Elic Ayomanor',9.5):"TEN WR (52-89% snaps), 7/8 over 9.5; Carnell Tate OUT (shoulder) again, so more targets; never on the injury report.",
+ ('Tommy Tremble',9.5):"CAR TE (48-70% snaps, 2-6 targets every game), 6/8 over 9.5; model 23.",
+ ('Chase Brown',49.5):"CIN lead back (63-79% snaps), 5/8 over 49.5 (55 and 57 the last two); model 54. Replaces Braelon Allen (Hall back).",
+ ('Josh Allen',174.5):"8/8 over 174.5 (low 204); BUF-NYJ total 50.5.",
  ('Khalil Shakir',24.5):"BUF slot, 7/8 over 24.5 (median 54; the miss was a full 73%-snap game); model 48 vs NYJ. Replaced Keenan Allen.",
  ('Matthew Stafford',224.5):"43 attempts last week; ARI starts a rookie QB, so LAR should control. 5/9 over 224.5, model 254.",
  ('Matthew Stafford',299.5):"Ceiling leg: 4 of 9 games over 299.5. Model 22% vs a 13.5% price.",
@@ -34,10 +39,10 @@ REASON={
  ('Brenton Strange',5.5):"Receptions ceiling: 2 of 8 games with 6+ catches; model 20% vs 17% price.",
 }
 CARD={
- 'SAFE':[('Josh Allen','pass_yards',149.5),('Brenton Strange','rec_yards',14.5),('Devaughn Vele','rec_yards',14.5),('Xavier Hutchinson','rec_yards',9.5),('AJ Barner','rec_yards',4.5),('Daniel Jones','pass_yards',99.5),('Aaron Rodgers','pass_yards',149.5),('Jahan Dotson','rec_yards',4.5),('Ryan Flournoy','rec_yards',19.5)],
+ 'SAFE':[('Josh Allen','pass_yards',149.5),('Brenton Strange','rec_yards',14.5),('Devaughn Vele','rec_yards',14.5),('Xavier Hutchinson','rec_yards',9.5),('AJ Barner','rec_yards',4.5),('Aaron Rodgers','pass_yards',149.5),('Jahan Dotson','rec_yards',4.5),('Ryan Flournoy','rec_yards',19.5)],
  'MODERATE':[('Bryce Young','pass_yards',249.5),('Kayshon Boutte','rec_yards',14.5),('Cooper Kupp','rec_yards',14.5),('Javonte Williams','rush_yards',39.5),('Khalil Shakir','rec_yards',24.5)],
- 'MEDIUM':[('Matthew Stafford','pass_yards',224.5),('Braelon Allen','rush_yards',39.5),('Dalton Schultz','rec_yards',19.5),('Rico Dowdle','rush_yards',29.5),('Daniel Jones','pass_yards',99.5),('Jahan Dotson','rec_yards',4.5)],
- 'HIGH':[('Bryce Young','pass_yards',274.5),('Kayshon Boutte','rec_yards',24.5),('Cooper Kupp','rec_yards',14.5),('Javonte Williams','rush_yards',39.5),('Braelon Allen','rush_yards',39.5),('Aaron Rodgers','pass_yards',149.5)],
+ 'MEDIUM':[('Matthew Stafford','pass_yards',224.5),('Dalton Schultz','rec_yards',19.5),('Rico Dowdle','rush_yards',29.5),('Jahan Dotson','rec_yards',4.5),('Khalil Shakir','rec_yards',29.5),('Elic Ayomanor','rec_yards',9.5),('Tommy Tremble','rec_yards',9.5)],
+ 'HIGH':[('Bryce Young','pass_yards',274.5),('Kayshon Boutte','rec_yards',24.5),('Cooper Kupp','rec_yards',14.5),('Javonte Williams','rush_yards',39.5),('Chase Brown','rush_yards',49.5),('Josh Allen','pass_yards',174.5),('Elic Ayomanor','rec_yards',9.5)],
  'LOTTERY':[('Matthew Stafford','pass_yards',299.5),('Brenton Strange','receptions',5.5),('Rico Dowdle','rush_yards',39.5),('Dalton Schultz','rec_yards',29.5),('Devaughn Vele','rec_yards',14.5)],
 }
 # Team-change check: the state comes from each player's prior games, never a constant.
