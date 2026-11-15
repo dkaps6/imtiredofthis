@@ -46,6 +46,8 @@ STAT = {"rec_yards": "receiving_yards", "rush_yards": "rushing_yards", "pass_yar
 GROUP = {"rush_yards": (("RB",), "carries", 0.25), "rec_yards": (("WR", "TE"), "targets", 0.15),
          "receptions": (("WR", "TE"), "targets", 0.15), "pass_yards": (("WR", "TE"), "targets", 0.15)}
 OUT_STATES = {"out", "doubtful"}
+KEY_MIN_VOLUME = {"carries": 10.0, "targets": 5.0}
+QB_MISSING_SHARE = 0.30
 
 
 def matchup_pct(legs: pd.DataFrame) -> pd.Series:
@@ -62,41 +64,76 @@ def teammate_context(st, played, team_now, inj_out, player, team, market, thr):
 
 
 def teammate_context_values(st, played, team_now, inj_out, player, team, market):
-    """(stat values in games matching today's key-teammate availability, notes)."""
+    """(stat values from games that do NOT flatter today's role, notes).
+
+    Direction matters (corrected 2026-11-15 after the first version required an
+    exact match on every key teammate and cut 32 of 72 players):
+      * receiving / rushing legs: same-group teammates are COMPETITORS. A game is
+        dropped when a competitor who plays today was missing from it (Braelon
+        Allen's Breece-Hall-out games). A competitor out today leaves MORE work,
+        so games with him present are conservative and are kept (Ayomanor with
+        Carnell Tate out).
+      * passing legs: receivers are COMPLEMENTS. A game is dropped when a
+        receiver who is out today (IR, inactive, traded) played in it (Stafford
+        without Nacua and Adams, Jones without Downs and Keenan Allen). A
+        receiver back today only helps, so those games are kept.
+    Presence is snaps > 0 (a stat line can be missing for a player who played).
+    A competitor newly arrived by trade is reported as "new arrival".
+    """
     fams, use, share_min = GROUP[market]
+    complement = market == "pass_yards"
     T = NFL_TEAM.get(team, team)
     tg = st[(st.team == T) & (st.position.isin(fams))]
-    weeks_team = sorted(st[st.team == T].week.unique())
     tot = tg.groupby("week")[use].sum()
     notes, key = [], {}
     for q, g in tg.groupby("player_display_name"):
         if q == player:
             continue
         share = float((g.set_index("week")[use] / tot.reindex(g.week).values).mean())
-        if share >= share_min:
+        # Key = real share AND real volume in the games he played. Share alone
+        # made a one-game backup (DJ Giddens, Will Mallory) look like a starter.
+        if share >= share_min and g[use].mean() >= KEY_MIN_VOLUME[use]:
             active = team_now.get(q) == T and q not in inj_out
-            key[q] = (set(g.week), active)
-    # Arrivals: today on this team, no games with it yet, key usage elsewhere.
-    for q, t in team_now.items():
-        if t == T and q != player and q not in set(tg.player_display_name):
-            prior = st[(st.player_display_name == q) & st.position.isin(fams)]
-            if len(prior) >= 2 and prior[use].mean() >= (8 if use == "carries" else 4) and q not in inj_out:
-                notes.append(f"{q} new arrival")
+            on_team = set(g.week)
+            weeks = (played.get(q, set()) & set(st[st.team == T].week)) | on_team
+            key[q] = (weeks, active)
+    if not complement:
+        for q, t in team_now.items():
+            if t == T and q != player and q not in set(tg.player_display_name):
+                prior = st[(st.player_display_name == q) & st.position.isin(fams)]
+                if len(prior) >= 2 and prior[use].mean() >= (8 if use == "carries" else 4) and q not in inj_out:
+                    notes.append(f"{q} new arrival")
     me = st[(st.player_display_name == player) & (st.team == T)]
     wk = played.get(player, set())
     me = me[me.week.isin(wk)] if wk else me
-    match = []
+    # For a QB, a missing receiver matters in proportion to his target share:
+    # Stafford (Nacua + Adams) and Jones (Downs + Keenan Allen) lost ~40-50% of
+    # their targets; one WR3 on IR does not erase a season. Games are dropped
+    # only when the receivers out today carried >= QB_MISSING_SHARE together.
+    missing_share = 0.0
+    if complement:
+        for q, (weeks, active) in key.items():
+            if not active:
+                g = tg[tg.player_display_name == q]
+                missing_share += float((g.set_index("week")[use] / tot.reindex(g.week).values).mean())
+        if missing_share:
+            notes.append(f"receivers out today held {missing_share:.0%} of targets")
+    keep = []
     for w in me.week:
-        ok = all((w in weeks) == active for weeks, active in key.values())
-        match.append(ok)
+        if complement:   # drop games a now-missing receiver group played in
+            ok = missing_share < QB_MISSING_SHARE or not any(
+                w in weeks for weeks, active in key.values() if not active)
+        else:            # drop games a now-playing competitor missed
+            ok = all(w in weeks for weeks, active in key.values() if active)
+        keep.append(ok)
     for q, (weeks, active) in key.items():
         absent = [w for w in me.week if w not in weeks]
-        if active and absent:
+        if active and absent and not complement:
             notes.append(f"{q} back (absent {len(absent)}/{len(me)})")
         if not active:
             why = "traded" if team_now.get(q) not in (None, T) else ("out today" if q in inj_out else "inactive")
             notes.append(f"{q} {why}")
-    m = me[np.array(match, bool)] if len(me) else me
+    m = me[np.array(keep, bool)] if len(me) else me
     return m[STAT[market]].fillna(0).to_numpy(float), "; ".join(notes)
 
 

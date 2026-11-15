@@ -14,14 +14,16 @@ INPUT: candidate rungs from build_slate_alt_legs_v1 (board + alt ladders).
 
 CHECKS (every tier; see TIER RULES for the extras):
   G1 snaps >= SNAP_MIN; G2 main-line role floor; G5 market allowed;
-  G7 matchup, toughest quartile WITHIN THE MARKET (fixed 2026-11-15);
+  G7 matchup, toughest quartile of all 32 defenses WITHIN THE MARKET
+    (per-game yards allowed to the position group; fixed 2026-11-15);
   G8 availability: no Out/Doubtful/Questionable designation, not quarantined;
   QB: team not in --exclude-teams (QB change / first start; fail closed);
   TEAM CHANGE: player has >= 3 games with today's team if he played elsewhere;
-  TEAMMATES: own history recomputed on games matching today's key-teammate
-    availability (returning starters, traded/IR'd teammates): >= CTX_MIN_GAMES
-    such games and a hit rate there above the price's breakeven; a key player
-    newly arrived by trade fails closed (no shared history exists);
+  TEAMMATES: own history recomputed on the games that do not flatter today's
+    role (audit_card_legs_v1.teammate_context_values: drop games a competitor
+    who plays today missed; for QBs, drop games a receiver who is out today
+    played): >= CTX_MIN_GAMES such games, and the tier's history rule holds on
+    them; a key competitor newly arrived by trade fails closed;
   EDGE: model probability at the rung above the price's breakeven.
 
 TIER RULES (as documented on the 2026-11-15 card, now enforced):
@@ -68,7 +70,7 @@ TIERS = ["SAFE", "MODERATE", "MEDIUM", "HIGH", "LOTTERY"]
 # middle three are the tier spacing of the 2026-11-15 card.
 MIN_AMERICAN = {"SAFE": 151, "MODERATE": 500, "MEDIUM": 1200, "HIGH": 3000, "LOTTERY": 24900}
 CTX_MIN_GAMES = 3
-TOP_K = 40  # best candidate tickets kept per tier for the joint search
+TOP_K = 60  # best candidate tickets kept per tier for the joint search
 MAX_TICKETS_PER_PLAYER = 2
 nm = lambda s: re.sub(r"[^a-z]", "", str(s).lower())
 
@@ -81,13 +83,22 @@ def check(r, tier: str) -> list[str]:
     if not real_alt:
         f.append("G4 alt")
     own_rate = r.own_hits / r.own_games if r.own_games else 0.0
+    ctx_rate = r.ctx_hits / r.ctx_games if r.ctx_games else 0.0
     if r.own_games < OWN_GAMES_MIN:
         f.append("G6 games")
+    # The tier's history rule applies to the whole season AND to the games that
+    # reflect today's teammates (same threshold; the context sample is not held
+    # to a stricter bar than the tier's own rule).
     if tier in ("SAFE", "MODERATE", "MEDIUM"):
         if own_rate < OWN_RATE_MIN:
             f.append("G6 own")
-    elif own_rate <= r.breakeven:
-        f.append("own below breakeven")
+        if r.ctx_games and ctx_rate < OWN_RATE_MIN:
+            f.append("context own")
+    else:
+        if own_rate <= r.breakeven:
+            f.append("own below breakeven")
+        if r.ctx_games and ctx_rate <= r.breakeven:
+            f.append("context below breakeven")
     if tier == "SAFE":
         if r.model_proj / r.alt_threshold < CUSHION_MIN:
             f.append("G3 cushion")
@@ -124,10 +135,21 @@ def main() -> int:
     desig = {nm(p): str(s).lower() for p, s in zip(ij.full_name, ij.report_status)}
     inj_out = {p for p, s in zip(ij.full_name, ij.report_status) if str(s).lower() in OUT_STATES}
 
-    # Matchup percentile within each market (0 = toughest defense).
-    one = L.drop_duplicates(["market", "opponent"])[["market", "opponent", "def_allowed"]].copy()
-    one["pct"] = one.groupby("market").def_allowed.rank(pct=True)
-    mpct = one.set_index(["market", "opponent"]).pct
+    # Matchup percentile within each market AMONG ALL 32 DEFENSES (0 = toughest).
+    # Ranking only today's opponents cut the toughest quarter of whoever is on
+    # the slate (on a two-team slate, one defense always), which is not the
+    # gate's meaning: "toughest quartile of prior yards allowed to the position
+    # group". Per-game yards allowed, same family/column as the leg builder.
+    from scripts.research.build_slate_alt_legs_v1 import FAM_COL
+    pos = st.groupby("player_display_name").position.first()
+    stf = st.assign(fam=st.player_display_name.map(pos))
+    league = {}
+    for mk, (fams, col) in FAM_COL.items():
+        pg = stf[stf.fam.isin(fams)].groupby(["opponent_team", "week"])[col].sum().groupby("opponent_team").mean()
+        league[mk] = pg.rank(pct=True)
+    from scripts.research.build_slate_alt_legs_v1 import NFL_TEAM as _NT
+    mpct = {(mk, opp): float(league.get(mk, pd.Series(dtype=float)).get(_NT.get(opp, opp), np.nan))
+            for mk, opp in L[["market", "opponent"]].drop_duplicates().itertuples(index=False)}
 
     # Per (player, market): checks that do not depend on the rung.
     ctx, common = {}, {}
@@ -137,7 +159,7 @@ def main() -> int:
         if mk in EXCLUDED_MARKETS: f.append("G5 market")
         if not b.snap_pct >= SNAP_MIN: f.append("G1 snaps")
         if not b.main_line >= MAIN_LINE_FLOOR.get(mk, np.inf): f.append("G2 role")
-        if mpct.get((mk, b.opponent), 1.0) < DEF_EXCLUDE_Q: f.append("G7 matchup")
+        if mpct.get((mk, b.opponent), 1.0) <= DEF_EXCLUDE_Q: f.append("G7 matchup")
         s = desig.get(nm(p), "nan")
         if s in {"out", "doubtful", "questionable"}: f.append(f"G8 {s}")
         if nm(p) in quarantine: f.append("quarantined")
@@ -155,9 +177,9 @@ def main() -> int:
         n, h = len(vals), int((vals > r.alt_threshold).sum())
         if not f:
             if "new arrival" in notes:
-                f.append("teammate arrival")  # a key player joined; no shared history exists
-            if n < CTX_MIN_GAMES or h / n <= r.breakeven:
-                f.append("teammate context")
+                f.append("teammate arrival")  # a key competitor joined; no shared history exists
+            if n < CTX_MIN_GAMES:
+                f.append("teammate context")  # too few games that reflect today's role
             if not r.model_prob > r.breakeven:
                 f.append("no model edge")
         rows.append(dict(r._asdict(), common_fails=f, ctx_games=n, ctx_hits=h, context=notes))
@@ -196,24 +218,25 @@ def main() -> int:
         return [(lp, tuple(E.loc[list(ix)].index_orig)) for lp, ix in out[:keep]]
 
     C["index_orig"] = C.index
-    order = ["HIGH", "MEDIUM", "MODERATE", "SAFE"]
-    cands = {t: candidates(t) for t in order}
     up = C[C.fails_LOTTERY == ""]
     ceiling = float(np.prod(up.groupby("event_id").dec.max())) if len(up) else 1.0
-    lottery = candidates("LOTTERY") if ceiling >= dec(MIN_AMERICAN["LOTTERY"]) else []
-    if not lottery:
+    order = ["HIGH", "MEDIUM", "MODERATE", "SAFE"]
+    if ceiling >= dec(MIN_AMERICAN["LOTTERY"]):
+        order = ["LOTTERY"] + order
+    else:
         print(f"LOTTERY UNSOLVED: best passing price in every game multiplies to {ceiling:.0f}x < 250x")
+    cands = {t: candidates(t) for t in order}
     pl = C.player.to_dict()
 
     # Joint choice: as many tiers filled as possible, then the highest summed
     # log hit probability, subject to no player on more than two tickets.
-    best = (-1, -np.inf, {})
+    best = [-1, -np.inf, {}]
     def search(k, uses, chosen, score):
-        nonlocal best
+        if len(chosen) + (len(order) - k) < best[0]:
+            return                                   # cannot fill more tiers than the best found
         if k == len(order):
-            key = (len(chosen), score)
-            if key > best[:2]:
-                best = (len(chosen), score, dict(chosen))
+            if (len(chosen), score) > (best[0], best[1]):
+                best[:] = [len(chosen), score, dict(chosen)]
             return
         t = order[k]
         for lp, ix in cands[t]:
@@ -226,8 +249,6 @@ def main() -> int:
         search(k + 1, uses, chosen, score)   # leave this tier unfilled
     search(0, {}, {}, 0.0)
     chosen = best[2]
-    if lottery:
-        chosen.setdefault("LOTTERY", lottery[0][1])
     card = []
     for t in TIERS:
         ix = chosen.get(t)
