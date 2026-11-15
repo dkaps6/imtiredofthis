@@ -12,7 +12,7 @@ audits); legs `data/research/sun_2026_wk10_card_v1.csv`; builder
 | HIGH | +3270 | 7 | 4.9% | 3.0% |
 | LOTTERY | +28475 | 5 | 0.81% | 0.35% |
 
-## Revision 11:30 ET: Keenan Allen removed (team change)
+## Revision ~11:20 ET: Keenan Allen removed (team change)
 Keenan Allen (o19.5, on MODERATE and HIGH) was traded IND -> SF; all 8 of his 2026
 games were with IND and today is his first SF game. His own history and the
 model's projection describe his IND role, so the leg had no evidence behind it.
@@ -30,7 +30,7 @@ player had a team change.
   likely back, and in the shared weeks Pollard cleared 49.5 only 3/5), Jakobi
   Meyers (limited again this week; snaps fell to 54-68% after the wk8 hamstring).
 
-## Revision 11:55 ET: teammate-context check (Braelon Allen, Daniel Jones removed)
+## Revision 11:25 ET: teammate-context check (Braelon Allen, Daniel Jones removed)
 Extending the team-change check to teammates (every 2026 skill player whose team
 changed, plus the week-10 injury report):
 * Braelon Allen (MEDIUM, HIGH) removed: his 5/5 over 39.5 came in weeks 4-8 with
