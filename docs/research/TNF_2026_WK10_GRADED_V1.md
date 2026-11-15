@@ -8,10 +8,10 @@ Williams 2-42, Mooney 2-8, White 11 carries 47, Daniels 11 carries 28, Skattebo 
 
 | card (time shipped) | built by | tickets won | legs hit |
 |---|---|---|---|
-| A nine-gate builder, cushion-ranked | validated gates | 2 of 2 | 5/5 |
-| B nine-gate builder, value-ranked (23:25Z) | validated gates | 2 of 2 | 6/6 |
-| C blended estimator (00:05Z) | ad hoc, invented weights | 1 of 4 | 5/9 distinct legs 33% |
-| D all-markets final card (00:20Z) | ad hoc, invented weights | **0 of 5** | 40% |
+| A nine-gate builder, cushion-ranked | validated gates | 2 of 2 | 5/5 distinct legs |
+| B nine-gate builder, value-ranked (23:25Z) | validated gates | 2 of 2 | 5/5 distinct legs |
+| C blended estimator (00:05Z) | ad hoc, invented weights | 1 of 4 | 2/6 distinct legs (33%) |
+| D all-markets final card (00:20Z) | ad hoc, invented weights | **0 of 5** | 4/10 distinct legs (40%) |
 
 Card B's SAFE (Diggs >29.5 + Fields >14.5) paid +115 and won. Each later
 rebuild of that card was worse.
