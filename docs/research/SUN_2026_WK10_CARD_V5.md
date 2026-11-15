@@ -1,5 +1,12 @@
 # Sunday 2026 week 10 card, v5 — the Nov 9 integrated alt-line rule
 
+> **DO NOT PLAY (12:40 ET).** Checked leg by leg against each player's own season,
+> 28 of the 40 legs do not clear their own price (e.g. Mumpfield over 4.5
+> receiving yards at -1000: 6/8 this season against 91% needed). v5 checked only
+> the model cushion. The card where every leg passes the cushion AND the
+> player's season beats the price is v4 (`SUN_2026_WK10_CARD_V4.md`). The chat
+> message for v5 also wrote "rec" for both receptions and receiving yards.
+
 Built 12:36 ET. The rule the operator and I settled on 2026-11-09
 (`PRISM_ALT_CUSHION_STRATEGY_2026_W9.md` addenda, `PRISM_ALT_FOOTBALL_INTEGRATION_2026_W9.md`):
 real role from the book's main line, rung >= 1.5x under the projection, toughest
