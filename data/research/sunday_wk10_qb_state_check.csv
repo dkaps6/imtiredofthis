@@ -1,0 +1,27 @@
+team,model_QB1,last_started,last_wk,agree,qb_unavailable,verdict,evidence
+ARI,Josh Johnson,Gardner Minshew,9.0,CHECK,,MODEL WRONG -> Carson Beck,"AP/WSAU 2026-11-11: Cardinals name rookie Carson Beck the starter, third starting QB in three games; Minshew injured. Model has Josh Johnson QB1, Beck QB3. First career start."
+ATL,Tua Tagovailoa,Michael Penix Jr.,9.0,CHECK,,UNRESOLVED,"Penix started wks 6-9 (33/34/24/31 att), Tua 0 attempts; model has Tua QB1. No week-10 starter announcement found."
+BAL,Lamar Jackson,Joe Fagnano,9.0,CHECK,,UNRESOLVED (Monday night),"Lamar 1 att wk8, 0 wk9; Fagnano started wks 8-9; Lamar not on the injury report. Returning-from-injury state."
+BUF,Josh Allen,Josh Allen,9.0,yes,,OK,last started == model QB1 per nflverse
+CAR,Bryce Young,Bryce Young,9.0,yes,,OK,last started == model QB1 per nflverse
+CIN,Joe Burrow,Joe Burrow,9.0,yes,,OK,last started == model QB1 per nflverse
+CLE,Shedeur Sanders,Shedeur Sanders,9.0,yes,,OK,last started == model QB1 per nflverse
+DAL,DAK Prescott,Dak Prescott,9.0,yes,,OK,last started == model QB1 per nflverse
+DET,Jared Goff,Jared Goff,9.0,yes,,OK,last started == model QB1 per nflverse
+GB,Jordan Love,Jordan Love,9.0,yes,,OK,last started == model QB1 per nflverse
+HOU,CJ Stroud,C.J. Stroud,9.0,yes,,OK,last started == model QB1 per nflverse
+IND,Daniel Jones,Daniel Jones,9.0,yes,,OK,last started == model QB1 per nflverse
+JAX,Trevor Lawrence,Trevor Lawrence,9.0,yes,,OK,last started == model QB1 per nflverse
+KC,Patrick Mahomes,Patrick Mahomes,9.0,yes,,OK,last started == model QB1 per nflverse
+LAC,Justin Herbert,Justin Herbert,9.0,yes,,OK,last started == model QB1 per nflverse
+LAR,Matthew Stafford,,,CHECK,,OK,"Stafford full practice, 43 att wk9. (nflverse code for the Rams is LA, so the automated comparison could not find him.)"
+LV,Fernando Mendoza,Kirk Cousins,9.0,CHECK,,"OK (model right, nflverse stale)","raiders.com + abc30: Mendoza named Week 10 starter after Cousins traded to MIN. Zero career attempts, so no quarterback-conditioned history for any LV pass catcher."
+MIA,Malik Willis,Malik Willis,9.0,yes,,OK,last started == model QB1 per nflverse
+MIN,Kirk Cousins,Carson Wentz,9.0,CHECK,,"LIKELY OK (model right, nflverse stale)","Cousins traded from LV Tuesday; Murray OUT (hamstring), Wentz started wk9. New team, first start with these receivers."
+NE,Drake Maye,Drake Maye,9.0,yes,,OK,last started == model QB1 per nflverse
+NO,Tyler Shough,Tyler Shough,9.0,yes,,OK,last started == model QB1 per nflverse
+NYJ,Geno Smith,Geno Smith,9.0,yes,,OK,last started == model QB1 per nflverse
+PIT,Aaron Rodgers,Aaron Rodgers,8.0,yes,,OK,last started == model QB1 per nflverse
+SEA,Drew Lock,Drew Lock,9.0,yes,,OK,last started == model QB1 per nflverse
+SF,Brock Purdy,Brock Purdy,9.0,yes,,OK,last started == model QB1 per nflverse
+TEN,Mitchell Trubisky,Cam Ward,8.0,CHECK,,MODEL LIKELY WRONG -> Cam Ward (unconfirmed),"Ward started wks 5-8 (TEN bye wk9), AP: team sticking with Ward; Ward not on the wk10 injury report. Model has Trubisky QB1. No week-10 announcement found."
