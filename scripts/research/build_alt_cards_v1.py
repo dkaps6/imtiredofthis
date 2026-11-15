@@ -226,8 +226,16 @@ def apply_gates(df: pd.DataFrame, book: str | None) -> tuple[pd.DataFrame, pd.Da
     """Return (survivors, rejection_log). Pure function of the input frame."""
     log: list[dict] = []
     keep = []
-    dq = df.get("def_allowed")
-    cut = float(np.nanquantile(dq, DEF_EXCLUDE_Q)) if dq is not None and dq.notna().any() else None
+    # G7 cut PER MARKET. Until 2026-11-15 this was one quantile over all markets
+    # mixed: rush yards allowed (~70-130) always sat below it and pass yards
+    # allowed (~170-270) never did, so every rush_yards rung failed G7 and no
+    # pass_yards rung could. The doc above says "toughest quartile of prior yards
+    # allowed to the position group", which is a within-market quantile.
+    cuts: dict = {}
+    if "def_allowed" in df and df["def_allowed"].notna().any():
+        for mk, g in df.groupby("market"):
+            if g["def_allowed"].notna().any():
+                cuts[mk] = float(np.nanquantile(g["def_allowed"], DEF_EXCLUDE_Q))
     for row in df.to_dict("records"):
         if book and str(row.get("book", "")).lower() != book.lower():
             _fail(log, row, "G9_book", f"book={row.get('book')}"); continue
@@ -267,9 +275,10 @@ def apply_gates(df: pd.DataFrame, book: str | None) -> tuple[pd.DataFrame, pd.Da
         rate = (oh or 0) / og
         if rate < OWN_RATE_MIN:
             _fail(log, row, "G6_own_rate", f"own_rate={rate:.2f} < {OWN_RATE_MIN}"); continue
-        if cut is not None:
+        if cuts:
+            cut = cuts.get(row.get("market"))
             da = row.get("def_allowed")
-            if da is None or not np.isfinite(da):
+            if cut is None or da is None or not np.isfinite(da):
                 _fail(log, row, "G7_matchup_unknown", "no opponent data"); continue
             if da < cut:
                 _fail(log, row, "G7_matchup", f"opponent allows {da:.1f} < {cut:.1f} (toughest quartile)"); continue

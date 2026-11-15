@@ -1,0 +1,33 @@
+ticket,player,team,opp,market,rung,price,breakeven,model_proj,model_prob,main_line,model_vs_main,cushion,snap,own,ctx_own,matchup_pct,total,injury,context,fails
+SAFE,Josh Allen,BUF,NYJ,pass_yards,149.5,-1450,0.935,233.9,0.955,238.3,0.98,1.56,0.99,8/8,6/6,0.18,50.5,,DJ Moore back (absent 2/8),G7 matchup
+SAFE,Brenton Strange,JAX,TEN,rec_yards,14.5,-650,0.867,39.5,0.913,35.8,1.1,2.72,0.75,8/8,8/8,1.0,45.5,,,PASS
+SAFE,Devaughn Vele,NO,CAR,rec_yards,14.5,-440,0.815,33.7,0.866,29.8,1.13,2.32,0.92,8/8,1/1,0.36,48.5,,Jordyn Tyson back (absent 7/8),context history
+SAFE,Xavier Hutchinson,HOU,CLE,rec_yards,9.5,-900,0.9,28.2,0.907,33.7,0.84,2.96,0.57,8/8,2/2,0.59,41.5,,Nico Collins back (absent 2/8); Tank Dell back (absent 6/8),context history
+SAFE,AJ Barner,SEA,LV,rec_yards,4.5,-1100,0.917,25.4,0.978,20.0,1.27,5.65,0.87,9/9,7/7,0.86,40.5,,Rashid Shaheed back (absent 2/9),PASS
+SAFE,Aaron Rodgers,PIT,CIN,pass_yards,149.5,-1800,0.947,248.6,0.967,240.3,1.03,1.66,0.98,8/8,3/3,0.77,49.5,,Germie Bernard back (absent 1/8); Roman Wilson inactive,context history
+SAFE,Jahan Dotson,ATL,KC,rec_yards,4.5,-900,0.9,28.9,0.962,29.3,0.99,6.42,0.7,9/9,9/9,0.18,47.5,,,G7 matchup
+SAFE,Ryan Flournoy,DAL,SF,rec_yards,19.5,-400,0.8,37.2,0.803,34.4,1.08,1.91,0.76,9/9,8/8,0.23,55.5,,George Pickens back (absent 1/9),G7 matchup
+MODERATE,Bryce Young,CAR,NO,pass_yards,249.5,-112,0.528,266.5,0.579,255.2,1.04,1.07,0.95,6/8,5/7,0.91,48.5,,Jalen Coker back (absent 1/8),G4 alt
+MODERATE,Kayshon Boutte,HOU,CLE,rec_yards,14.5,-180,0.643,30.2,0.695,23.6,1.28,2.08,0.52,8/8,2/2,0.59,41.5,,Nico Collins back (absent 2/8); Tank Dell back (absent 6/8),context history
+MODERATE,Cooper Kupp,SEA,LV,rec_yards,14.5,-162,0.618,24.3,0.681,18.9,1.28,1.67,0.71,7/9,6/7,0.86,40.5,,Rashid Shaheed back (absent 2/9),PASS
+MODERATE,Javonte Williams,DAL,SF,rush_yards,39.5,-360,0.783,65.7,0.872,60.9,1.08,1.66,0.74,8/9,8/9,0.18,55.5,,,G7 matchup
+MODERATE,Khalil Shakir,BUF,NYJ,rec_yards,24.5,-380,0.792,47.6,0.851,44.7,1.07,1.94,0.62,7/8,5/6,0.27,50.5,,DJ Moore back (absent 2/8),PASS
+MEDIUM,Matthew Stafford,LAR,ARI,pass_yards,224.5,116,0.463,254.4,0.664,209.0,1.22,1.13,0.98,5/9,0/0,0.45,38.5,,Davante Adams inactive; Puka Nacua inactive; Tyler Higbee back (absent 1/9),"G4 alt, G6 own, context history"
+MEDIUM,Dalton Schultz,HOU,CLE,rec_yards,19.5,-230,0.697,33.0,0.752,28.6,1.15,1.69,0.56,7/8,2/2,0.59,41.5,,Nico Collins back (absent 2/8); Tank Dell back (absent 6/8),context history
+MEDIUM,Rico Dowdle,PIT,CIN,rush_yards,29.5,-122,0.55,39.4,0.646,30.3,1.3,1.33,0.4,3/5,3/5,0.36,49.5,,,G4 alt
+MEDIUM,Jahan Dotson,ATL,KC,rec_yards,4.5,-900,0.9,28.9,0.962,29.3,0.99,6.42,0.7,9/9,9/9,0.18,47.5,,,G7 matchup
+MEDIUM,Khalil Shakir,BUF,NYJ,rec_yards,29.5,-270,0.73,47.6,0.765,44.7,1.07,1.61,0.62,7/8,5/6,0.27,50.5,,DJ Moore back (absent 2/8),PASS
+MEDIUM,Elic Ayomanor,TEN,JAX,rec_yards,9.5,-450,0.818,25.3,0.866,25.4,0.99,2.66,0.64,7/8,1/1,0.64,45.5,,Carnell Tate out today,context history
+MEDIUM,Tommy Tremble,CAR,NO,rec_yards,9.5,-215,0.683,22.8,0.841,15.9,1.43,2.4,0.57,6/8,5/7,0.91,48.5,,Jalen Coker back (absent 1/8),G2 role
+HIGH,Bryce Young,CAR,NO,pass_yards,274.5,162,0.382,266.5,0.42,255.2,1.04,0.97,0.95,6/8,5/7,0.91,48.5,,Jalen Coker back (absent 1/8),"G4 alt, G9 price"
+HIGH,Kayshon Boutte,HOU,CLE,rec_yards,24.5,114,0.467,30.2,0.485,23.6,1.28,1.23,0.52,5/8,2/2,0.59,41.5,,Nico Collins back (absent 2/8); Tank Dell back (absent 6/8),"G4 alt, context history"
+HIGH,Cooper Kupp,SEA,LV,rec_yards,14.5,-162,0.618,24.3,0.681,18.9,1.28,1.67,0.71,7/9,6/7,0.86,40.5,,Rashid Shaheed back (absent 2/9),PASS
+HIGH,Javonte Williams,DAL,SF,rush_yards,39.5,-360,0.783,65.7,0.872,60.9,1.08,1.66,0.74,8/9,8/9,0.18,55.5,,,G7 matchup
+HIGH,Chase Brown,CIN,PIT,rush_yards,49.5,104,0.49,53.9,0.543,47.2,1.14,1.09,0.7,5/8,5/8,0.14,49.5,,,"G4 alt, G7 matchup"
+HIGH,Josh Allen,BUF,NYJ,pass_yards,174.5,-600,0.857,233.9,0.865,238.3,0.98,1.34,0.99,8/8,6/6,0.18,50.5,,DJ Moore back (absent 2/8),G7 matchup
+HIGH,Elic Ayomanor,TEN,JAX,rec_yards,9.5,-450,0.818,25.3,0.866,25.4,0.99,2.66,0.64,7/8,1/1,0.64,45.5,,Carnell Tate out today,context history
+LOTTERY,Matthew Stafford,LAR,ARI,pass_yards,299.5,640,0.135,254.4,0.218,209.0,1.22,0.85,0.98,4/9,0/0,0.45,38.5,,Davante Adams inactive; Puka Nacua inactive; Tyler Higbee back (absent 1/9),"G6 own, G9 price, context history"
+LOTTERY,Brenton Strange,JAX,TEN,receptions,5.5,490,0.169,3.8,0.199,3.2,1.17,0.68,0.75,2/8,2/8,1.0,45.5,,,"G4 alt, G6 own, G9 price"
+LOTTERY,Rico Dowdle,PIT,CIN,rush_yards,39.5,164,0.379,39.4,0.429,30.3,1.3,1.0,0.4,3/5,3/5,0.36,49.5,,,G9 price
+LOTTERY,Dalton Schultz,HOU,CLE,rec_yards,29.5,102,0.495,33.0,0.503,28.6,1.15,1.12,0.56,7/8,2/2,0.59,41.5,,Nico Collins back (absent 2/8); Tank Dell back (absent 6/8),"G4 alt, context history"
+LOTTERY,Devaughn Vele,NO,CAR,rec_yards,14.5,-440,0.815,33.7,0.866,29.8,1.13,2.32,0.92,8/8,1/1,0.36,48.5,,Jordyn Tyson back (absent 7/8),context history

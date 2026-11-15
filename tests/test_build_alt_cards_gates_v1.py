@@ -79,10 +79,15 @@ def test_g4_rejects_deep_over_rung():
     assert surv.empty and rej.gate.iat[0] == "G4_frac_deep"
 
 
-def test_g5_rejects_receptions_market():
-    """receptions returned -30.0% ROI blind on 1260 week-9 rungs."""
+def test_g5_admits_receptions_but_not_excluded_markets():
+    """2026-11-13 operator ruling: receptions are not a banned market (the rule is
+    "no receptions-only ticket", enforced by validate_ticket_card_v1). Week-9
+    receptions were -30.0% blind, so they still face every other gate."""
     surv, rej = _gates([_leg(market="receptions", main_line=3.5, alt_threshold=1.5,
                              model_proj=3.8, frac_of_line=0.43)])
+    assert len(surv) == 1 and rej.empty
+    surv, rej = _gates([_leg(market="rush_rec_yards", main_line=60.0, alt_threshold=20.0,
+                             model_proj=60.0, frac_of_line=0.33)])
     assert surv.empty and rej.gate.iat[0] == "G5_market"
 
 
@@ -206,3 +211,18 @@ def test_depth_cap_sits_inside_the_measured_cliff():
     """Rungs beyond 1.6x returned -55.1% ROI on 593 week-9 rungs."""
     from scripts.research.build_alt_cards_v1 import FRAC_MAX
     assert FRAC_MAX <= 1.6
+
+
+def test_g7_cut_is_computed_within_each_market():
+    """2026-11-15: one mixed-market quantile failed every rush rung (rush yards
+    allowed ~70-130 < a cut set by receiving/passing yards) and could never fail
+    a pass rung. The toughest quartile must be measured within the market."""
+    rows = [_leg(player=f"R{i}", market="rush_yards", def_allowed=float(d), event_id=f"r{i}")
+            for i, d in enumerate([70, 85, 100, 115, 130])]
+    rows += [_leg(player=f"Q{i}", market="pass_yards", main_line=220.0, alt_threshold=100.0,
+                  model_proj=230.0, frac_of_line=0.45, def_allowed=float(d), event_id=f"q{i}")
+             for i, d in enumerate([170, 195, 220, 245, 270])]
+    surv, rej = _gates(rows)
+    killed = set(rej[rej.gate == "G7_matchup"].player)
+    assert killed == {"R0", "Q0"}
+    assert {"R1", "R2", "R3", "R4", "Q1", "Q2", "Q3", "Q4"} <= set(surv.player)
