@@ -1,0 +1,7 @@
+ticket,tier,player,team,opponent,event_id,market,side,threshold,price_american,book,model_prob,own,state_label,price_basis,status,football_reason
+LOTTERY,LOTTERY,Bryce Young,CAR,NO,e5aa20e1364dd639f042af1c2281bbe2,pass_yards,OVER,324.5,470,fanduel,0.1757,2/8,HEALTHY_FULL,naive_product,,model 266 vs book 255; model 18% and season 2/8 vs 18% needed
+LOTTERY,LOTTERY,Deshaun Watson,CLE,HOU,be0e03cc42fbc9b6962467b22c7bf9dd,pass_yards,OVER,274.5,400,fanduel,0.2079,2/8,HEALTHY_FULL,naive_product,,model 230 vs book 208; model 21% and season 2/8 vs 20% needed
+LOTTERY,LOTTERY,Rico Dowdle,PIT,CIN,48e497c230e6c9afcb3b600091d28e17,rush_yards,OVER,39.5,164,fanduel,0.4288,3/5,HEALTHY_FULL,naive_product,,model 39 vs book 30; model 43% and season 3/5 vs 38% needed
+LOTTERY,LOTTERY,Cooper Kupp,SEA,LV,6079a5cbabf99b265a17edfc92a1da60,rec_yards,OVER,19.5,-106,fanduel,0.535,6/9,HEALTHY_FULL,naive_product,,model 24 vs book 19; model 54% and season 6/9 vs 51% needed
+LOTTERY,LOTTERY,Darren Waller,CAR,NO,e5aa20e1364dd639f042af1c2281bbe2,rec_yards,OVER,24.5,-162,fanduel,0.6212,6/8,HEALTHY_FULL,naive_product,,model 33 vs book 30; model 62% and season 6/8 vs 62% needed
+LOTTERY,LOTTERY,Tetairoa McMillan,CAR,NO,e5aa20e1364dd639f042af1c2281bbe2,rec_yards,OVER,39.5,-420,fanduel,0.815,7/8,HEALTHY_FULL,naive_product,,model 64 vs book 66; model 82% and season 7/8 vs 81% needed
