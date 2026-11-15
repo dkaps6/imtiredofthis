@@ -1,0 +1,38 @@
+card,ticket,player,market,side,line,actual,leg_hit,ticket_result
+"A nine-gate builder, pre-fix (cushion-ranked)",SAFE -506,Malachi Fields,rec_yards,OVER,4.5,62.0,1,WON
+"A nine-gate builder, pre-fix (cushion-ranked)",SAFE -506,Stefon Diggs,rec_yards,OVER,9.5,83.0,1,WON
+"A nine-gate builder, pre-fix (cushion-ranked)",MODERATE -466,Isaiah Likely,rec_yards,OVER,9.5,127.0,1,WON
+"A nine-gate builder, pre-fix (cushion-ranked)",MODERATE -466,Antonio Williams,rec_yards,OVER,9.5,42.0,1,WON
+"A nine-gate builder, pre-fix (cushion-ranked)",MODERATE -466,Chig Okonkwo,rec_yards,OVER,9.5,24.0,1,WON
+"B nine-gate builder, value-ranked (23:25Z)",SAFE +115,Stefon Diggs,rec_yards,OVER,29.5,83.0,1,WON
+"B nine-gate builder, value-ranked (23:25Z)",SAFE +115,Malachi Fields,rec_yards,OVER,14.5,62.0,1,WON
+"B nine-gate builder, value-ranked (23:25Z)",MODERATE -305,Antonio Williams,rec_yards,OVER,14.5,42.0,1,WON
+"B nine-gate builder, value-ranked (23:25Z)",MODERATE -305,Rachaad White,rush_yards,OVER,14.5,47.0,1,WON
+"B nine-gate builder, value-ranked (23:25Z)",MODERATE -305,Isaiah Likely,rec_yards,OVER,9.5,127.0,1,WON
+C blended estimator (00:05Z),SAFE -111,Stefon Diggs,rec_yards,OVER,24.5,83.0,1,WON
+C blended estimator (00:05Z),SAFE -111,Malachi Fields,rec_yards,OVER,14.5,62.0,1,WON
+C blended estimator (00:05Z),MODERATE +259,Stefon Diggs,rec_yards,OVER,24.5,83.0,1,LOST
+C blended estimator (00:05Z),MODERATE +259,Malachi Fields,rec_yards,OVER,14.5,62.0,1,LOST
+C blended estimator (00:05Z),MODERATE +259,Darnell Mooney,rec_yards,OVER,13.5,8.0,0,LOST
+C blended estimator (00:05Z),MEDIUM +678,Stefon Diggs,rec_yards,OVER,24.5,83.0,1,LOST
+C blended estimator (00:05Z),MEDIUM +678,Malachi Fields,rec_yards,OVER,14.5,62.0,1,LOST
+C blended estimator (00:05Z),MEDIUM +678,Malik Nabers,rec_yards,OVER,99.5,44.0,0,LOST
+C blended estimator (00:05Z),HIGH +1823,Malachi Fields,rec_yards,OVER,14.5,62.0,1,LOST
+C blended estimator (00:05Z),HIGH +1823,Malik Nabers,rec_yards,OVER,109.5,44.0,0,LOST
+C blended estimator (00:05Z),HIGH +1823,Darnell Mooney,rec_yards,OVER,19.5,8.0,0,LOST
+D all-markets final card (00:20Z),SAFE +161,Malachi Fields,rec_yards,OVER,14.5,62.0,1,LOST
+D all-markets final card (00:20Z),SAFE +161,Rachaad White,rush_yards,UNDER,38.5,47.0,0,LOST
+D all-markets final card (00:20Z),MODERATE +417,Malachi Fields,rec_yards,OVER,14.5,62.0,1,LOST
+D all-markets final card (00:20Z),MODERATE +417,Rachaad White,rush_yards,UNDER,38.5,47.0,0,LOST
+D all-markets final card (00:20Z),MODERATE +417,Antonio Williams,receptions,UNDER,3.5,2.0,1,LOST
+D all-markets final card (00:20Z),MEDIUM +731,Malachi Fields,receptions,OVER,2.5,3.0,1,LOST
+D all-markets final card (00:20Z),MEDIUM +731,Rachaad White,rush_yards,UNDER,38.5,47.0,0,LOST
+D all-markets final card (00:20Z),MEDIUM +731,Isaiah Likely,rec_yards,UNDER,46.5,127.0,0,LOST
+D all-markets final card (00:20Z),HIGH +3036,Malachi Fields,receptions,OVER,3.5,3.0,0,LOST
+D all-markets final card (00:20Z),HIGH +3036,Malik Nabers,rec_yards,OVER,69.5,44.0,0,LOST
+D all-markets final card (00:20Z),HIGH +3036,Rachaad White,rush_yards,UNDER,38.5,47.0,0,LOST
+D all-markets final card (00:20Z),HIGH +3036,Antonio Williams,receptions,UNDER,3.5,2.0,1,LOST
+D all-markets final card (00:20Z),LOTTERY +11554,Malachi Fields,receptions,OVER,4.5,3.0,0,LOST
+D all-markets final card (00:20Z),LOTTERY +11554,Malik Nabers,rec_yards,OVER,99.5,44.0,0,LOST
+D all-markets final card (00:20Z),LOTTERY +11554,Jayden Daniels,rush_yards,UNDER,38.5,28.0,1,LOST
+D all-markets final card (00:20Z),LOTTERY +11554,Isaiah Likely,rec_yards,UNDER,46.5,127.0,0,LOST
