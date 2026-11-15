@@ -85,7 +85,13 @@ def validate(df: pd.DataFrame, safe_floor: float = SAFE_FLOOR_AMERICAN) -> list[
             E(t, "ticket is made only of reception lines")
         for r in g.itertuples():
             mp = getattr(r, "model_prob", None)
-            if str(getattr(r, "edge_basis", "model")) == "history":
+            if str(getattr(r, "edge_basis", "model")) == "cushion":
+                # Nov 9 rule: the model-backed edge is the rung sitting >= 1.5x under the
+                # projection (week-9 measured +EV band), not a per-leg probability.
+                cu = float(getattr(r, "cushion", 0) or 0)
+                if cu < 1.5:
+                    E(t, f"{r.player} {r.market}: cushion {cu:.2f} is under 1.5x the projection")
+            elif str(getattr(r, "edge_basis", "model")) == "history":
                 # Edge from the player's own history; the model must clear the line
                 # (checked by the builder). Validate the stated history here.
                 h, n = (int(x) for x in str(getattr(r, "own", "0/0")).split("/"))
