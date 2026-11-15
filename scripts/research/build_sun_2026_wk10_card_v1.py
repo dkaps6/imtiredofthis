@@ -1,6 +1,8 @@
 import pandas as pd, numpy as np, sys
 sys.path.insert(0,'.')
 from scripts.research.validate_ticket_card_v1 import validate
+from scripts.research.build_slate_alt_legs_v1 import team_change_state
+import nflreadpy as nfl
 S='/tmp/claude-0/-home-user-imtiredofthis/1701f8f3-afc9-57ea-bbc6-cce4dc6b5fbd/scratchpad/'
 L=pd.read_csv(S+'sun_legs.csv'); L=L[L.book=='fanduel']
 dec=lambda a:1+a/100 if a>0 else 1+100/-a
@@ -20,7 +22,8 @@ REASON={
  ('Kayshon Boutte',14.5):"8/8 over 14.5 (low 16); model 30.",
  ('Kayshon Boutte',24.5):"5/8 over 24.5; model 30 vs CLE.",
  ('Cooper Kupp',14.5):"SEA slot, 7/9 over 14.5; model 24 vs a rookie-QB LV team likely to trail.",
- ('Keenan Allen',19.5):"SF WR, 7/8 over 19.5, model 34 vs book 24.5; DAL-SF is the highest total (55.5).",
+ ('Javonte Williams',39.5):"DAL lead back (72% snaps, 11-25 carries), 8/9 over 39.5 (floor 30, median 56); RB Goodson OUT; total 55.5. Replaced Keenan Allen (traded IND->SF, first SF game).",
+ ('Khalil Shakir',24.5):"BUF slot, 7/8 over 24.5 (median 54; the miss was a full 73%-snap game); model 48 vs NYJ. Replaced Keenan Allen.",
  ('Matthew Stafford',224.5):"43 attempts last week; ARI starts a rookie QB, so LAR should control. 5/9 over 224.5, model 254.",
  ('Matthew Stafford',299.5):"Ceiling leg: 4 of 9 games over 299.5. Model 22% vs a 13.5% price.",
  ('Braelon Allen',39.5):"NYJ lead back, 6/9 over 39.5 (median 59); model 46. Risk: NYJ trailing BUF.",
@@ -32,20 +35,25 @@ REASON={
 }
 CARD={
  'SAFE':[('Josh Allen','pass_yards',149.5),('Brenton Strange','rec_yards',14.5),('Devaughn Vele','rec_yards',14.5),('Xavier Hutchinson','rec_yards',9.5),('AJ Barner','rec_yards',4.5),('Daniel Jones','pass_yards',99.5),('Aaron Rodgers','pass_yards',149.5),('Jahan Dotson','rec_yards',4.5),('Ryan Flournoy','rec_yards',19.5)],
- 'MODERATE':[('Bryce Young','pass_yards',249.5),('Kayshon Boutte','rec_yards',14.5),('Cooper Kupp','rec_yards',14.5),('Keenan Allen','rec_yards',19.5)],
+ 'MODERATE':[('Bryce Young','pass_yards',249.5),('Kayshon Boutte','rec_yards',14.5),('Cooper Kupp','rec_yards',14.5),('Javonte Williams','rush_yards',39.5),('Khalil Shakir','rec_yards',24.5)],
  'MEDIUM':[('Matthew Stafford','pass_yards',224.5),('Braelon Allen','rush_yards',39.5),('Dalton Schultz','rec_yards',19.5),('Rico Dowdle','rush_yards',29.5),('Daniel Jones','pass_yards',99.5),('Jahan Dotson','rec_yards',4.5)],
- 'HIGH':[('Bryce Young','pass_yards',274.5),('Kayshon Boutte','rec_yards',24.5),('Cooper Kupp','rec_yards',14.5),('Keenan Allen','rec_yards',19.5),('Braelon Allen','rush_yards',39.5),('Aaron Rodgers','pass_yards',149.5)],
+ 'HIGH':[('Bryce Young','pass_yards',274.5),('Kayshon Boutte','rec_yards',24.5),('Cooper Kupp','rec_yards',14.5),('Javonte Williams','rush_yards',39.5),('Braelon Allen','rush_yards',39.5),('Aaron Rodgers','pass_yards',149.5)],
  'LOTTERY':[('Matthew Stafford','pass_yards',299.5),('Brenton Strange','receptions',5.5),('Rico Dowdle','rush_yards',39.5),('Dalton Schultz','rec_yards',29.5),('Devaughn Vele','rec_yards',14.5)],
 }
+# Team-change check: the state comes from each player's prior games, never a constant.
+st=nfl.load_player_stats(seasons=[2026]).to_pandas(); st=st[(st.season_type=='REG')&(st.week<10)]
+def state_of(p,team):
+    return team_change_state(st[st.player_display_name==p].sort_values('week').team.tolist(),team)
 rows=[]
 for t,legs in CARD.items():
     for p,m,thr in legs:
         r=L[(L.player==p)&(L.market==m)&(L.alt_threshold==thr)]
         if r.empty: raise SystemExit(f"MISSING {t} {p} {m} {thr}")
         r=r.sort_values('offered_american',ascending=False).iloc[0]
+        gwt,state,hist=state_of(p,r.team)
         rows.append(dict(ticket=t,tier=t,player=p,team=r.team,opponent=r.opponent,event_id=r.event_id,market=m,side='OVER',threshold=thr,
             price_american=int(r.offered_american),book='fanduel',model_prob=round(float(r.model_prob),4),breakeven=round(float(r.breakeven),4),
-            own=f"{int(r.own_hits)}/{int(r.own_games)}",state_label='HEALTHY_FULL',price_basis='naive_product',football_reason=REASON[(p,thr)]))
+            own=f"{int(r.own_hits)}/{int(r.own_games)}",games_with_team=gwt,team_history=hist,state_label=state,price_basis='naive_product',football_reason=REASON[(p,thr)]))
 C=pd.DataFrame(rows)
 for t,g in C.groupby('ticket',sort=False):
     assert g.event_id.nunique()==len(g), f"{t}: two legs from one game"

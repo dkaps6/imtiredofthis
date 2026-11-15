@@ -16,6 +16,13 @@ overstatement on the picked side).
 Strictly prior evidence only: own history and matchup use weeks < target week.
 No sportsbook variable reaches model_proj (AGENTS.md section 3); price is used
 for breakeven and the market's main line for the real-alternate gate.
+
+Team-change check (added after Keenan Allen, wk10 2026: traded IND -> SF, all 8
+prior games with IND, first game with SF on the day of the card). A player whose
+prior games were for another team and who has fewer than NEW_TEAM_MIN_GAMES games
+with today's team is labeled UNRESOLVED_CONTEXT: his own history describes a role
+in a different offense, so it cannot be affirmative evidence (AGENTS.md anomaly
+gate). The card validator refuses such legs.
 """
 from __future__ import annotations
 import argparse
@@ -31,11 +38,23 @@ FAM_COL = {"rec_yards": (("WR", "TE"), "receiving_yards"), "receptions": (("WR",
            "rush_yards": (("RB",), "rushing_yards"), "rush_rec_yards": (("RB",), "rushing_yards"),
            "pass_yards": (("QB",), "passing_yards")}
 NFL_TEAM = {"LAR": "LA"}
+NEW_TEAM_MIN_GAMES = 3
 nm = lambda s: s.astype(str).str.lower().str.replace(r"[^a-z]", "", regex=True)
 
 
 def ip(x):
     x = float(x); return (-x) / ((-x) + 100) if x < 0 else 100 / (x + 100)
+
+
+def team_change_state(prior_teams, team_today) -> tuple[int, str, str]:
+    """(games with today's team, state_label, history) from the team of each prior game."""
+    today = NFL_TEAM.get(str(team_today), str(team_today))
+    teams = [NFL_TEAM.get(str(t), str(t)) for t in prior_teams]
+    with_today = sum(t == today for t in teams)
+    hist = ",".join(f"{t}:{teams.count(t)}" for t in dict.fromkeys(teams))
+    if len(teams) > with_today and with_today < NEW_TEAM_MIN_GAMES:
+        return with_today, "UNRESOLVED_CONTEXT", hist
+    return with_today, "HEALTHY_FULL", hist
 
 
 def main_line(g):
@@ -91,6 +110,7 @@ def main() -> int:
         wk = played.get(k, set())
         s = s[s.week.isin(wk)] if wk else s
         vals = s[STAT[mk]].fillna(0).to_numpy(float)
+        gwt, state, hist = team_change_state(s.sort_values("week").team.tolist(), b.team)
         opp = NFL_TEAM.get(str(b.opponent), str(b.opponent))
         da = float(allowed[mk].get(opp, np.nan))
         ml = main_line(g)
@@ -103,6 +123,7 @@ def main() -> int:
                 snap_pct=float(snap.get(k, np.nan)), own_games=int(len(vals)), own_hits=int((vals > thr).sum()),
                 own_floor=float(vals.min()) if len(vals) else np.nan, own_median=float(np.median(vals)) if len(vals) else np.nan,
                 def_allowed=da, injury_status="", quarantined=False,
+                games_with_team=gwt, team_history=hist, state_label=state,
                 model_prob=float((draws > thr).mean()), breakeven=ip(r.price_american)))
     out = pd.DataFrame(rows)
     out.to_csv(a.out, index=False)

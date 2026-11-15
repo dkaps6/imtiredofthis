@@ -31,6 +31,9 @@ LOTTERY_MIN_AMERICAN = 24900         # 250x gross on the stake (override + rejec
 MAX_REGULAR_TICKETS_PER_PLAYER = 2   # five regular tickets; MOONSHOT is separate
 REGULAR = {"SAFE", "MODERATE", "MEDIUM", "HIGH", "LOTTERY"}
 BAD_STATES = {"DNP_INACTIVE", "RETURN_FROM_INJURY", "UNRESOLVED_CONTEXT", "PARTIAL_GAME"}
+# Fail closed (AGENTS.md anomaly gate): an inactive player, or one whose context is
+# unresolved (e.g. first game with a new team), cannot carry a leg at all.
+REFUSED_STATES = {"DNP_INACTIVE", "UNRESOLVED_CONTEXT"}
 NEED = ["ticket", "tier", "player", "market", "side", "threshold", "price_american",
         "book", "football_reason", "state_label", "price_basis"]
 
@@ -91,7 +94,11 @@ def validate(df: pd.DataFrame, safe_floor: float = SAFE_FLOOR_AMERICAN) -> list[
                      "including on HIGH and LOTTERY")
             if not str(r.football_reason).strip() or str(r.football_reason).strip().lower() == "nan":
                 E(t, f"{r.player} {r.market}: no football reason stated")
-            if str(r.state_label).strip().upper() in BAD_STATES:
+            state = str(r.state_label).strip().upper()
+            if state in REFUSED_STATES:
+                E(t, f"{r.player}: state {r.state_label} is refused; an unresolved or inactive "
+                     "player cannot carry a leg (anomaly gate)")
+            elif state in BAD_STATES:
                 W(t, f"{r.player}: state {r.state_label} cannot be affirmative evidence (anomaly gate)")
             if r.market in {"rush_yards", "rush_rec_yards"} and r.side == "UNDER":
                 W(t, f"{r.player} {r.market} UNDER is in the known-systematic RB under family; "

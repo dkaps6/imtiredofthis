@@ -7,10 +7,28 @@ audits); legs `data/research/sun_2026_wk10_card_v1.csv`; builder
 | ticket | price | legs | model ticket % | breakeven |
 |---|---|---|---|---|
 | SAFE | +188 | 9 | 49.9% | 34.8% |
-| MODERATE | +707 | 4 | 21.3% | 12.4% |
+| MODERATE | +669 | 5 | 20.3% | 13.0% |
 | MEDIUM | +1561 | 6 | 17.2% | 6.0% |
-| HIGH | +3922 | 6 | 5.8% | 2.5% |
+| HIGH | +2933 | 6 | 6.5% | 3.3% |
 | LOTTERY | +28475 | 5 | 0.81% | 0.35% |
+
+## Revision 11:30 ET: Keenan Allen removed (team change)
+Keenan Allen (o19.5, on MODERATE and HIGH) was traded IND -> SF; all 8 of his 2026
+games were with IND and today is his first SF game. His own history and the
+model's projection describe his IND role, so the leg had no evidence behind it.
+The card process stamped every leg HEALTHY_FULL without a team-change check; it
+now derives `state_label` from each player's prior teams
+(`build_slate_alt_legs_v1.team_change_state`: fewer than 3 games with today's
+team after playing elsewhere = UNRESOLVED_CONTEXT) and `validate_ticket_card_v1`
+refuses UNRESOLVED_CONTEXT and DNP_INACTIVE legs as errors. No other card or pool
+player had a team change.
+* MODERATE: Allen -> Javonte Williams rush o39.5 (-360) + Khalil Shakir o24.5 (-380).
+* HIGH: Allen -> Javonte Williams rush o39.5 (-360).
+* Considered and rejected: Mahomes (still the elbow rejection below; the club
+  report lists him full/no designation, but the morning call stands), Tony Pollard
+  (his wk7-8 surge came with Tyjae Spears out; Spears is questionable/full and
+  likely back, and in the shared weeks Pollard cleared 49.5 only 3/5), Jakobi
+  Meyers (limited again this week; snaps fell to 54-68% after the wk8 hamstring).
 
 ## How it was built (and what it was checked against)
 * Quarterbacks verified per team before pricing: ARI Beck, TEN Ward, LV Mendoza
@@ -34,7 +52,7 @@ elbow, UCL sprain); Juwan Johnson and Darren Waller (zero-yard games at the rung
 ## Known risks
 * "Model ticket %" uses the model's own probabilities, which V27 records as
   overconfident; read them as optimistic.
-* MODERATE and HIGH share Kupp, Keenan Allen, Boutte and Young.
+* MODERATE and HIGH share Kupp, Javonte Williams, Boutte and Young.
 * SNF legs (Rodgers, Dowdle) carry inactive risk until ~6:50pm ET.
 * Braelon Allen: NYJ may trail BUF. Dowdle: 40% snaps, 5-game sample.
 * Prices captured 10:31 ET.

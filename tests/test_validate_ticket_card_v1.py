@@ -91,3 +91,18 @@ def test_missing_model_prob_warns_only_on_high_and_lottery():
     mod = [leg("B", "MODERATE", "P1", 200, **base)]
     assert any("no model probability" in m for m in warns(hi))
     assert not any("no model probability" in m for m in warns(mod))
+
+def test_unresolved_context_and_inactive_legs_are_refused():
+    # Keenan Allen, wk10 2026: first game with SF after the trade from IND
+    for state in ("UNRESOLVED_CONTEXT", "DNP_INACTIVE"):
+        e = errs([leg("A", "MODERATE", "KEENAN", 300, state=state)])
+        assert any("is refused" in m for m in e), state
+    assert not errs([leg("A", "MODERATE", "P1", 300, state="RETURN_FROM_INJURY")])
+
+def test_team_change_state_flags_a_traded_player():
+    from scripts.research.build_slate_alt_legs_v1 import team_change_state
+    assert team_change_state(["IND"] * 8, "SF") == (0, "UNRESOLVED_CONTEXT", "IND:8")
+    assert team_change_state(["IND"] * 6 + ["SF"] * 2, "SF")[1] == "UNRESOLVED_CONTEXT"
+    assert team_change_state(["IND"] * 5 + ["SF"] * 3, "SF")[1] == "HEALTHY_FULL"
+    assert team_change_state(["LA"] * 9, "LAR") == (9, "HEALTHY_FULL", "LA:9")
+    assert team_change_state([], "SF") == (0, "HEALTHY_FULL", "")
