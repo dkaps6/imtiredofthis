@@ -57,6 +57,12 @@ def matchup_pct(legs: pd.DataFrame) -> pd.Series:
 
 def teammate_context(st, played, team_now, inj_out, player, team, market, thr):
     """(ctx_games, ctx_hits, notes) for history matching today's teammate availability."""
+    vals, notes = teammate_context_values(st, played, team_now, inj_out, player, team, market)
+    return len(vals), int((vals > thr).sum()), notes
+
+
+def teammate_context_values(st, played, team_now, inj_out, player, team, market):
+    """(stat values in games matching today's key-teammate availability, notes)."""
     fams, use, share_min = GROUP[market]
     T = NFL_TEAM.get(team, team)
     tg = st[(st.team == T) & (st.position.isin(fams))]
@@ -91,8 +97,7 @@ def teammate_context(st, played, team_now, inj_out, player, team, market, thr):
             why = "traded" if team_now.get(q) not in (None, T) else ("out today" if q in inj_out else "inactive")
             notes.append(f"{q} {why}")
     m = me[np.array(match, bool)] if len(me) else me
-    vals = m[STAT[market]].fillna(0).to_numpy(float)
-    return len(vals), int((vals > thr).sum()), "; ".join(notes)
+    return m[STAT[market]].fillna(0).to_numpy(float), "; ".join(notes)
 
 
 def main() -> int:

@@ -367,3 +367,38 @@ Current order:
 7. resume RB, WR and TE model refinement on the corrected production foundation.
 
 Do not spend production-overhaul time rewriting historical/backtest code simply because it contains 2025. Historical years are expected there. Focus on code that is executed by, imported into, or supplies artifacts to Full Slate.
+
+---
+
+## 10) Weekly alternate-line ticket cards — ONE procedure, in code
+
+Operator, 2026-11-15: "I shouldn't have to remind you how to do this every week."
+Tickets were being hand-assembled from pools built different ways each time, and
+that put Keenan Allen (first game after a trade), Braelon Allen (Breece Hall back),
+Daniel Jones (receivers traded) and Stafford (Nacua and Adams on IR) on a card.
+
+Build every card with these scripts, in this order, and nothing else:
+
+1. `scripts/research/build_slate_alt_legs_v1.py` — board + alt ladders -> candidate rungs.
+2. `scripts/research/build_weekly_alt_card_v1.py` — runs every check on every rung
+   and assembles the tickets by rule (`--exclude-teams` for QB-change/first-start
+   teams, `--quarantine` for hand-ruled-out players, each with its reason in the doc).
+3. `scripts/research/validate_ticket_card_v1.py` runs inside the builder; any ERROR
+   means no card.
+4. `scripts/research/audit_card_legs_v1.py` prints the per-leg checklist for any card.
+
+Checks on EVERY tier: snaps, main-line role floor, market allowed, matchup
+(toughest quartile within the market), availability (no Out/Doubtful/Questionable),
+QB context, player team change, teammate context (history recomputed on games that
+match today's key-teammate availability, >= 3 such games and above breakeven; a key
+teammate newly arrived by trade fails closed), and model probability above the
+price's breakeven. SAFE adds cushion >= 1.50, real alternate, own >= 60%, price
+window; MODERATE/MEDIUM add real alternate and own >= 60%; HIGH/LOTTERY add real
+alternate and own history above breakeven.
+
+Ticket rules (operator): SAFE strictly over +150; LOTTERY >= 250x or UNSOLVED; no
+player on more than two tickets; no receptions-only ticket; one leg per game per
+ticket; one book. A tier the slate cannot fill under these rules is reported as
+SHORT or UNSOLVED. **Never hand-pick a replacement leg, and never relax a check to
+fill a tier.** Same-day news (inactives, trades, IR moves) goes in as
+`--quarantine` / `--exclude-teams` and the builder is re-run.

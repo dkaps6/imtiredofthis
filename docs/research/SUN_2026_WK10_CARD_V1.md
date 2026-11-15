@@ -1,5 +1,10 @@
 # Sunday 2026 week 10 card (1pm, 4pm and SNF games)
 
+> **SUPERSEDED 11:45 ET by `SUN_2026_WK10_CARD_V2.md`.** This version was
+> hand-assembled from pools built by different rules; the one-checklist audit
+> (`data/research/sun_2026_wk10_card_audit_v1.csv`) found 6 of 32 leg slots
+> passing every check. Kept for lineage only. Do not place it.
+
 Board: Full Slate run 43730255663 (paid pull 15:31Z, all steps green incl. strict
 audits); legs `data/research/sun_2026_wk10_card_v1.csv`; builder
 `scripts/research/build_sun_2026_wk10_card_v1.py`. NE@DET (9:30am) was missed.
