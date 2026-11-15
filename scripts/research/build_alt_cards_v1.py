@@ -158,7 +158,12 @@ PRICE_MIN, PRICE_MAX = -2500, 130
 # has to clear all nine gates and the card validator's edge check.
 EXCLUDED_MARKETS = ("rush_rec_yards", "anytime_td")
 MAIN_LINE_FLOOR = {"rec_yards": 18.0, "rush_yards": 15.0,
-                   "pass_yards": 30.0, "rush_rec_yards": 30.0}
+                   "pass_yards": 30.0, "rush_rec_yards": 30.0,
+                   # Added 2026-11-15 with the receptions ban lifted: without a
+                   # floor G2 rejected every reception rung as role-unknown, so
+                   # lifting the ban did nothing. 2.5 catches mirrors the 18-yard
+                   # rec_yards floor -- a book line under that says no real role.
+                   "receptions": 2.5}
 
 
 def _implied(american: float) -> float:

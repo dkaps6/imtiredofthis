@@ -15,10 +15,10 @@ ARI,Tyler Allgeier,RB,tylerallgeier,ourlads_depth,,,
 ARI,ZAY Jones,LWR,zayjones,ourlads_depth,,,
 ATL,Andy Dalton,QB,andydalton,ourlads_depth,,,
 ATL,Austin Hooper,TE,austinhooper,ourlads_depth,,,
-ATL,Beaux Collins,LWR,beauxcollins,ourlads_depth,,,
+ATL,Beaux Collins,RWR,beauxcollins,ourlads_depth,,,
 ATL,Bijan Robinson,RB,bijanrobinson,ourlads_depth,,,
 ATL,Charlie Woerner,TE,charliewoerner,ourlads_depth,,,
-ATL,Chris Blair,RWR,chrisblair,ourlads_depth,,,
+ATL,Chris Blair,LWR,chrisblair,ourlads_depth,,,
 ATL,Drake London,LWR,drakelondon,ourlads_depth,,,
 ATL,Jahan Dotson,RWR,jahandotson,ourlads_depth,,,
 ATL,Khalil Herbert,RB,khalilherbert,ourlads_depth,,,
@@ -228,15 +228,15 @@ KC,Patrick Mahomes,QB,patrickmahomes,ourlads_depth,,,Full Participation in Pract
 KC,Rashee Rice,RWR,rasheerice,ourlads_depth,,,Full Participation in Practice
 KC,Travis Kelce,TE,traviskelce,ourlads_depth,,,Full Participation in Practice
 KC,Xavier Worthy,LWR,xavierworthy,ourlads_depth,,,Full Participation in Practice
-LAC,Brenen Thompson,RWR,brenenthompson,ourlads_depth,,,Did Not Participate In Practice
+LAC,Brenen Thompson,RWR,brenenthompson,ourlads_depth,Doubtful,Doubtful,Did Not Participate In Practice
 LAC,Charlie Kolar,TE,charliekolar,ourlads_depth,,,
 LAC,Derius Davis,SWR,deriusdavis,ourlads_depth,,,
 LAC,DJ Uiagalelei,QB,djuiagalelei,ourlads_depth,,,
 LAC,Justin Herbert,QB,justinherbert,ourlads_depth,,,
 LAC,Keandre Lambert-Smith,LWR,keandrelambertsmith,ourlads_depth,,,
-LAC,Keaton Mitchell,RB,keatonmitchell,ourlads_depth,,,Limited Participation in Practice
+LAC,Keaton Mitchell,RB,keatonmitchell,ourlads_depth,,,Full Participation in Practice
 LAC,Kimani Vidal,RB,kimanividal,ourlads_depth,,,
-LAC,Ladd McConkey,SWR,laddmcconkey,ourlads_depth,,,Did Not Participate In Practice
+LAC,Ladd McConkey,SWR,laddmcconkey,ourlads_depth,Questionable,Questionable,Did Not Participate In Practice
 LAC,Omarion Hampton,RB,omarionhampton,ourlads_depth,,,
 LAC,Oronde Gadsden,TE,orondegadsden,ourlads_depth,,,
 LAC,Quentin Johnston,LWR,quentinjohnston,ourlads_depth,,,
@@ -306,7 +306,7 @@ MIN,Myles Price,SWR,mylesprice,ourlads_depth,,,
 MIN,Tai Felton,LWR,taifelton,ourlads_depth,,,
 MIN,TJ Hockenson,TE,tjhockenson,ourlads_depth,OUT,OUT,Did Not Participate In Practice
 NE,AJ Brown,LWR,ajbrown,ourlads_depth,Questionable,Questionable,Limited Participation in Practice
-NE,Behren Morton,QB,behrenmorton,ourlads_depth,,,
+NE,Behren Morton,QB,behrenmorton,ourlads_depth,OUT,OUT,
 NE,Cameron Latu,TE,cameronlatu,ourlads_depth,Questionable,Questionable,Limited Participation in Practice
 NE,Corey Kiner,RB,coreykiner,ourlads_depth,,,
 NE,Demario Douglas,SWR,demariodouglas,ourlads_depth,,,
