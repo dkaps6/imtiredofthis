@@ -254,3 +254,29 @@ def test_a_missing_availability_artifact_does_not_block_the_union(monkeypatch, t
     out, _ = su.augment_roles_with_depth_chart(
         _roles([("NYG", "Devin Singletary", "devinsingletary", "RB", "RB1")]), 2026)
     assert "Cam Skattebo" in set(out.player)
+
+
+# ------------------------------------------- the certified team set is not widened
+
+def test_the_union_never_adds_a_team_the_certified_roles_withhold(monkeypatch, no_external):
+    """NYG and WAS played Thursday and left the eligible team set. The depth chart
+    still lists them. Re-admitting them failed the run on the Saturday after the
+    game (run 43675607013), so the union must stay inside the certified teams."""
+    _patch_depth(monkeypatch, [
+        ("NYG", "Cam Skattebo", "camskattebo", "RB", 1),
+        ("DET", "Jahmyr Gibbs", "jahmyrgibbs", "RB", 1),
+        ("DET", "David Montgomery", "davidmontgomery", "RB", 2),
+    ])
+    certified = _roles([("DET", "David Montgomery", "davidmontgomery", "RB", "RB1")])
+    out, stats = su.augment_roles_with_depth_chart(certified, 2026)
+    assert set(out.team) == {"DET"}
+    assert "Cam Skattebo" not in set(out.player)
+    assert stats["dropped_uncertified_team_rows"] == 1
+    # and the legitimate restoration inside a certified team still happens
+    assert dict(zip(out.player, out.role))["Jahmyr Gibbs"] == "RB1"
+
+def test_a_depth_chart_with_only_uncertified_teams_changes_nothing(monkeypatch, no_external):
+    _patch_depth(monkeypatch, [("NYG", "Cam Skattebo", "camskattebo", "RB", 1)])
+    certified = _roles([("DET", "David Montgomery", "davidmontgomery", "RB", "RB1")])
+    out, _ = su.augment_roles_with_depth_chart(certified, 2026)
+    assert out.equals(certified)

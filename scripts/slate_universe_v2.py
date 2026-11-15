@@ -238,6 +238,21 @@ def augment_roles_with_depth_chart(roles: pd.DataFrame, season: int) -> tuple[pd
     stats.update(available=True, depth_rows=int(len(dc)))
 
     base = roles.copy()
+    # THE CERTIFIED TEAM SET IS NOT THE UNION'S TO WIDEN.
+    #
+    # The roles artifact is the availability/timing-certified subset, and its
+    # team set is itself an authority: once a team's game has been played it
+    # leaves the eligible set. The depth chart covers all 32 teams, so an
+    # unrestricted union re-admitted NYG and WAS on the Saturday after their
+    # Thursday game, and the certified-team-scope gate failed the whole run
+    # ("current-team universe != certified current roles; extra=['NYG','WAS']").
+    # Thursday's runs passed only because the clock had not yet moved the set.
+    # The union restores players WITHIN certified teams; it never adds a team.
+    certified_teams = set(base["team"].astype(str))
+    stats["dropped_uncertified_team_rows"] = int((~dc["team"].astype(str).isin(certified_teams)).sum())
+    dc = dc.loc[dc["team"].astype(str).isin(certified_teams)].copy()
+    if dc.empty:
+        return roles, stats
     have = set(zip(base["team"].astype(str), base["player_clean_key"].astype(str)))
     # Match suffix-INSENSITIVELY when deciding whether Ourlads already has a
     # player. The two sources disagree on generational suffixes and initials
