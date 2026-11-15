@@ -70,14 +70,28 @@ TIERS = ["SAFE", "MODERATE", "MEDIUM", "HIGH", "LOTTERY"]
 # middle three are the tier spacing of the 2026-11-15 card.
 MIN_AMERICAN = {"SAFE": 151, "MODERATE": 500, "MEDIUM": 1200, "HIGH": 3000, "LOTTERY": 24900}
 CTX_MIN_GAMES = 3
+PER_GAME_PLAYERS = 4
 TOP_K = 60  # best candidate tickets kept per tier for the joint search
 MAX_TICKETS_PER_PLAYER = 2
 nm = lambda s: re.sub(r"[^a-z]", "", str(s).lower())
 
 
-def check(r, tier: str) -> list[str]:
+def check(r, tier: str, edge_basis: str = "model") -> list[str]:
     """Every failed check for this rung at this tier (empty list = eligible)."""
     f = list(r.common_fails)
+    if edge_basis == "history":
+        # The TNF-validated nine-gate builder used the model as a projection that
+        # must clear the line (cushion), not as a probability that must beat the
+        # price; the model under-projects stars (MODEL_CEILING_COMPRESSION_2026_W10_V1).
+        # The price edge then has to come from the player's own history.
+        # Model-backed = the projection clears the line OR the model's probability
+        # beats the price (the second is how a ceiling rung can be model-backed).
+        if not (r.model_proj > r.alt_threshold or r.model_prob > r.breakeven):
+            f.append("model below line")
+        if r.own_games and r.own_hits / r.own_games <= r.breakeven:
+            f.append("own below breakeven")
+        if r.ctx_games and r.ctx_hits / r.ctx_games <= r.breakeven:
+            f.append("context below breakeven")
     frac = r.frac_of_line
     real_alt = np.isfinite(frac) and frac <= FRAC_MAX and not (NEAR_MAIN_LO <= frac <= NEAR_MAIN_HI)
     if not real_alt:
@@ -117,6 +131,9 @@ def main() -> int:
     ap.add_argument("--exclude-events", default="", help="comma list of event_ids already started")
     ap.add_argument("--quarantine", default="", help="comma list of players ruled out by hand, with reason in the doc")
     ap.add_argument("--out-card", required=True); ap.add_argument("--out-checks", required=True)
+    ap.add_argument("--edge-basis", choices=["model", "history"], default="model",
+                    help="model: model probability must beat the price; history: model projection "
+                         "must clear the line and own + teammate-context history must beat the price")
     a = ap.parse_args()
 
     L = pd.read_csv(a.legs)
@@ -180,12 +197,12 @@ def main() -> int:
                 f.append("teammate arrival")  # a key competitor joined; no shared history exists
             if n < CTX_MIN_GAMES:
                 f.append("teammate context")  # too few games that reflect today's role
-            if not r.model_prob > r.breakeven:
+            if a.edge_basis == "model" and not r.model_prob > r.breakeven:
                 f.append("no model edge")
         rows.append(dict(r._asdict(), common_fails=f, ctx_games=n, ctx_hits=h, context=notes))
     C = pd.DataFrame(rows)
     for t in TIERS:
-        C[f"fails_{t}"] = [", ".join(check(r, t)) for r in C.itertuples(index=False)]
+        C[f"fails_{t}"] = [", ".join(dict.fromkeys(check(r, t, a.edge_basis))) for r in C.itertuples(index=False)]
     C["own_rate"] = C.own_hits / C.own_games.replace(0, np.nan)
     C["leg_value"] = [leg_value(r) for r in C.to_dict("records")]
     C.drop(columns=["common_fails"]).to_csv(a.out_checks, index=False)
@@ -201,7 +218,12 @@ def main() -> int:
     def candidates(t: str, keep: int = TOP_K) -> list[tuple[float, tuple]]:
         """Every one-leg-per-game ticket from tier-eligible rungs reaching the tier's
         minimum odds; the `keep` with the highest estimated hit probability."""
-        E = C[C[f"fails_{t}"] == ""].reset_index(drop=True)
+        E = C[C[f"fails_{t}"] == ""]
+        # Bound the enumeration: each player's best rung for this tier, then the
+        # best PER_GAME_PLAYERS players in each game.
+        key = {"SAFE": "p_est", "MODERATE": "leg_value", "MEDIUM": "leg_value"}.get(t, "offered_american")
+        E = (E.sort_values(key, ascending=False).drop_duplicates("player")
+              .groupby("event_id").head(PER_GAME_PLAYERS).reset_index(drop=True))
         target = np.log(dec(MIN_AMERICAN[t]))
         games = [g.index.tolist() for _, g in E.groupby("event_id")]
         out: list = []
@@ -263,6 +285,7 @@ def main() -> int:
                 breakeven=round(float(r.breakeven), 4), own=f"{int(r.own_hits)}/{int(r.own_games)}",
                 ctx_own=f"{r.ctx_hits}/{r.ctx_games}", context=r.context, state_label="HEALTHY_FULL",
                 price_basis="naive_product", leg_value=round(float(r.leg_value), 4), status=status,
+                edge_basis=a.edge_basis,
                 football_reason=(f"{r.team} vs {r.opponent}: {int(r.own_hits)}/{int(r.own_games)} over "
                                  f"{r.alt_threshold:g} ({r.ctx_hits}/{r.ctx_games} with today's teammates), "
                                  f"snaps {r.snap_pct:.0%}, model {r.model_proj:.0f} vs book {r.main_line:.0f}")))

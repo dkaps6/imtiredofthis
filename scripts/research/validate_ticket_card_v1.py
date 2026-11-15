@@ -85,7 +85,14 @@ def validate(df: pd.DataFrame, safe_floor: float = SAFE_FLOOR_AMERICAN) -> list[
             E(t, "ticket is made only of reception lines")
         for r in g.itertuples():
             mp = getattr(r, "model_prob", None)
-            if mp is None or pd.isna(mp):
+            if str(getattr(r, "edge_basis", "model")) == "history":
+                # Edge from the player's own history; the model must clear the line
+                # (checked by the builder). Validate the stated history here.
+                h, n = (int(x) for x in str(getattr(r, "own", "0/0")).split("/"))
+                if not n or h / n <= 1 / dec(r.price_american):
+                    E(t, f"{r.player} {r.market}: own history {h}/{n} does not exceed breakeven "
+                         f"{1 / dec(r.price_american):.3f}; every leg needs an edge")
+            elif mp is None or pd.isna(mp):
                 if "model_prob" in g.columns and tier in {"HIGH", "LOTTERY"}:
                     W(t, f"{r.player} {r.market}: no model probability stated on a {tier} leg")
             elif float(mp) <= 1 / dec(r.price_american):
