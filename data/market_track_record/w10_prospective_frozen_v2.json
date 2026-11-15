@@ -1,0 +1,56 @@
+{
+  "season": 2026,
+  "week": 10,
+  "captured_utc": "2026-11-15T04:10:55.593643+00:00",
+  "players": 426,
+  "teams": 26,
+  "max_player_stats_week_read": 9,
+  "designations_available": 160,
+  "designated_players_in_universe": 43,
+  "teams_excluded_already_played": [
+    "NYG",
+    "WAS"
+  ],
+  "include_played": false,
+  "arms_frozen": [
+    "base",
+    "d1",
+    "d1d3",
+    "d3"
+  ],
+  "d1_retention_calibration_window": "2026 weeks 2-9",
+  "d1_retention": {
+    "OUT": {
+      "tgt": 0.0,
+      "rush": 0.0,
+      "n": 429,
+      "n_tgt": 116,
+      "n_rush": 71
+    },
+    "DOUBTFUL": {
+      "tgt": 0.0,
+      "rush": 0.0,
+      "n": 28,
+      "n_tgt": 7,
+      "n_rush": 2
+    },
+    "QUESTIONABLE": {
+      "tgt": 0.8199353911125359,
+      "rush": 0.5476829594263083,
+      "n": 450,
+      "n_tgt": 116,
+      "n_rush": 62
+    }
+  },
+  "d1_semantics": "A2 \u2014 mass discarded, applied after sharpening, no redistribution",
+  "totals": {
+    "rec_yards_base": 6524.151146569707,
+    "rush_yards_base": 3103.932081644428,
+    "rec_yards_d1": 6567.745991855161,
+    "rush_yards_d1": 3050.666106367829,
+    "rec_yards_d3": 6187.8703151767,
+    "rush_yards_d3": 2702.3123533514736,
+    "rec_yards_d1d3": 6204.598691888658,
+    "rush_yards_d1d3": 2641.8961226224255
+  }
+}
