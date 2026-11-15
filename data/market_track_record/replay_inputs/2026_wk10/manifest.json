@@ -1,23 +1,17 @@
 {
-  "complete": true,
+  "complete": false,
   "files": {
     "data/injuries.csv": {
       "archived_as": "injuries.csv.gz",
-      "bytes_gz": 3381,
-      "bytes_raw": 24594,
-      "sha256_raw": "8a9f1adaab85d75af26882ae8bfaf47aa3c4465354f02958da5fd616c5b3c7b1"
+      "bytes_gz": 4574,
+      "bytes_raw": 33567,
+      "sha256_raw": "06fa71b1a574e828087c2ebc614eaed60e386630da3f5071e90067af29f7395f"
     },
     "data/injuries_source_status.json": {
       "archived_as": "injuries_source_status.json.gz",
-      "bytes_gz": 336,
-      "bytes_raw": 583,
-      "sha256_raw": "e9da44becaec819ed6e22904d94a5d5141b98337859c9889172648a59ea51dea"
-    },
-    "data/metrics_ready.csv": {
-      "archived_as": "metrics_ready.csv.gz",
-      "bytes_gz": 9004,
-      "bytes_raw": 252933,
-      "sha256_raw": "b0e774afc8c49e030fc4ac20ccf2b0231df7501bef9902cce03a6885bf7347cf"
+      "bytes_gz": 223,
+      "bytes_raw": 258,
+      "sha256_raw": "5a692a3f77775f05427cb492cb840854f9430b12e36aee356a6600843e2b2c55"
     },
     "data/model_ensemble_diagnostics.csv": {
       "archived_as": "model_ensemble_diagnostics.csv.gz",
@@ -33,39 +27,27 @@
     },
     "data/model_ml_diagnostics.csv": {
       "archived_as": "model_ml_diagnostics.csv.gz",
-      "bytes_gz": 33853,
-      "bytes_raw": 145062,
-      "sha256_raw": "f276ffeae0059bbf601bb41b37c3d88145fabc18e12df29a1da9039d6a2776a3"
-    },
-    "data/model_rule_simulation_inputs.csv": {
-      "archived_as": "model_rule_simulation_inputs.csv.gz",
-      "bytes_gz": 14520,
-      "bytes_raw": 320858,
-      "sha256_raw": "ad8be79e314e406e39d1f06475113ad7bc8be783d23c85684c8864e55055908d"
+      "bytes_gz": 30738,
+      "bytes_raw": 132497,
+      "sha256_raw": "7326508134c40b18f441cf4c50abdc5a0e91245cb04ec462ef9c4d74f2283cec"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
-      "bytes_gz": 13795,
-      "bytes_raw": 208180,
-      "sha256_raw": "a61d554e1d1f4ab6a2ac52582b4238cae73c9b2c18e303f3ab514da33c19f32b"
+      "bytes_gz": 12845,
+      "bytes_raw": 187903,
+      "sha256_raw": "8274744539bd77297ac84d23587bab8343b500dda99e2049429ce0a3c65b9f1e"
     },
     "data/player_form_consensus.csv": {
       "archived_as": "player_form_consensus.csv.gz",
-      "bytes_gz": 61078,
-      "bytes_raw": 243109,
-      "sha256_raw": "55f2598bbb87bb5a88f90ebc8721cc7beb385f3c4b9a514217586db8afc83445"
+      "bytes_gz": 56655,
+      "bytes_raw": 224171,
+      "sha256_raw": "a82e5e097f9a7f0c631ed557bb1750e0ad38eb5641166a108c25bf1d917b90c5"
     },
     "data/qb_promoted_team_context.csv": {
       "archived_as": "qb_promoted_team_context.csv.gz",
       "bytes_gz": 4725,
       "bytes_raw": 12237,
       "sha256_raw": "16003685b5f9be71a435358581cf7fe73b22d3099df1e37197b71b1730774c75"
-    },
-    "data/rb_rush_synthesis_context.csv": {
-      "archived_as": "rb_rush_synthesis_context.csv.gz",
-      "bytes_gz": 143,
-      "bytes_raw": 157,
-      "sha256_raw": "4a07c70be06434c6cb44e7e77416e7881519c95ce64a448f19e0def102b3785d"
     },
     "data/team_week_map.csv": {
       "archived_as": "team_week_map.csv.gz",
@@ -75,15 +57,18 @@
     },
     "data/weather_week.csv": {
       "archived_as": "weather_week.csv.gz",
-      "bytes_gz": 1187,
-      "bytes_raw": 3941,
-      "sha256_raw": "806b320be3388fbc61a891586d681f9c93c21aa1095b553f013048015e5855a9"
+      "bytes_gz": 1224,
+      "bytes_raw": 4052,
+      "sha256_raw": "38cf5d36fedd3852270114c6d4f1091d40d59a0e857bad66353a41344b0d9b9e"
     }
   },
   "required_column_stripped": {},
-  "required_missing": [],
-  "source_git_sha": "fd7dead25e9564f82605a5001b84b931622ff5e1",
-  "source_run_id": "43327080728",
+  "required_missing": [
+    "data/metrics_ready.csv",
+    "data/model_rule_simulation_inputs.csv"
+  ],
+  "source_git_sha": "456406896d353f18c8acab7635c38d415f0e52e7",
+  "source_run_id": "43676028234",
   "stem": "2026_wk10",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
