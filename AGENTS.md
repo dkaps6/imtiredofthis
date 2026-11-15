@@ -370,35 +370,26 @@ Do not spend production-overhaul time rewriting historical/backtest code simply 
 
 ---
 
-## 10) Weekly alternate-line ticket cards — ONE procedure, in code
+## 10) Weekly ticket cards — the operator's rules, not a session's
 
-Operator, 2026-11-15: "I shouldn't have to remind you how to do this every week."
-Tickets were being hand-assembled from pools built different ways each time, and
-that put Keenan Allen (first game after a trade), Braelon Allen (Breece Hall back),
-Daniel Jones (receivers traded) and Stafford (Nacua and Adams on IR) on a card.
+**Before building any card, read `docs/research/YOUR_RULES_PLAIN_ENGLISH.md`
+(the CURRENT RULES block), `docs/research/MODEL_BACKED_ALT_LINE_PARLAY_CONSTRUCTION_V1.md`
+and `docs/research/PRISM_ALT_CUSHION_STRATEGY_2026_W9.md`.** Those are the
+operator's rules with his words and dates. Do not rebuild them from a chat
+summary.
 
-Build every card with these scripts, in this order, and nothing else:
+On 2026-11-15 a session working from a compressed summary rebuilt the Sunday card
+five times and reapplied rules the operator had removed (one leg per game) or never
+gave ("model probability must beat the price" as a hard filter, tier minimums of
++500/+1200/+3000). Never do that again: if a rule is not in the CURRENT RULES
+block, it is not a rule.
 
-1. `scripts/research/build_slate_alt_legs_v1.py` — board + alt ladders -> candidate rungs.
-2. `scripts/research/build_weekly_alt_card_v1.py` — runs every check on every rung
-   and assembles the tickets by rule (`--exclude-teams` for QB-change/first-start
-   teams, `--quarantine` for hand-ruled-out players, each with its reason in the doc).
-3. `scripts/research/validate_ticket_card_v1.py` runs inside the builder; any ERROR
-   means no card.
-4. `scripts/research/audit_card_legs_v1.py` prints the per-leg checklist for any card.
-
-Checks on EVERY tier: snaps, main-line role floor, market allowed, matchup
-(toughest quartile within the market), availability (no Out/Doubtful/Questionable),
-QB context, player team change, teammate context (history recomputed on games that
-match today's key-teammate availability, >= 3 such games and above breakeven; a key
-teammate newly arrived by trade fails closed), and model probability above the
-price's breakeven. SAFE adds cushion >= 1.50, real alternate, own >= 60%, price
-window; MODERATE/MEDIUM add real alternate and own >= 60%; HIGH/LOTTERY add real
-alternate and own history above breakeven.
-
-Ticket rules (operator): SAFE strictly over +150; LOTTERY >= 250x or UNSOLVED; no
-player on more than two tickets; no receptions-only ticket; one leg per game per
-ticket; one book. A tier the slate cannot fill under these rules is reported as
-SHORT or UNSOLVED. **Never hand-pick a replacement leg, and never relax a check to
-fill a tier.** Same-day news (inactives, trades, IR moves) goes in as
-`--quarantine` / `--exclude-teams` and the builder is re-run.
+Tooling that implements checks: `scripts/research/build_slate_alt_legs_v1.py`
+(candidate rungs), `scripts/research/build_alt_cards_v1.py` (the nine gates),
+`scripts/research/audit_card_legs_v1.py` (per-leg checklist incl. team change and
+teammate context), `scripts/research/validate_ticket_card_v1.py` (ticket rules).
+`scripts/research/build_weekly_alt_card_v1.py` was written on 2026-11-15 and
+still enforces one leg per game; do not use its ticket assembly until that is
+removed. Same-day news (inactives, trades, IR) is applied as a quarantine and the
+check is re-run; never hand-pick a replacement and never relax a gate to fill a
+ticket.
