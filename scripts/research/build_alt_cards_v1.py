@@ -150,7 +150,13 @@ PRICE_MIN, PRICE_MAX = -2500, 130
 # cannot silently admit them: blind they returned -28.8% and -30.7%, and
 # rush_rec_yards is the worst-calibrated cell family in the repository at
 # -0.0809, every frac band negative from 0.7x upward.
-EXCLUDED_MARKETS = ("receptions", "rush_rec_yards", "anytime_td")
+# 2026-11-13, operator ruling: receptions are NOT a banned market. The rule is
+# "no ticket made only of reception alternates", a ticket-construction cap that
+# validate_ticket_card_v1 enforces. Recorded honestly: on the week-9 board
+# receptions were -30.7% blind, and inside the cushion gate -0.6%. Removing the
+# ban admits the market; it does not certify it, and every reception leg still
+# has to clear all nine gates and the card validator's edge check.
+EXCLUDED_MARKETS = ("rush_rec_yards", "anytime_td")
 MAIN_LINE_FLOOR = {"rec_yards": 18.0, "rush_yards": 15.0,
                    "pass_yards": 30.0, "rush_rec_yards": 30.0}
 

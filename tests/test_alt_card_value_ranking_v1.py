@@ -96,7 +96,14 @@ def test_cards_are_built_cheapest_first_and_stay_disjoint():
 
 
 def test_value_ranking_does_not_admit_an_excluded_market():
-    df = pd.DataFrame([_leg("Malachi Fields", 1.5, -240, 2.5, 3.0, market="receptions")])
+    df = pd.DataFrame([_leg("Rachaad White", 40.5, -240, 60.0, 50.0, market="rush_rec_yards")])
     surv, rej = apply_gates(df, "fanduel")
     assert surv.empty
     assert "G5_market" in set(rej.gate)
+
+
+def test_receptions_are_admitted_not_banned():
+    """Operator ruling 2026-11-13: only receptions-ONLY tickets are disallowed."""
+    from scripts.research.build_alt_cards_v1 import EXCLUDED_MARKETS
+    assert "receptions" not in EXCLUDED_MARKETS
+    assert "rush_rec_yards" in EXCLUDED_MARKETS and "anytime_td" in EXCLUDED_MARKETS
