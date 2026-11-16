@@ -31,3 +31,15 @@ Chase 70+ rec yds (-270), Rodgers 200+ pass (-320).
 LOTTERY: none -- no single-game combination of legs with support reaches 250x.
 Passed on: Metcalf (4/8 over 39.5), Higgins short rungs (22 and 32 in two full games),
 Chase Brown rushing (PIT run D toughest quartile), Burrow 275+ (4/8).
+
+## Final SNF card (~19:47 ET): SAFE / MODERATE / MEDIUM
+Tiers separated by cushion, every leg with the model AND FanDuel's main line both
+above the bet; SAFE legs both >= 1.2x. Each player on at most two tickets.
+* SAFE (naive +190): Rodgers 200+ pass, Burrow 225+ pass, Bernard 25+ rec yds,
+  Warren 40+ rush, Chase Brown 15+ rec yds.
+* MODERATE (naive +238): Ja'Marr Chase 60+ rec yds, Burrow 250+ pass, Metcalf 40+
+  rec yds, Higgins 40+ rec yds, Bernard 30+ rec yds.
+* MEDIUM (naive +377): Chase 6+ receptions, Rodgers 225+ pass, Metcalf 40+ rec yds,
+  Higgins 4+ receptions, Chase Brown 3+ receptions, Warren 40+ rush.
+No HIGH/LOTTERY: the game has 9 qualifying players; with the two-ticket cap no
+further ticket can be built without legs the model and FanDuel do not support.
