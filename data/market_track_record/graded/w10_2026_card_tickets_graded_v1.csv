@@ -1,0 +1,48 @@
+version,ticket,legs,hit,live,result,price,missed
+v1a_1031,SAFE,9,6,9,LOST,188,Brenton Strange o14.5 rec_yards -> 9; Devaughn Vele o14.5 rec_yards -> 14; Aaron Rodgers o149.5 pass_yards -> 143
+v1a_1031,MODERATE,4,2,4,LOST,707,Bryce Young o249.5 pass_yards -> 200; Kayshon Boutte o14.5 rec_yards -> 0
+v1a_1031,MEDIUM,6,4,6,LOST,1561,Dalton Schultz o19.5 rec_yards -> 11; Rico Dowdle o29.5 rush_yards -> 26
+v1a_1031,HIGH,6,3,6,LOST,3922,Bryce Young o274.5 pass_yards -> 200; Kayshon Boutte o24.5 rec_yards -> 0; Aaron Rodgers o149.5 pass_yards -> 143
+v1a_1031,LOTTERY,5,0,5,LOST,28475,Matthew Stafford o299.5 pass_yards -> 249; Brenton Strange o5.5 receptions -> 2; Rico Dowdle o39.5 rush_yards -> 26; Dalton Schultz o29.5 rec_yards -> 11; Devaughn Vele o14.5 rec_yards -> 14
+v1b_1120,SAFE,9,6,9,LOST,188,Brenton Strange o14.5 rec_yards -> 9; Devaughn Vele o14.5 rec_yards -> 14; Aaron Rodgers o149.5 pass_yards -> 143
+v1b_1120,MODERATE,5,3,5,LOST,669,Bryce Young o249.5 pass_yards -> 200; Kayshon Boutte o14.5 rec_yards -> 0
+v1b_1120,MEDIUM,6,4,6,LOST,1561,Dalton Schultz o19.5 rec_yards -> 11; Rico Dowdle o29.5 rush_yards -> 26
+v1b_1120,HIGH,6,3,6,LOST,2933,Bryce Young o274.5 pass_yards -> 200; Kayshon Boutte o24.5 rec_yards -> 0; Aaron Rodgers o149.5 pass_yards -> 143
+v1b_1120,LOTTERY,5,0,5,LOST,28475,Matthew Stafford o299.5 pass_yards -> 249; Brenton Strange o5.5 receptions -> 2; Rico Dowdle o39.5 rush_yards -> 26; Dalton Schultz o29.5 rec_yards -> 11; Devaughn Vele o14.5 rec_yards -> 14
+v1c_1125,SAFE,8,5,8,LOST,169,Brenton Strange o14.5 rec_yards -> 9; Devaughn Vele o14.5 rec_yards -> 14; Aaron Rodgers o149.5 pass_yards -> 143
+v1c_1125,MODERATE,5,3,5,LOST,669,Bryce Young o249.5 pass_yards -> 200; Kayshon Boutte o14.5 rec_yards -> 0
+v1c_1125,MEDIUM,7,4,7,LOST,1438,Dalton Schultz o19.5 rec_yards -> 11; Rico Dowdle o29.5 rush_yards -> 26; Khalil Shakir o29.5 rec_yards -> 26
+v1c_1125,HIGH,7,4,7,LOST,3270,Bryce Young o274.5 pass_yards -> 200; Kayshon Boutte o24.5 rec_yards -> 0; Chase Brown o49.5 rush_yards -> 44
+v1c_1125,LOTTERY,5,0,5,LOST,28475,Matthew Stafford o299.5 pass_yards -> 249; Brenton Strange o5.5 receptions -> 2; Rico Dowdle o39.5 rush_yards -> 26; Dalton Schultz o29.5 rec_yards -> 11; Devaughn Vele o14.5 rec_yards -> 14
+v2a_1143,SAFE,4,2,4,LOST,153,Khalil Shakir o29.5 rec_yards -> 26; Brenton Strange o14.5 rec_yards -> 9
+v2a_1143,MODERATE,5,4,5,LOST,500,Rico Dowdle o39.5 rush_yards -> 26
+v2a_1143,HIGH,4,2,4,LOST,3176,Brenton Strange o4.5 receptions -> 2; Rico Dowdle o39.5 rush_yards -> 26
+v2b_1154,SAFE,4,3,4,LOST,152,Brenton Strange o14.5 rec_yards -> 9
+v2b_1154,MODERATE,5,4,5,LOST,500,Rico Dowdle o39.5 rush_yards -> 26
+v2b_1154,HIGH,4,2,4,LOST,3176,Brenton Strange o4.5 receptions -> 2; Rico Dowdle o39.5 rush_yards -> 26
+v3_1157,SAFE,7,7,7,WON,152,
+v3_1157,MODERATE,5,4,5,LOST,510,Rico Dowdle o39.5 rush_yards -> 26
+v3_1157,MEDIUM,7,4,7,LOST,1207,Brenton Strange o14.5 rec_yards -> 9; Rico Dowdle o39.5 rush_yards -> 26; Darren Waller o24.5 rec_yards -> 24
+v3_1157,HIGH,3,2,3,LOST,3085,Bryce Young o324.5 pass_yards -> 200
+v3_1157,LOTTERY,7,4,7,LOST,25242,Brenton Strange o4.5 receptions -> 2; Kyren Williams o9.5 rec_yards -> 9; Bryce Young o324.5 pass_yards -> 200
+v4_1220,SAFE,10,8,10,LOST,161,Aaron Rodgers o149.5 pass_yards -> 143; Jaylen Warren o29.5 rush_yards -> 15
+v4_1220,HIGH,8,7,8,LOST,684,Tetairoa McMillan o39.5 rec_yards -> 35
+v4lot_1250,LOTTERY,6,2,6,LOST,29179,Bryce Young o324.5 pass_yards -> 200; Rico Dowdle o39.5 rush_yards -> 26; Darren Waller o24.5 rec_yards -> 24; Tetairoa McMillan o39.5 rec_yards -> 35
+v5_1236,SAFE,9,7,9,LOST,163,Aaron Rodgers o149.5 pass_yards -> 143; Geno Smith o149.5 pass_yards -> 148
+v5_1236,MODERATE,8,6,8,LOST,357,Tetairoa McMillan o39.5 rec_yards -> 35; Wan'Dale Robinson o19.5 rec_yards -> 10
+v5_1236,MEDIUM,12,7,12,LOST,801,Mike Gesicki o9.5 rec_yards -> 9; Germie Bernard o19.5 rec_yards -> 0; KC Concepcion o24.5 rec_yards -> 21; Josh Allen o14.5 rush_yards -> 5; Jalen Coker o24.5 rec_yards -> 0
+v5_1236,HIGH,11,9,11,LOST,1679,Darnell Washington o1.5 receptions -> 1; Brenton Strange o24.5 rec_yards -> 9
+snfA_1947,SAFE,5,2,5,LOST,,Aaron Rodgers o174.5 pass_yards -> 143; Jaylen Warren o49.5 rush_yards -> 15; Germie Bernard o24.5 rec_yards -> 0
+snfA_1947,HIGH,4,1,4,LOST,,Jaylen Warren o69.5 rush_yards -> 15; Tee Higgins o79.5 rec_yards -> 66; Aaron Rodgers o199.5 pass_yards -> 143
+snfB,SAFE,6,3,6,LOST,,Aaron Rodgers o199.5 pass_yards -> 143; Germie Bernard o24.5 rec_yards -> 0; Jaylen Warren o39.5 rush_yards -> 15
+snfC,SAFE,5,2,5,LOST,,Aaron Rodgers o199.5 pass_yards -> 143; Germie Bernard o24.5 rec_yards -> 0; Jaylen Warren o39.5 rush_yards -> 15
+snfC,MODERATE,5,4,5,LOST,,Germie Bernard o29.5 rec_yards -> 0
+snfC,MEDIUM,6,4,6,LOST,,Aaron Rodgers o224.5 pass_yards -> 143; Jaylen Warren o39.5 rush_yards -> 15
+snfD,SAFE,5,2,5,LOST,,Aaron Rodgers o199.5 pass_yards -> 143; Germie Bernard o24.5 rec_yards -> 0; Jaylen Warren o39.5 rush_yards -> 15
+snfD,HIGH,5,3,5,LOST,,Darnell Washington o24.5 rec_yards -> 5; Jaylen Warren o49.5 rush_yards -> 15
+snfD,LOTTERY,8,3,8,LOST,,Aaron Rodgers o249.5 pass_yards -> 143; Tee Higgins o79.5 rec_yards -> 66; Germie Bernard o49.5 rec_yards -> 0; DK Metcalf o59.5 rec_yards -> 54; Darnell Washington o2.5 receptions -> 1
+snfE_ladder,SAFE,5,3,5,LOST,,Aaron Rodgers o199.5 pass_yards -> 143; Germie Bernard o24.5 rec_yards -> 0
+snfE_ladder,MODERATE,7,5,7,LOST,,Aaron Rodgers o199.5 pass_yards -> 143; Germie Bernard o29.5 rec_yards -> 0
+snfE_ladder,MEDIUM,7,5,7,LOST,,Aaron Rodgers o224.5 pass_yards -> 143; Germie Bernard o29.5 rec_yards -> 0
+snfE_ladder,HIGH,7,5,7,LOST,,Aaron Rodgers o224.5 pass_yards -> 143; Germie Bernard o39.5 rec_yards -> 0
+snfE_ladder,LOTTERY,8,3,8,LOST,,Tee Higgins o79.5 rec_yards -> 66; Aaron Rodgers o249.5 pass_yards -> 143; DK Metcalf o59.5 rec_yards -> 54; Germie Bernard o49.5 rec_yards -> 0; Darnell Washington o2.5 receptions -> 1

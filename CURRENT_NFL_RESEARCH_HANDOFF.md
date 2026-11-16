@@ -1,6 +1,73 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-11-10 — V27 — **WEEK 9 CLOSED AND FULLY GRADED: THE TABLE'S PROFITABILITY CLAIM IS WITHDRAWN, THE NINE-GATE BUILDER IS THE ONLY THING THAT WORKED, AND IT CANNOT SERVE A LOTTERY TIER**
+## TOP CHECKPOINT — 2026-11-16 — V28 — **WEEK 10 GRADED (MNF PENDING). THE OPERATOR'S TICKET RULES ARE NOW WRITTEN DOWN; READ THEM BEFORE BUILDING ANY CARD**
+
+**Repo:** dkaps6/imtiredofthis. **Branch:** `claude/nice-cori-4qkwqs` (not yet merged to `main`).
+V27 is archived verbatim at `docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V27_PRE_V28_2026-11-16.md`;
+its model-research sections are carried forward below unchanged.
+
+### 0. Before building ANY ticket card — mandatory reading, in order
+1. `docs/research/YOUR_RULES_PLAIN_ENGLISH.md` — the **CURRENT RULES** block: every operator
+   rule with his words and date, plus the list of rules a session invented on 2026-11-15
+   that are **not** his (one leg per game; "model probability must beat the price" as a
+   hard filter; tier minimums +500/+1200/+3000; an exact-match teammate check).
+2. `docs/research/MODEL_BACKED_ALT_LINE_PARLAY_CONSTRUCTION_V1.md` and the binding override
+   `docs/research/evidence/2026-11-01_week8_sunday_tickets/WEEK8_USER_BINDING_TICKET_PAYOUT_AND_CONSTRUCTION_OVERRIDE_20261101.md`.
+3. `docs/research/PRISM_ALT_CUSHION_STRATEGY_2026_W9.md` (+ addenda) and
+   `PRISM_ALT_FOOTBALL_INTEGRATION_2026_W9.md` — the Nov 9 integrated alt-line rule.
+4. `docs/research/WK10_2026_BACKTEST_V1.md` — what week 10 says.
+5. `AGENTS.md` section 10.
+
+**Why this block exists.** On 2026-11-15 the session worked from a compressed chat summary,
+rebuilt the Sunday card five times in two hours, reapplied a rule the operator removed on
+Nov 9 (one leg per game), and added filters he never gave. The operator's trust is very low
+and he asked for a different helper. **Never rebuild his rules from memory or a summary.**
+
+### 1. Week 10 results (`WK10_2026_BACKTEST_V1.md`)
+* TNF: nine-gate builder cards 4/4; ad hoc rebuilds 1/9.
+* Sunday: every version lost except **v3 SAFE +152 (7/7)**, which was replaced 23 minutes
+  later. SNF: 0 of 14 tickets across five versions.
+* Biggest single cause: **Rodgers on four Sunday tickets and every SNF ticket**; he was pulled
+  in a 38-18 blowout (143 yds, 82% snaps). Concentration, plus a game script (PIT secondary
+  lost two starters pregame) that was visible and not used.
+* Whole-board rule comparison (2,947 FanDuel over rungs): blind **-16.5%**; the only rule near
+  breakeven was **nine gates + own season beats the price, +1.1% (n=38, 17 players)**. Wider
+  pools all lost. One week; not proof.
+* Exclusions: QB-change teams -48%, toughest-quartile matchups -43%, teammate-context -24% —
+  all correctly excluded. **Mahomes (news over the official report) +57% and Keenan Allen
+  (team change) +59% were wrong this week.** Official club reports should outrank headlines.
+
+### 2. Tooling state (all under `scripts/research/`, research only)
+* `build_slate_alt_legs_v1.py` — board + alt ladders -> rungs; `team_change_state()`.
+* `build_alt_cards_v1.py` — nine gates. **G7 fixed 2026-11-15**: the cut was one quantile over
+  all markets mixed (failed every rush rung, never a pass rung); now per market.
+* `audit_card_legs_v1.py` — per-leg checklist; `teammate_context_values()` is directional
+  (competitor back today / QB losing >= 30% of targets) with a volume floor for key teammates.
+* `validate_ticket_card_v1.py` — ticket rules; refuses UNRESOLVED_CONTEXT / DNP_INACTIVE;
+  edge bases `model`, `history`, `cushion`.
+* `build_weekly_alt_card_v1.py` — **still enforces one leg per game; do not use its ticket
+  assembly** until it is rebuilt from the CURRENT RULES. Its `--out-checks` CSV is useful.
+* Operator-facing export: `data/research/sun_2026_wk10_model_outputs_fanduel.csv` (every
+  FanDuel rung with model, book line, price, season record, checks failed).
+
+### 3. Next actions, in order
+1. **Build one card program from the CURRENT RULES** (no per-game quota; two-ticket player cap
+   enforced; same-game legs priced by the real quote; game-script and concentration checks;
+   single-game slates built separately). Test it on weeks 9 and 10 before week 11.
+2. **Build the week-11 card the night before**, not two hours before kickoff; Sunday morning
+   only applies inactives and price changes, through the program.
+3. Grade MNF (LAC@BAL) when it posts; add it to the week-10 rows.
+4. Model defects still open (V27 §6): ceiling compression on stars (JSN model 77 vs book 91;
+   Chase 62 vs 87.5) and overconfident distributions.
+
+### 4. Paid odds
+Sunday wk10 paid run 43730255663; Sunday alt ladders archived at
+`data/market_track_record/alt_props/2026_wk10_sun.csv`. Credits were 174/500 before Sunday;
+the Sunday pull's cost was not recorded — check before the next paid run.
+
+---
+
+## CARRIED FORWARD FROM V27 (2026-11-10; still binding unless V28 above says otherwise) — **WEEK 9 CLOSED AND FULLY GRADED: THE TABLE'S PROFITABILITY CLAIM IS WITHDRAWN, THE NINE-GATE BUILDER IS THE ONLY THING THAT WORKED, AND IT CANNOT SERVE A LOTTERY TIER**
 
 **Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.
 **Branch:** `claude/nice-cori-4qkwqs`, synced to `main`.
