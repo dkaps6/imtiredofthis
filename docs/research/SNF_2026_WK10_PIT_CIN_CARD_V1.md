@@ -43,3 +43,15 @@ above the bet; SAFE legs both >= 1.2x. Each player on at most two tickets.
   Higgins 4+ receptions, Chase Brown 3+ receptions, Warren 40+ rush.
 No HIGH/LOTTERY: the game has 9 qualifying players; with the two-ticket cap no
 further ticket can be built without legs the model and FanDuel do not support.
+
+## Single-game construction (~19:52 ET) — supersedes the cap-based tickets above
+Operator rule (Nov 13): single-game slates are built differently from the full
+slate. One game script, laddered: the same core players at higher rungs per tier.
+Script: CIN passing vs a PIT secondary that lost S Elliott in warmups (after the
+10:31 prices), PIT trailing (CIN -3.5) and throwing at a soft CIN pass D without
+S Dugger; total 49.5.
+* SAFE (naive +168): Burrow 225+, Chase 50+, Rodgers 200+, Bernard 25+, C. Brown 15+ rec.
+* MODERATE (+407): Burrow 250+, Chase 60+, Higgins 40+, Rodgers 200+, Bernard 30+, Metcalf 30+, C. Brown 15+ rec.
+* MEDIUM (+917): Burrow 250+, Chase 70+, Higgins 50+, Rodgers 225+, Metcalf 40+, Bernard 30+, C. Brown 20+ rec.
+* HIGH (+2199): Burrow 275+, Chase 80+, Higgins 60+, Rodgers 225+, Metcalf 50+, Bernard 40+, C. Brown 20+ rec.
+* LOTTERY (+30183): Burrow 300+, Chase 100+, Higgins 80+, Rodgers 250+, Metcalf 60+, Bernard 50+, C. Brown 25+ rec, D. Washington 3+ rec.
