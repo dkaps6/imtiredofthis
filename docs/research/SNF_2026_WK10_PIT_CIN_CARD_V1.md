@@ -1,4 +1,19 @@
-# SNF 2026 week 10 PIT @ CIN (8:20 ET) — card built 19:47 ET
+# SNF 2026 week 10 PIT @ CIN (8:20 ET)
+
+> **SUPERSEDED ~19:45 ET.** The first version below chose legs (Warren 70+,
+> Higgins 80+, Warren 50+, Chase 60+) on hit history while the model and/or
+> FanDuel's main line sat at or below the bet. Rebuilt with the deciding test
+> first: model AND FanDuel main line both >= 1.2x the line bet; then usage,
+> matchup/injuries, total and script; history only as a sanity check.
+>
+> **SAFE (naive +225, 6 legs):** Rodgers 200+ pass (-320; model 249, FD 240),
+> Burrow 225+ pass (-650; model 276, FD 294), Ja'Marr Chase 50+ rec yds (-850;
+> model 62, FD 87.5), Germie Bernard 25+ rec yds (-490; model 34.5, FD 49.5),
+> Jaylen Warren 40+ rush (-470; model 49, FD 63.5), Chase Brown 15+ rec yds
+> (-320; model 18, FD 24.5). No HIGH or LOTTERY: no plus-money line in this game
+> has both the model and FanDuel above it.
+
+## First version (superseded)
 
 Prices: FanDuel 10:31 ET capture (stale; same-game parlay quote is the price).
 Game: CIN -3.5, total 49.5. Inactives: PIT S DeShon Elliott (pregame knee), CB Sean
