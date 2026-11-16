@@ -1,0 +1,19 @@
+event_id,commence_time,home_team,away_team,book,book_title,market,name,price_american,point
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,draftkings,DraftKings,h2h,Baltimore Ravens,-225,
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,draftkings,DraftKings,h2h,Los Angeles Chargers,185,
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,draftkings,DraftKings,spreads,Baltimore Ravens,-112,-4.5
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,draftkings,DraftKings,spreads,Los Angeles Chargers,-108,4.5
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,draftkings,DraftKings,totals,Over,-105,39.5
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,draftkings,DraftKings,totals,Under,-115,39.5
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,fanduel,FanDuel,h2h,Baltimore Ravens,-220,
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,fanduel,FanDuel,h2h,Los Angeles Chargers,184,
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,fanduel,FanDuel,spreads,Baltimore Ravens,-110,-4.5
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,fanduel,FanDuel,spreads,Los Angeles Chargers,-110,4.5
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,fanduel,FanDuel,totals,Over,-115,38.5
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,fanduel,FanDuel,totals,Under,-105,38.5
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,betmgm,BetMGM,h2h,Baltimore Ravens,-225,
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,betmgm,BetMGM,h2h,Los Angeles Chargers,185,
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,betmgm,BetMGM,spreads,Baltimore Ravens,-108,-4.5
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,betmgm,BetMGM,spreads,Los Angeles Chargers,-110,4.5
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,betmgm,BetMGM,totals,Over,-110,39.0
+35e3bdff558b5d1506251e814986f164,2026-11-17T01:15:00Z,BAL,LAC,betmgm,BetMGM,totals,Under,-108,39.0

@@ -6,14 +6,14 @@ ARI,Elijah Higgins,TE,elijahhiggins,ourlads_depth,,,
 ARI,Evan Hull,RB,evanhull,ourlads_depth,,,
 ARI,Harrison Wallace,SWR,harrisonwallace,ourlads_depth,,,
 ARI,Hunter Long,TE,hunterlong,ourlads_depth,Questionable,Questionable,Limited Participation in Practice
-ARI,Joey Aguilar,QB,joeyaguilar,ourlads_depth,,,
+ARI,Joey Aguilar,QB,joeyaguilar,ourlads_depth,OUT,OUT,
 ARI,Josh Johnson,QB,joshjohnson,ourlads_depth,,,
 ARI,Reggie Virgil,RWR,reggievirgil,ourlads_depth,,,
 ARI,Simi Fehoko,LWR,simifehoko,ourlads_depth,,,
 ARI,Trey McBride,TE,treymcbride,ourlads_depth,,,
 ARI,Tyler Allgeier,RB,tylerallgeier,ourlads_depth,,,
 ARI,ZAY Jones,LWR,zayjones,ourlads_depth,,,
-ATL,Andy Dalton,QB,andydalton,ourlads_depth,,,
+ATL,Andy Dalton,QB,andydalton,ourlads_depth,OUT,OUT,
 ATL,Austin Hooper,TE,austinhooper,ourlads_depth,,,
 ATL,Beaux Collins,RWR,beauxcollins,ourlads_depth,,,
 ATL,Bijan Robinson,RB,bijanrobinson,ourlads_depth,,,
@@ -53,7 +53,7 @@ BUF,Keon Coleman,LWR,keoncoleman,ourlads_depth,,,
 BUF,Khalil Shakir,SWR,khalilshakir,ourlads_depth,,,
 BUF,Kyle Allen,QB,kyleallen,ourlads_depth,,,
 BUF,Ray Davis,RB,raydavis,ourlads_depth,,,
-BUF,Shane Buechele,QB,shanebuechele,ourlads_depth,,,
+BUF,Shane Buechele,QB,shanebuechele,ourlads_depth,OUT,OUT,
 BUF,Skyler Bell,RWR,skylerbell,ourlads_depth,,,
 BUF,Ty Johnson,RB,tyjohnson,ourlads_depth,,,
 CAR,Anthony Tyus,RB,anthonytyus,ourlads_depth,,,
@@ -61,7 +61,7 @@ CAR,Brycen Tremayne,LWR,brycentremayne,ourlads_depth,,,
 CAR,Bryce Young,QB,bryceyoung,ourlads_depth,,,
 CAR,Chuba Hubbard,RB,chubahubbard,ourlads_depth,,,Full Participation in Practice
 CAR,Darren Waller,TE,darrenwaller,ourlads_depth,,,
-CAR,Haynes King,QB,haynesking,ourlads_depth,,,
+CAR,Haynes King,QB,haynesking,ourlads_depth,OUT,OUT,
 CAR,Jalen Coker,SWR,jalencoker,ourlads_depth,,,
 CAR,John Metchie,RWR,johnmetchie,ourlads_depth,,,
 CAR,Kenny Pickett,QB,kennypickett,ourlads_depth,,,
@@ -101,7 +101,7 @@ CLE,Blake Whiteheart,TE,blakewhiteheart,ourlads_depth,,,
 CLE,Carsen Ryan,TE,carsenryan,ourlads_depth,,,
 CLE,Denzel Boston,LWR,denzelboston,ourlads_depth,Questionable,Questionable,Limited Participation in Practice
 CLE,Deshaun Watson,QB,deshaunwatson,ourlads_depth,,,
-CLE,Dillon Gabriel,QB,dillongabriel,ourlads_depth,,,
+CLE,Dillon Gabriel,QB,dillongabriel,ourlads_depth,OUT,OUT,
 CLE,Dylan Sampson,RB,dylansampson,ourlads_depth,,,
 CLE,Harold Fannin,TE,haroldfannin,ourlads_depth,,,Full Participation in Practice
 CLE,Isaiah Bond,SWR,isaiahbond,ourlads_depth,,,
@@ -193,7 +193,7 @@ IND,Jonathan Taylor,RB,jonathantaylor,ourlads_depth,,,Full Participation in Prac
 IND,Laquon Treadwell,LWR,laquontreadwell,ourlads_depth,,,
 IND,Nick Westbrook-Ikhine,LWR,nickwestbrookikhine,ourlads_depth,,,
 IND,Quez Watkins,SWR,quezwatkins,ourlads_depth,,,
-IND,Riley Leonard,QB,rileyleonard,ourlads_depth,,,
+IND,Riley Leonard,QB,rileyleonard,ourlads_depth,OUT,OUT,
 IND,Seth McGowan,RB,sethmcgowan,ourlads_depth,,,
 IND,Tyler Warren,TE,tylerwarren,ourlads_depth,,,
 IND,Will Mallory,TE,willmallory,ourlads_depth,OUT,OUT,Limited Participation in Practice
@@ -201,7 +201,7 @@ JAX,Bhayshul Tuten,RB,bhayshultuten,ourlads_depth,,,Limited Participation in Pra
 JAX,Brenton Strange,TE,brentonstrange,ourlads_depth,,,
 JAX,Brian Thomas,LWR,brianthomas,ourlads_depth,,,
 JAX,Chris Rodriguez,RB,chrisrodriguez,ourlads_depth,,,Limited Participation in Practice
-JAX,CJ Williams,RWR,cjwilliams,ourlads_depth,,,
+JAX,CJ Williams,RWR,cjwilliams,ourlads_depth,OUT,OUT,
 JAX,Jakobi Meyers,RWR,jakobimeyers,ourlads_depth,,,Limited Participation in Practice
 JAX,Josh Cameron,LWR,joshcameron,ourlads_depth,,,
 JAX,Lequint Allen,RB,lequintallen,ourlads_depth,,,
@@ -212,14 +212,14 @@ JAX,Tanner Koziol,TE,tannerkoziol,ourlads_depth,,,
 JAX,Travis Hunter,SWR,travishunter,ourlads_depth,,,
 JAX,Trevor Lawrence,QB,trevorlawrence,ourlads_depth,,,
 KC,Andrew Armstrong,RWR,andrewarmstrong,ourlads_depth,,,
-KC,Ben Vansumeren,FB,benvansumeren,ourlads_depth,,,
+KC,Ben Vansumeren,FB,benvansumeren,ourlads_depth,OUT,OUT,
 KC,Cyrus Allen,SWR,cyrusallen,ourlads_depth,,,
 KC,Emmett Johnson,RB,emmettjohnson,ourlads_depth,,,
-KC,Garrett Nussmeier,QB,garrettnussmeier,ourlads_depth,,,
+KC,Garrett Nussmeier,QB,garrettnussmeier,ourlads_depth,OUT,OUT,
 KC,Jacob Jesus,SWR,jacobjesus,ourlads_depth,,,
 KC,Jake Briningstool,TE,jakebriningstool,ourlads_depth,,,
 KC,Jalen Royals,LWR,jalenroyals,ourlads_depth,,,
-KC,Jaydn Ott,RB,jaydnott,ourlads_depth,Questionable,Questionable,Limited Participation in Practice
+KC,Jaydn Ott,RB,jaydnott,ourlads_depth,OUT,OUT,Limited Participation in Practice
 KC,Josh Downs,SWR,joshdowns,ourlads_depth,,,
 KC,Justin Fields,QB,justinfields,ourlads_depth,,,Full Participation in Practice
 KC,Kenneth Walker,RB,kennethwalker,ourlads_depth,OUT,OUT,Did Not Participate In Practice
@@ -236,7 +236,7 @@ LAC,Justin Herbert,QB,justinherbert,ourlads_depth,,,
 LAC,Keandre Lambert-Smith,LWR,keandrelambertsmith,ourlads_depth,,,
 LAC,Keaton Mitchell,RB,keatonmitchell,ourlads_depth,,,Full Participation in Practice
 LAC,Kimani Vidal,RB,kimanividal,ourlads_depth,,,
-LAC,Ladd McConkey,SWR,laddmcconkey,ourlads_depth,Questionable,Questionable,Did Not Participate In Practice
+LAC,Ladd McConkey,SWR,laddmcconkey,ourlads_depth,OUT,OUT,Did Not Participate In Practice
 LAC,Omarion Hampton,RB,omarionhampton,ourlads_depth,,,
 LAC,Oronde Gadsden,TE,orondegadsden,ourlads_depth,,,
 LAC,Quentin Johnston,LWR,quentinjohnston,ourlads_depth,,,
@@ -255,7 +255,7 @@ LAR,Ronnie Rivers,RB,ronnierivers,ourlads_depth,,,
 LAR,Stetson Bennett,QB,stetsonbennett,ourlads_depth,,,
 LAR,Tutu Atwell,RWR,tutuatwell,ourlads_depth,,,
 LAR,Tyler Higbee,TE,tylerhigbee,ourlads_depth,,,Limited Participation in Practice
-LAR,Ty Simpson,QB,tysimpson,ourlads_depth,,,
+LAR,Ty Simpson,QB,tysimpson,ourlads_depth,OUT,OUT,
 LAR,Xavier Smith,SWR,xaviersmith,ourlads_depth,,,
 LV,Aidan O'Connell,QB,aidanoconnell,ourlads_depth,,,
 LV,Ashton Jeanty,RB,ashtonjeanty,ourlads_depth,,,
@@ -263,24 +263,24 @@ LV,Brock Bowers,TE,brockbowers,ourlads_depth,,,
 LV,Cody White,RWR,codywhite,ourlads_depth,,,
 LV,Connor Heyward,FB,connorheyward,ourlads_depth,,,
 LV,Dareke Young,SWR,darekeyoung,ourlads_depth,,,
-LV,Dont'E Thornton,LWR,dontethornton,ourlads_depth,Questionable,Questionable,Did Not Participate In Practice
+LV,Dont'E Thornton,LWR,dontethornton,ourlads_depth,OUT,OUT,Did Not Participate In Practice
 LV,Dylan Laube,RB,dylanlaube,ourlads_depth,,,
 LV,Fernando Mendoza,QB,fernandomendoza,ourlads_depth,,,
 LV,IAN Thomas,TE,ianthomas,ourlads_depth,,,Full Participation in Practice
 LV,Jack Bech,SWR,jackbech,ourlads_depth,,,
 LV,Jalen Nailor,LWR,jalennailor,ourlads_depth,,,
-LV,Malik Benson,RWR,malikbenson,ourlads_depth,,,
+LV,Malik Benson,RWR,malikbenson,ourlads_depth,OUT,OUT,
 LV,Michael Mayer,TE,michaelmayer,ourlads_depth,,,
 LV,Mike Washington,RB,mikewashington,ourlads_depth,,,
 LV,Tre Tucker,RWR,tretucker,ourlads_depth,,,
 MIA,Brady Cook,QB,bradycook,ourlads_depth,,,
 MIA,Caleb Douglas,RWR,calebdouglas,ourlads_depth,,,
-MIA,Chris Bell,LWR,chrisbell,ourlads_depth,Doubtful,Doubtful,Did Not Participate In Practice
+MIA,Chris Bell,LWR,chrisbell,ourlads_depth,OUT,OUT,Did Not Participate In Practice
 MIA,DJ Herman,FB,djherman,ourlads_depth,,,
 MIA,Greg Dulcich,TE,gregdulcich,ourlads_depth,,,
 MIA,Jalen Reagor,LWR,jalenreagor,ourlads_depth,,,
-MIA,Jalen Tolbert,RWR,jalentolbert,ourlads_depth,,,
-MIA,Jared Wayne,LWR,jaredwayne,ourlads_depth,OUT,OUT,Did Not Participate In Practice
+MIA,Jalen Tolbert,LWR,jalentolbert,ourlads_depth,,,
+MIA,Jared Wayne,RWR,jaredwayne,ourlads_depth,OUT,OUT,Did Not Participate In Practice
 MIA,Jaylen Wright,RB,jaylenwright,ourlads_depth,,,Full Participation in Practice
 MIA,Kaytron Allen,RB,kaytronallen,ourlads_depth,,,Full Participation in Practice
 MIA,Kevin Coleman,SWR,kevincoleman,ourlads_depth,,,
@@ -296,7 +296,7 @@ MIN,Deejay Dallas,RB,deejaydallas,ourlads_depth,,,
 MIN,Gavin Bartholomew,TE,gavinbartholomew,ourlads_depth,,,
 MIN,Jauan Jennings,SWR,jauanjennings,ourlads_depth,OUT,OUT,Did Not Participate In Practice
 MIN,Jeshaun Jones,RWR,jeshaunjones,ourlads_depth,,,
-MIN,Jordan Addison,RWR,jordanaddison,ourlads_depth,Questionable,Questionable,Limited Participation in Practice
+MIN,Jordan Addison,RWR,jordanaddison,ourlads_depth,OUT,OUT,Limited Participation in Practice
 MIN,Jordan Mason,RB,jordanmason,ourlads_depth,,,
 MIN,Justin Jefferson,LWR,justinjefferson,ourlads_depth,,,
 MIN,Kirk Cousins,QB,kirkcousins,ourlads_depth,,,
@@ -333,7 +333,7 @@ NO,Oscar Delp,TE,oscardelp,ourlads_depth,,,
 NO,Spencer Rattler,QB,spencerrattler,ourlads_depth,,,
 NO,Travis Etienne,RB,travisetienne,ourlads_depth,Questionable,Questionable,Full Participation in Practice
 NO,Tyler Shough,QB,tylershough,ourlads_depth,,,
-NO,Zach Wilson,QB,zachwilson,ourlads_depth,,,
+NO,Zach Wilson,QB,zachwilson,ourlads_depth,OUT,OUT,
 NYG,Cam Skattebo,RB,camskattebo,ourlads_depth,,,Full Participation in Practice
 NYG,Charlie Jones,SWR,charliejones,ourlads_depth,,,Full Participation in Practice
 NYG,Chris Manhertz,TE,chrismanhertz,ourlads_depth,,,
@@ -362,7 +362,7 @@ NYJ,Kenyon Sadiq,TE,kenyonsadiq,ourlads_depth,,,
 NYJ,Malik McClain,RWR,malikmcclain,ourlads_depth,,,
 NYJ,Mason Taylor,TE,masontaylor,ourlads_depth,,,
 NYJ,Omar Cooper,SWR,omarcooper,ourlads_depth,Questionable,Questionable,Full Participation in Practice
-NYJ,TIM Patrick,LWR,timpatrick,ourlads_depth,,,
+NYJ,TIM Patrick,LWR,timpatrick,ourlads_depth,OUT,OUT,
 PHI,Britain Covey,SWR,britaincovey,ourlads_depth,,,
 PHI,Cole Payton,QB,colepayton,ourlads_depth,,,
 PHI,Dallas Goedert,TE,dallasgoedert,ourlads_depth,,,
@@ -390,7 +390,7 @@ PIT,Pat Freiermuth,TE,patfreiermuth,ourlads_depth,,,
 PIT,Rico Dowdle,RB,ricodowdle,ourlads_depth,,,
 PIT,Riley Nowakowski,FB,rileynowakowski,ourlads_depth,,,
 PIT,Robert Tonyan,TE,roberttonyan,ourlads_depth,,,
-PIT,Will Howard,QB,willhoward,ourlads_depth,,,
+PIT,Will Howard,QB,willhoward,ourlads_depth,OUT,OUT,
 SEA,AJ Barner,TE,ajbarner,ourlads_depth,,,Full Participation in Practice
 SEA,Brady Russell,FB,bradyrussell,ourlads_depth,,,
 SEA,Cooper Kupp,SWR,cooperkupp,ourlads_depth,,,
@@ -406,8 +406,8 @@ SEA,Rashid Shaheed,RWR,rashidshaheed,ourlads_depth,,,Full Participation in Pract
 SEA,Sam Darnold,QB,samdarnold,ourlads_depth,OUT,OUT,Did Not Participate In Practice
 SEA,Tory Horton,RWR,toryhorton,ourlads_depth,,,
 SEA,Zach Charbonnet,RB,zachcharbonnet,ourlads_depth,,,
-SF,Brandin Cooks,LWR,brandincooks,ourlads_depth,,,
-SF,Brandon Aiyuk,LWR,brandonaiyuk,ourlads_depth,OUT,OUT,
+SF,Brandin Cooks,RWR,brandincooks,ourlads_depth,OUT,OUT,
+SF,Brandon Aiyuk,LWR,brandonaiyuk,ourlads_depth,,,
 SF,Brayden Willis,TE,braydenwillis,ourlads_depth,,,
 SF,Brock Purdy,QB,brockpurdy,ourlads_depth,,,
 SF,Christian McCaffrey,RB,christianmccaffrey,ourlads_depth,,,Full Participation in Practice
@@ -416,10 +416,10 @@ SF,Demarcus Robinson,LWR,demarcusrobinson,ourlads_depth,,,Full Participation in 
 SF,George Kittle,TE,georgekittle,ourlads_depth,,,
 SF,Jacob Cowing,SWR,jacobcowing,ourlads_depth,,,
 SF,Jordan James,RB,jordanjames,ourlads_depth,,,
-SF,Jordan Watkins,RWR,jordanwatkins,ourlads_depth,,,
+SF,Jordan Watkins,LWR,jordanwatkins,ourlads_depth,,,
 SF,Kaelon Black,RB,kaelonblack,ourlads_depth,,,
-SF,Keenan Allen,SWR,keenanallen,ourlads_depth,,,
-SF,Kurtis Rourke,QB,kurtisrourke,ourlads_depth,,,
+SF,Keenan Allen,RWR,keenanallen,ourlads_depth,,,
+SF,Kurtis Rourke,QB,kurtisrourke,ourlads_depth,OUT,OUT,
 SF,Kyle Juszczyk,FB,kylejuszczyk,ourlads_depth,,,
 SF,Luke Farrell,TE,lukefarrell,ourlads_depth,,,
 SF,Mac Jones,QB,macjones,ourlads_depth,,,
