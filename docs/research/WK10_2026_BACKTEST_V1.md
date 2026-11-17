@@ -90,3 +90,27 @@ overturn it, but it cost money this week.
 4. **The card changed five times in two hours.** The only Sunday ticket that won (v3 SAFE)
    was replaced 23 minutes later.
 5. **Official injury reports should outrank news headlines** (Mahomes).
+
+## 6. MNF LAC @ BAL — graded 2026-11-17; week 10 is now closed
+
+Final: **LAC 23, BAL 20** (LAC were 0-8 and +4.5). Card: `MNF_2026_WK10_LAC_BAL_CARD_V1.md`;
+rows `data/market_track_record/graded/w10_2026_mnf_card_legs_graded_v1.csv`.
+**All five tickets lost**: SAFE, MODERATE 2/5; MEDIUM, HIGH, LOTTERY 2/6. Herbert rushing
+(51 on 7 carries) and Tre Harris (86 on 5 catches) cleared every rung on every ticket; every
+other leg missed.
+
+| leg | actual | state | what happened |
+|---|---|---|---|
+| Derrick Henry 50+/60+/80+ rush | 10 on 10 carries | HEALTHY_FULL (55% snaps, his norm) | Brissett threw **49** times for 340. BAL's run/pass mix flipped with the new QB. |
+| Herbert 150+/175+/200+/225+ pass | 129 on 18 att | HEALTHY_FULL | LAC led and ran: Omarion Hampton 22 carries for 105. |
+| Quentin Johnston 20+ to 40+ | 6 (1 target) | HEALTHY_FULL (77%) | Dud. |
+| Oronde Gadsden II 10+/15+/20+ | 7 | **role cut: 21% snaps** (47% season) | Usage change at TE. |
+
+**The script was backwards.** The card assumed BAL leads and runs, LAC trails and throws; the
+game went the other way. **The QB change hit the BAL run game too:** the card excluded BAL
+passing legs because of Brissett's first start but kept Henry, and the new QB is exactly
+what took Henry's carries (10 vs 15.5 a game). A QB change is a whole-offense context change,
+not a passing-only one.
+
+## Week 10 final tally
+TNF nine-gate cards 4/4. Sunday: one ticket cashed (v3 SAFE +152). SNF 0/14. MNF 0/5.
