@@ -1,6 +1,6 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-11-16 — V28 — **WEEK 10 GRADED (MNF PENDING). THE OPERATOR'S TICKET RULES ARE NOW WRITTEN DOWN; READ THEM BEFORE BUILDING ANY CARD**
+## TOP CHECKPOINT — 2026-11-16 — V28 — **WEEK 10 CLOSED AND GRADED. THE OPERATOR'S TICKET RULES ARE NOW WRITTEN DOWN; READ THEM BEFORE BUILDING ANY CARD**
 
 **Repo:** dkaps6/imtiredofthis. **Branch:** `claude/nice-cori-4qkwqs` (not yet merged to `main`).
 V27 is archived verbatim at `docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V27_PRE_V28_2026-11-16.md`;
@@ -36,6 +36,17 @@ and he asked for a different helper. **Never rebuild his rules from memory or a 
 * Exclusions: QB-change teams -48%, toughest-quartile matchups -43%, teammate-context -24% —
   all correctly excluded. **Mahomes (news over the official report) +57% and Keenan Allen
   (team change) +59% were wrong this week.** Official club reports should outrank headlines.
+
+### 1b. Whole-slate grading (`PRISM_W10_COMPLETE_GRADING_V1.md`, week 10 closed incl. MNF)
+* PRISM-picked side: **-11.3% vs -5.5% coin flip (-5.7 pts, CI [-12.8, +1.5])** — reverses
+  weeks 6-8 (+3.5 pts). Overs -20.8%, unders -6.6% (FanDuel).
+* **The week-9 cushion edge did not replicate:** every cushion band lost; 1.5-2.0x at
+  -150..-400 went **-15.1%** (week 9: +13.5%). Do not treat the cushion rule as a proven edge.
+* Passing yards is the only market where PRISM beat the line (MAE 67.1 vs 69.3; alt rungs +11.7%).
+* Star compression: top-quartile lines PRISM bias **-17.6** vs Vegas -5.9. Missed role changes:
+  Emmett Johnson (PRISM 6 vs book 73.5, actual 101).
+* MNF: all five tickets lost — script inverted (LAC ran, Brissett threw 49); a QB change is a
+  whole-offense context change, not passing-only.
 
 ### 2. Tooling state (all under `scripts/research/`, research only)
 * `build_slate_alt_legs_v1.py` — board + alt ladders -> rungs; `team_change_state()`.
