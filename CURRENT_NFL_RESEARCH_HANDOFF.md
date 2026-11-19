@@ -63,9 +63,19 @@ Boards weeks 1, 2, 6-10 (3-5 lost).
       [+0.460,+0.748]); lead-back bias +3.7→+1.75; QB mass fixed (K4 clear). **K3 fired
       again, smaller** (team RB mass worse by 0.14/0.21 carries). The remaining loss is the
       0.95 cap/residual and non-playing backs. **Not passed; nothing promoted.**
-    * **Operator decision needed:** fixing the cap/residual reopens the CLOSED
-      "residual/top-five normalization rescue" family (closed 2026-09-26/29). The newer
-      mass-budget evidence (empirical budget ~1.0) is the case for reopening.
+    * **Operator reopened** the closed "residual/top-five normalization" family
+      (2026-11-19, "Yes you should reopen it"). The closure's premise ("not missing team
+      mass") was falsified by the mass-budget study.
+12. **Allocative prior + team budget 1.0 (D1)**
+    (`ALLOCATIVE_PRIOR_PLUS_BUDGET_NORMALIZATION_RESULTS_V1.md`): RB carries MAE -19%
+    (2025, +0.623 [+0.519,+0.725]) and -21% (2026, +0.736 [+0.558,+0.908]); team RB mass
+    bias +1.8→+0.2 / +2.1→+0.5; lead-back bias +3.7→+0.7; committee backs improve. The
+    budget-only control harms committee backs and QBs. **K4 fired narrowly** (2025 team QB
+    mass worse by 0.024, CI crosses 0; the gate had no noise tolerance). Not passed.
+    **Prospective test frozen before week 11 kickoff**
+    (`ALLOCATIVE_PRIOR_BUDGET_PROSPECTIVE_PREREGISTRATION_V1.md`): weeks 11-18, frozen
+    tables/code hashes, NI margins 0.25 carries; interim after week 14 (no decision), final
+    after week 18. Open separately: QB over-projection of ~1 carry/team in every arm.
 
 ### Week 11
 * Paid full-week pull run **44580190319** (Thu-MNF, alt ladders), archived by 44581177692 to
