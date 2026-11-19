@@ -75,7 +75,14 @@ Boards weeks 1, 2, 6-10 (3-5 lost).
     **Prospective test frozen before week 11 kickoff**
     (`ALLOCATIVE_PRIOR_BUDGET_PROSPECTIVE_PREREGISTRATION_V1.md`): weeks 11-18, frozen
     tables/code hashes, NI margins 0.25 carries; interim after week 14 (no decision), final
-    after week 18. Open separately: QB over-projection of ~1 carry/team in every arm.
+    after week 18. QB over-projection (~1 carry/team) decomposed: it is mass on QBs who do not
+    play (QB1 carries accurate under D1); the prior-weight fix is closed by
+    `PRISM_PRIOR_ANCHORING_RESULTS_V1.md`, so no QB study is opened.
+13. **D1 → rushing yards vs FanDuel** (`D1_RUSH_YARDS_VS_MARKET_RESULTS_V1.md`): primary null
+    (+0.18 yds, CI [-1.10,+1.50], n=221). D1 fixes the level (bias +10.6→+2.5) but its median
+    residual is -4.1. **When D1 is above the line, the actual went over only 38%**: a second,
+    independent sighting of the "book already cut him" RB-under pattern. Never decide sides
+    by mean vs line; RB rushing is right-skewed.
 
 ### Week 11
 * Paid full-week pull run **44580190319** (Thu-MNF, alt ladders), archived by 44581177692 to
