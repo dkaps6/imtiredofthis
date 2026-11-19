@@ -42,8 +42,16 @@ Boards weeks 1, 2, 6-10 (3-5 lost).
 8. **RB carry-share recency, preregistered and PASSED** (`RB_CARRY_SHARE_RECENCY_RESULTS_V1.md`):
    PlayerForm has no recent-games component; adding last-3 at a=0.85 (fit 2023-24) improves
    next-game carry share on 2025 (+0.0043 [+0.0016,+0.0070]) and 2026 (+0.0055
-   [+0.0022,+0.0088]). Candidate only; the end-to-end test with the INERT carry-concentration
-   fix is the next step. Role-shrinkage V2 is still preregistered and unrun.
+   [+0.0022,+0.0088]). Candidate only. **Caveat:** that test scored PlayerForm's blended share, which
+   the simulator does not consume (Bayes rebuilds from the prior/current split).
+9. **End-to-end recency test, preregistered and PASSED**
+   (`RB_CARRY_SHARE_RECENCY_END_TO_END_RESULTS_V1.md`): offline reproduction of Bayes →
+   top-5 → 0.95 cap (it reproduces the known -3.5 carries/team mass deficit). Expected RB
+   carries MAE gain +0.073 [+0.035,+0.112] (2025), +0.046 [+0.013,+0.078] (2026); lead backs
+   improve. **Small** (1-2% of MAE). The larger prize remains the never-preregistered coupled
+   fixes in `PRISM_RB_RUSH_SHARE_MASS_BUDGET_V1.md` Addendum 3; the offline chain
+   (`evaluate_rb_recency_end_to_end_v1.py`) is a validated harness for them. Role-shrinkage
+   V2 is still preregistered and unrun.
 
 ### Week 11
 * Paid full-week pull run **44580190319** (Thu-MNF, alt ladders), archived by 44581177692 to
