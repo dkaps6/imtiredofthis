@@ -283,3 +283,32 @@ injuries, depth chart and teammates before any of these is used.
    adjustments belong in efficiency, if anywhere, not in volume.
 5. Each of these is a promotion candidate. Each needs the normal research-to-production test
    (AGENTS.md §2) before it touches Full Slate.
+
+---
+
+## 10. Validity audit (2026-11-19, evening): prior work checked, flaws corrected
+
+Before more research, each claim was checked against earlier studies and re-tested where the
+test was weak.
+
+| claim | prior work | validity problem found | status now |
+|---|---|---|---|
+| §2: spread + total improve team volume | PR #558 (`MARKET_IMPLIED_GAME_SCRIPT_V1_PLAN.md`): no incremental value for plays or pass rate | **Invalid comparator.** The unfit team-average arm was compared with a fitted market arm, the flaw #558's review caught. The "production" baseline used league plays. 7 weeks only. | **Re-tested** (`team_volume_market_increment_v2.py`, three arms, fit 2023-24 → test 2025 and fit 2023-25 → test 2026). **The spread and total add nothing** (rush gain -0.00 [-0.14, +0.14] and +0.06 [-0.09, +0.21]), which confirms #558. **The team's own fitted tendency does beat production's constant split** (rush MAE 6.39 → 5.54 and 5.81 → 5.29). |
+| §5: efficiency does not repeat | `PRISM_ROLE_SHRINKAGE_FIX_RESULTS_V1.md` (efficiency shrinkage is correct; nine prior nulls) | None, but **not new**. It replicates prior work. | Replication. |
+| §5-6: stability and recency weights | `PRISM_SNAP_SIGNAL_AND_NOISE_FLOOR_V1.md`: target-share headroom is only 0.0077 | **Name-join defect.** Snap counts were joined to stats by name, which zeroed players like Gainwell and Robinson Jr. Selecting on in-game snaps ≥ 30% also slightly inflates snap-share r. | Re-joined on IDs. Numbers moved by 0.02-0.07 and the conclusions hold. The receiver recency question is effectively closed by the noise-floor study. |
+| §6: RB carries should weight recent games | Carry concentration and role shrinkage tested share level and shrinkage, not recency. **PlayerForm has no recent-games component.** | The original test had no production baseline and no holdout. | **Preregistered and tested:** `RB_CARRY_SHARE_RECENCY_RESULTS_V1.md`. **PASS:** a = 0.85; 2025 +0.0043 [+0.0016, +0.0070]; 2026 +0.0055 [+0.0022, +0.0088]. Candidate only. |
+| §3 and §7: RB rushing UNDER patterns | `BACKTEST_2026_WEEKS_1_2_FINDINGS.md` warns that PRISM's board is UNDER-skewed and that "UNDER is not itself predictive" | That warning concerns PRISM's selected side. This test grades **both sides of every offer, model ignored**, so the warning does not apply. **Spread timing:** the capture-time FanDuel spread gives an identical result (n=59, 67.8%, weeks 6-10). **Discovery contamination:** the underdog component was viewed on weeks 1-2 before the composite was tested, and the cold/cut thresholds were picked on weeks 6-10, so weeks 1-2 are not a fully clean holdout. About 60 cells were scanned. | Strong and consistent, **not proven**. The CI includes 0. **Only prospective tracking from week 11 is a clean test.** |
+
+**Prior studies dissected while doing this (all judged valid as designs):**
+- **#558:** sound three-arm design. **Its numbers were never committed** and its input file
+  (`data/team_weekly_history.csv`) is not in the repo, so it cannot be reproduced. The
+  independent V2 re-test above confirms its conclusion.
+- **Game-script trace:** a source-only fact, valid. Its open question ("does a non-constant
+  split help?") is now answered: a team-specific tendency helps; the market adds nothing.
+- **Carry concentration:** preregistered, retracted an off-production-path number itself, and
+  its CIs exclude 0. The finding stands. The fix ships INERT.
+- **Role shrinkage V1:** its specification errors are self-reported. **V2 was preregistered
+  and never run.** It is still open.
+- **Noise floor:** valid, including its own matched-rows correction.
+- **Rush allocation:** a valid arithmetic decomposition. The 14% RB rushing gap is too few rush
+  plays (0.959) x the 0.95 cap (0.941) x YPC (0.953).

@@ -25,9 +25,16 @@ STATS = ["targets", "receiving_yards", "carries", "rushing_yards", "receptions"]
 def games(season: int) -> pd.DataFrame:
     st = nfl.load_player_stats(seasons=[season]).to_pandas(); st = st[st.season_type == "REG"]
     sn = nfl.load_snap_counts(seasons=[season]).to_pandas()
-    sn = sn[sn.offense_snaps.fillna(0) > 0][["player", "week", "team", "offense_pct"]]
-    d = sn.rename(columns={"player": "player_display_name"}).merge(st, on=["player_display_name", "week", "team"], how="left")
+    sn = sn[sn.offense_snaps.fillna(0) > 0]
+    # ID join (pfr -> gsis): a name join zeroed players whose names differ between sources.
+    ids = nfl.load_players().to_pandas()[["gsis_id", "pfr_id"]].dropna().drop_duplicates("pfr_id")
+    sn = sn.merge(ids, left_on="pfr_player_id", right_on="pfr_id", how="left")
+    sn["player_id"] = sn.gsis_id.fillna("pfr:" + sn.pfr_player_id.astype(str))
+    sn = sn[["player_id", "player", "week", "team", "offense_pct", "position"]].rename(columns={"position": "snap_pos"})
+    d = sn.merge(st.drop(columns=["player_display_name"], errors="ignore"), on=["player_id", "week", "team"], how="left")
+    d["player_display_name"] = d.player_id          # unique key for grouping
     d[STATS] = d[STATS].fillna(0)
+    d["position"] = d.position.fillna(d.snap_pos)
     d["position"] = d.groupby("player_display_name").position.transform(lambda s: s.ffill().bfill())
     tt = d.groupby(["team", "week"])[["targets", "carries", "receiving_air_yards"]].sum().add_prefix("tm_").reset_index()
     d = d.merge(tt, on=["team", "week"])

@@ -34,6 +34,16 @@ Boards weeks 1, 2, 6-10 (3-5 lost).
    66.3%, +24.6%, 6/7 weeks; out-of-sample weeks 1-2 62.5%; ex-injury-exits 60.6%, CI
    [-8.9%, +35.7%]; lines < 30 do not work (51%). Week 11 candidates (line >= 30): Taylor,
    Skattebo, Jeanty, Aaron Jones.
+7. **Validity audit (same doc §10).** The part-1 team-volume claim was **invalid** (fitted vs
+   unfit comparator, the flaw PR #558's review caught). Re-tested
+   (`team_volume_market_increment_v2.py`): spread/total add nothing (confirms #558); the
+   team's own fitted tendency beats the constant 0.57 split by 9-13% on rush attempts. A
+   name-join defect (snap counts to stats) was fixed with pfr→gsis IDs; conclusions held.
+8. **RB carry-share recency, preregistered and PASSED** (`RB_CARRY_SHARE_RECENCY_RESULTS_V1.md`):
+   PlayerForm has no recent-games component; adding last-3 at a=0.85 (fit 2023-24) improves
+   next-game carry share on 2025 (+0.0043 [+0.0016,+0.0070]) and 2026 (+0.0055
+   [+0.0022,+0.0088]). Candidate only; the end-to-end test with the INERT carry-concentration
+   fix is the next step. Role-shrinkage V2 is still preregistered and unrun.
 
 ### Week 11
 * Paid full-week pull run **44580190319** (Thu-MNF, alt ladders), archived by 44581177692 to
