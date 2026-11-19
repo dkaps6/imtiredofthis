@@ -94,3 +94,28 @@ RB subgroup.
 
 **Next:** the prospective test, frozen before week-11 kickoff on 2026-11-19 at about 14:40 ET.
 Nothing was promoted and no production code changed. No sportsbook variable was used.
+
+## Addendum: where the ~1 carry/team of QB over-projection lives (diagnostic, not a test)
+
+Per QB-game, projected minus actual carries, D1:
+
+| | 2025 | 2026 |
+|---|---|---|
+| pregame QB1 who played | **-0.05** | **+0.31** |
+| backup QB who played | -0.42 | -0.56 |
+| backup QB who did **not** play (300 / 155 rows) | +1.27 | +1.17 |
+| pregame QB1 who did not play (10.5% / 8.8% of team-weeks) | +2.81 | +3.24 |
+
+**Starting QBs' carries are accurate under D1.** The over-projection is mass on QBs who do not
+take a snap:
+- backups carry a mean prior-season share of about 0.09, often earned as a starter elsewhere;
+- QB1s ruled out late.
+
+Props on non-players void, so the betting impact is small. The cost is the finite carries
+those players hold.
+
+**Prior work closes the obvious fix.** Weighting down prior-season evidence was killed in
+`PRISM_PRIOR_ANCHORING_RESULTS_V1.md`: the prior earns its weight, even for team changers. The
+remaining lever is availability: knowing who will not play. That is the roster-coverage
+problem in `PRISM_RB_RUSH_SHARE_MASS_BUDGET_V1.md` Addendum 2, not a prior problem. No QB study
+is opened here.
