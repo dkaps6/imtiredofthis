@@ -74,8 +74,19 @@ weeks with its average in even weeks, across all 32 teams:
 - So "team X against defense type Y" game-plan patterns are not measurable this season. This
   agrees with the earlier opponent null in `PRISM_OPPONENT_SIGNAL_NULLS_V1.md`.
 
-**Walk-forward test.** Each week from 4 to 10 was predicted only from earlier weeks. The table
-shows team volume error (MAE):
+> **CORRECTED 2026-11-19 (see §10).** The walk-forward table below is **invalid as a test of
+> the spread**. The "team season average" arm was unfit, while the "+ spread + total" arm was
+> a fitted regression, so the fitted arm could win just by shrinking the team average. PR
+> #558's review caught exactly this flaw in its own design. The "production" row also used
+> league plays, not production's team-specific plays. The valid re-test is
+> `team_volume_market_increment_v2.py`:
+> - **the spread and total add nothing measurable**, which confirms #558;
+> - **a team's own fitted run/pass tendency does beat production's constant split**.
+>
+> The original table is kept below as the record.
+
+**Walk-forward test (superseded).** Each week from 4 to 10 was predicted only from earlier
+weeks. The table shows team volume error (MAE):
 
 | method | team rushes | team dropbacks |
 |---|---|---|
@@ -150,8 +161,9 @@ Other markets by script, from the same table:
 4. **Ticket construction implication (proposal for the operator, not a rule):** every card so
    far has been built from alt OVER ladders. On RB rushing, those lost on underdogs (-30%).
    The only consistently positive spot this season is the opposite side, a main-line UNDER.
-5. Production's constant 0.57 pass share should be replaced by team identity + spread +
-   total. That is a separate promotion test.
+5. ~~Production's constant 0.57 pass share should be replaced by team identity + spread +
+   total.~~ **Corrected (§10):** replace it with the team's own fitted run/pass tendency. The
+   spread and total add nothing beyond that. This is a separate promotion test.
 
 ---
 
@@ -264,8 +276,9 @@ injuries, depth chart and teammates before any of these is used.
 1. **Project volume, shrink efficiency.** Efficiency repeats at r 0.2-0.3, so own-player
    efficiency should get about 20-30% weight against the position mean.
 2. **RB carry share: about 0.65-0.70 weight on the last three games.** Receivers: about 0.2.
-3. **Team rush attempts: team average + spread + total**, not a constant 0.57 pass share
-   (walk-forward MAE 6.02 -> 5.51, 7 of 7 weeks).
+3. **Team rush attempts: the team's own fitted rolling rush tendency**, not a constant 0.57
+   pass share. Corrected in §10: rush-attempt MAE 6.39 -> 5.54 on the 2025 holdout and 5.81
+   -> 5.29 on 2026. The spread and total add nothing beyond it.
 4. **The opponent's defense does not set the opponent's game plan** (r 0.00). Opponent
    adjustments belong in efficiency, if anywhere, not in volume.
 5. Each of these is a promotion candidate. Each needs the normal research-to-production test
