@@ -92,6 +92,12 @@ Boards weeks 1, 2, 6-10 (3-5 lost).
     week 11 (`TARGET_ALLOCATIVE_PRIOR_BUDGET_PROSPECTIVE_PREREGISTRATION_V1.md`). The multiplier question
     is already settled: D2 (delete multipliers) was withdrawn in `PRISM_JOINT_D1_D2_D3_RESULTS_V1.md`
     because it worsens yards. TD1 must be validated on yards (`TD1_REC_YARDS_VS_MARKET_*`).
+15. **TD1 → receiving yards/receptions vs FanDuel** (`TD1_REC_YARDS_VS_MARKET_RESULTS_V1.md`):
+    primary null (rec_yards -0.19, CI [-0.76,+0.40]; n=715). TD1 removes level biases
+    (receptions +0.56→+0.06 = the "half a reception low" defect; WR1 rec_yards +13.7→+1.2) but
+    yardage MAE does not improve; the line has the lowest MAE in both markets. **Consistent
+    across rushing and receiving: the allocative+budget fixes are opportunity/level fixes, not
+    yardage-accuracy fixes, and sides must come from the distribution, not mean vs line.**
 
 ### Week 11
 * Paid full-week pull run **44580190319** (Thu-MNF, alt ladders), archived by 44581177692 to
