@@ -307,8 +307,10 @@ test was weak.
   split help?") is now answered: a team-specific tendency helps; the market adds nothing.
 - **Carry concentration:** preregistered, retracted an off-production-path number itself, and
   its CIs exclude 0. The finding stands. The fix ships INERT.
-- **Role shrinkage V1:** its specification errors are self-reported. **V2 was preregistered
-  and never run.** It is still open.
+- **Role shrinkage V1:** its specification errors are self-reported. ~~V2 was preregistered
+  and never run.~~ **Corrected: V2 was run on 2026-11-03.** Its results are filed as
+  `PRISM_ROLE_STATE_FRONTIER_RESULTS_V2.md`, a name this audit's search missed. It passed 8 of
+  9 gates and was blocked by its own infeasible G7 threshold (K6).
 - **Noise floor:** valid, including its own matched-rows correction.
 - **Rush allocation:** a valid arithmetic decomposition. The 14% RB rushing gap is too few rush
   plays (0.959) x the 0.95 cap (0.941) x YPC (0.953).

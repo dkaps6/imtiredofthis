@@ -7,7 +7,7 @@
 | prior study | what it tested | what it did not test |
 |---|---|---|
 | `PRISM_RB_CARRY_CONCENTRATION_RESULTS_V1.md` | Lead-back share level. Production's Bayesian layer over-shrinks by about 9-11pp, CI excludes 0. A transform was shipped INERT. | The window PlayerForm measures current share over |
-| `PRISM_ROLE_SHRINKAGE_FIX_RESULTS_V1.md` | Shrinkage targets for shares (A4 role-rank anchor best; K4 side-accuracy cost). V2 was preregistered and never run. | Recency |
+| `PRISM_ROLE_SHRINKAGE_FIX_RESULTS_V1.md` | Shrinkage targets for shares (A4 role-rank anchor best; K4 side-accuracy cost). V2 was run (`PRISM_ROLE_STATE_FRONTIER_RESULTS_V2.md`, 8 of 9 gates; not promoted on its own G7 threshold). | Recency |
 | `PRISM_SNAP_SIGNAL_AND_NOISE_FLOOR_V1.md` | Target share, where production is near the oracle (headroom 0.0077) | RB carry share |
 | `player_form_v2.py` `PLAYERFORM_TEAM_CHANGE_PRIOR_K` | The prior-season pseudo-sample k, for team changers, on target share | Recency within the current season |
 | `REVERSE_ENGINEER_2026_W1_10_V1.md` §6 | On raw season-to-date vs last-3 means, the best last-3 weight for RB carries is 0.70 (0.75/0.65/0.50 by season) | **PlayerForm's actual formula as the baseline**; a holdout |

@@ -48,10 +48,15 @@ Boards weeks 1, 2, 6-10 (3-5 lost).
    (`RB_CARRY_SHARE_RECENCY_END_TO_END_RESULTS_V1.md`): offline reproduction of Bayes →
    top-5 → 0.95 cap (it reproduces the known -3.5 carries/team mass deficit). Expected RB
    carries MAE gain +0.073 [+0.035,+0.112] (2025), +0.046 [+0.013,+0.078] (2026); lead backs
-   improve. **Small** (1-2% of MAE). The larger prize remains the never-preregistered coupled
-   fixes in `PRISM_RB_RUSH_SHARE_MASS_BUDGET_V1.md` Addendum 3; the offline chain
-   (`evaluate_rb_recency_end_to_end_v1.py`) is a validated harness for them. Role-shrinkage
-   V2 is still preregistered and unrun.
+   improve. **Small** (1-2% of MAE).
+10. **Corrections (same evening).**
+    * Role-shrinkage V2 **was run**: `PRISM_ROLE_STATE_FRONTIER_RESULTS_V2.md`, 8 of 9 gates,
+      K6 on its own G7 threshold.
+    * The coupled fixes **were tested**: `PRISM_PLAYER_EVIDENCE_SHRINKAGE_RESULTS_V1.md`.
+      Evidence-precision weighting is closed negative. The allocative prior is a strong
+      candidate never given its own preregistration, and its universe/K was outcome-known.
+    * Next: the allocative prior on a **pregame** universe through the production chain
+      (`RB_ALLOCATIVE_PRIOR_PREGAME_PREREGISTRATION_V1.md`).
 
 ### Week 11
 * Paid full-week pull run **44580190319** (Thu-MNF, alt ladders), archived by 44581177692 to

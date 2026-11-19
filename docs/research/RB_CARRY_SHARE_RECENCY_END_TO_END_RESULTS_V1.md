@@ -71,6 +71,14 @@ not a different model.
      concentration transform in place.
 2. **The prize is still the budget and shrinkage defects:** mass -3.5 carries per team, lead
    backs +3.4. The two coupled changes designed in `PRISM_RB_RUSH_SHARE_MASS_BUDGET_V1.md`
-   Addendum 3 are allocative priors and evidence-precision shrinkage weights. **They have
-   never been preregistered or tested.** This offline chain gives them a validated harness.
+   Addendum 3 are allocative priors and evidence-precision shrinkage weights. ~~They have never
+   been preregistered or tested.~~ **Corrected the same evening: they were tested**, in
+   `PRISM_PLAYER_EVIDENCE_SHRINKAGE_RESULTS_V1.md` (2014-2025, 18,809 player-weeks):
+   - evidence-precision weighting is **closed negative**;
+   - the allocative prior is **a strong candidate** that was never given its own
+     preregistration.
+
+   That study's universe and back-count K came from the backs who appeared in the box score,
+   which is outcome-known. The allocative prior has **not** been tested on a pregame universe.
+   This offline chain can do that (`RB_ALLOCATIVE_PRIOR_PREGAME_PREREGISTRATION_V1.md`).
 3. No sportsbook variable was used. No production code changed.
