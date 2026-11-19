@@ -83,6 +83,14 @@ Boards weeks 1, 2, 6-10 (3-5 lost).
     residual is -4.1. **When D1 is above the line, the actual went over only 38%**: a second,
     independent sighting of the "book already cut him" RB-under pattern. Never decide sides
     by mean vs line; RB rushing is right-skewed.
+14. **Receiving: allocative target prior + budget (TD1)** (`TARGET_ALLOCATIVE_PRIOR_BUDGET_RESULTS_V1.md`):
+    WR+TE target MAE -7/-8% (2025 +0.106 [+0.083,+0.130]; 2026 +0.129 [+0.087,+0.168]); WR1
+    under-projection removed (T3 lands it at ~0). The allocative prior is the whole gain. PASS as
+    written, but NI-2 (team mass) was uninformative by construction; block mass shows **WRs still
+    short ~1.5-2 targets/team-game and TEs over**, likely the rules layer's TE x1.265 / RB x1.20
+    target multipliers (measured on wk 8/9/11 replay inputs). Prospective test frozen before
+    week 11 (`TARGET_ALLOCATIVE_PRIOR_BUDGET_PROSPECTIVE_PREREGISTRATION_V1.md`). Next: check
+    `RECEIVING_RULE_SEMANTICS_INTEGRITY_V1` before any multiplier study.
 
 ### Week 11
 * Paid full-week pull run **44580190319** (Thu-MNF, alt ladders), archived by 44581177692 to
