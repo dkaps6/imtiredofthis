@@ -26,6 +26,14 @@ Boards weeks 1, 2, 6-10 (3-5 lost).
    (stars): 48%, no edge.** Alt RB rush OVER rungs on underdogs weeks 9-10: -30.4%.
 5. **Not a ticket rule.** Presented to the operator as a proposal on 2026-11-19; only he can
    add it to the CURRENT RULES block.
+6. **Part 2, player production (same doc §5-9):** role/volume repeats (snap 0.82-0.93,
+   target share 0.80-0.89, carry share 0.90), efficiency does not (YPT 0.25-0.31, catch rate
+   ~0, YPC 0.21). Best weight on the last 3 games over 2024-2026: **RB carries 0.70 (stable
+   0.75/0.65/0.50)**, receivers ~0.2. **RB rushing UNDER with 2+ flags** (underdog 3+, YPC
+   < 95% league, volume projection > 1.2x line; `rb_rush_situation_flags_v1.py`): 83 bets,
+   66.3%, +24.6%, 6/7 weeks; out-of-sample weeks 1-2 62.5%; ex-injury-exits 60.6%, CI
+   [-8.9%, +35.7%]; lines < 30 do not work (51%). Week 11 candidates (line >= 30): Taylor,
+   Skattebo, Jeanty, Aaron Jones.
 
 ### Week 11
 * Paid full-week pull run **44580190319** (Thu-MNF, alt ladders), archived by 44581177692 to

@@ -152,3 +152,121 @@ Other markets by script, from the same table:
    The only consistently positive spot this season is the opposite side, a main-line UNDER.
 5. Production's constant 0.57 pass share should be replaced by team identity + spread +
    total. That is a separate promotion test.
+
+---
+
+# Part 2 (2026-11-19, afternoon): player production
+
+**Scripts:**
+- `scripts/research/player_volume_efficiency_v1.py`
+- `scripts/research/rb_rush_situation_flags_v1.py`
+
+**Rows** are in `data/research/reverse_engineer/`:
+- `player_stat_reliability_v1.csv`
+- `player_recency_weights_v1.csv`
+- `rb_rush_flags_backtest_v1.csv`
+- `rb_rush_flags_wk11_v1.csv`
+
+## 5. What repeats: the role does, efficiency doesn't
+
+Odd-week vs even-week correlation for the same player, 2026, players with 30%+ snaps:
+
+| | WR | TE | RB |
+|---|---|---|---|
+| snap share | 0.82 | 0.93 | 0.83 |
+| target share | 0.80 | 0.89 | 0.45 |
+| carry share | | | **0.90** |
+| targets / carries per game | 0.74 | 0.86 | 0.81 (carries) |
+| **yards per target** | **0.25** | **0.31** | 0.19 |
+| **catch rate** | **0.16** | **-0.12** | 0.14 |
+| **yards per carry** | | | **0.21** |
+| yards per game (the betting outcome) | 0.60 | 0.75 | 0.77 rushing / 0.36 receiving |
+
+**A player's next game is his share of the work times close-to-average efficiency.**
+- Hit history at a yardage line mixes the stable part (role) with the noise (efficiency).
+- That is why hit history alone has not held up as validation.
+
+## 6. How much recent games should count (three seasons, 2024-2026)
+
+The projection is (1-w) x the season-to-date mean + w x the last-3 mean, with w chosen for the
+lowest next-game error.
+
+| stat | best weight on last 3 games | by season |
+|---|---|---|
+| WR targets | 0.35 | 0.25 / 0.55 / 0.00 |
+| WR receiving yards | 0.20 | 0.10 / 0.40 / 0.00 |
+| TE receiving yards | 0.15 | 0.10 / 0.25 / 0.00 |
+| **RB carries** | **0.70** | **0.75 / 0.65 / 0.50** |
+| **RB carry share** | **0.65** | **0.75 / 0.55 / 0.70** |
+| RB rushing yards | 0.35 | 0.55 / 0.25 / 0.30 |
+
+- **Backfield roles change and the change sticks.** Weight recent games heavily for RB carries.
+- **Receiver roles mostly don't change.** The season average carries most of the information.
+
+**Model implication: project RB carry share mostly from the last three games.** This addresses
+the Emmett Johnson-type miss (PRISM 6.3, book 73.5, actual 101).
+
+**What the book does, from a regression of the FanDuel line on season vs last-3 volume, weeks
+6-10:**
+- Receiving lines put about 20% on the last 3 games, which is about right.
+- RB rushing lines put about 29% on the last 3 carries, against 0.70 optimal.
+
+So the book under-reacts to backfield changes. On its own this did not produce a clean side in
+weeks 6-10 (r = 0.08 between the recent-carry trend and the line's error).
+
+## 7. Market tests on player production (FanDuel, every offer, model ignored)
+
+| hypothesis | result | verdict |
+|---|---|---|
+| Book overprices receivers whose efficiency has been hot | hot (YPT > 1.2x league) UNDER 54.0%, +1.6% | no edge |
+| Book chases recent receiver targets | 2026: falling targets -> OVER 60%; rising 10-25% -> UNDER 59%. Across 3 seasons the book's ~20% recent weight is about optimal | 2026-only, **unconfirmed** |
+| **RB rushing UNDER, 2+ "bad situation" flags** | see below | **strongest pattern found** |
+
+**The RB flags** (`rb_rush_situation_flags_v1.py`), all strictly prior:
+1. Team is an underdog by 3+.
+2. His yards per carry so far is under 95% of the league RB average.
+3. **The book has already cut him:** carries per game x shrunk efficiency is more than 1.2x
+   the line.
+
+The flags overlap only partly (r 0.0-0.4).
+
+| RB rushing | weeks 6-10 | weeks 1-2 (out of sample) |
+|---|---|---|
+| UNDER, 2+ flags | **70.3% / 63.6%** (2 / 3 flags), n=59 | **63.2% / 60.0%**, n=24 |
+| UNDER, 0 flags | 39.1% | 51.7% |
+| OVER, 0 flags | 60.9% | **48.3%: failed out of sample** |
+
+**All weeks, UNDER with 2+ flags: 83 bets, 66.3% hit, +24.6%.**
+- Above breakeven in **6 of 7 weeks**: 67, 60, 50, 79, 67, 64, 71%.
+- With in-game exits removed (12 bets where snaps fell 40%+ below his norm): **60.6%,
+  +13.9%**, 37 players, 53 games.
+- Game-clustered 95% CI [-8.9%, +35.7%], P(ROI > 0) = 88%.
+- **Lines under 30 hit only 51%** (backups). Lines of 30 and up: about 74% (n=34).
+
+**Strong, consistent, not proven.**
+
+## 8. Week 11 candidates (Thursday capture; re-check lines and state before Sunday)
+
+RB rushing UNDER, 2+ flags, line 30 and up:
+
+| RB | line | team spread | flags |
+|---|---|---|---|
+| Jonathan Taylor | 51.5 | IND +12.5 | dog, cut |
+| Cam Skattebo | 52.5 | NYG +6 | dog, cut |
+| Ashton Jeanty | 32.5 | LV +10 | dog, cold, cut |
+| Aaron Jones | 30.5 | MIN +3 | dog, cut |
+
+Full list, including sub-30 lines: `rb_rush_flags_wk11_v1.csv`. Rule 7 still applies: verify
+injuries, depth chart and teammates before any of these is used.
+
+## 9. What the model should take from this
+
+1. **Project volume, shrink efficiency.** Efficiency repeats at r 0.2-0.3, so own-player
+   efficiency should get about 20-30% weight against the position mean.
+2. **RB carry share: about 0.65-0.70 weight on the last three games.** Receivers: about 0.2.
+3. **Team rush attempts: team average + spread + total**, not a constant 0.57 pass share
+   (walk-forward MAE 6.02 -> 5.51, 7 of 7 weeks).
+4. **The opponent's defense does not set the opponent's game plan** (r 0.00). Opponent
+   adjustments belong in efficiency, if anywhere, not in volume.
+5. Each of these is a promotion candidate. Each needs the normal research-to-production test
+   (AGENTS.md §2) before it touches Full Slate.
