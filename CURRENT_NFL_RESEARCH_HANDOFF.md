@@ -1,6 +1,39 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-11-16 — V28 — **WEEK 10 CLOSED AND GRADED. THE OPERATOR'S TICKET RULES ARE NOW WRITTEN DOWN; READ THEM BEFORE BUILDING ANY CARD**
+## TOP CHECKPOINT — 2026-11-19 — V29 — **EVERY 2026 GAME REVERSE-ENGINEERED (WEEKS 1-10): PRISM HAS NO CONSISTENTLY PROFITABLE SIDE; UNDERDOG RBs GOING UNDER THEIR RUSHING LINE HELD IN 6 OF 7 WEEKS**
+
+**Repo:** dkaps6/imtiredofthis. **Branch:** `claude/nice-cori-4qkwqs`. V28 is archived verbatim
+at `docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V28_PRE_V29_2026-11-19.md` and carried forward
+below (its §0 mandatory reading before any card still binds).
+
+### Reverse-engineering study (`docs/research/REVERSE_ENGINEER_2026_W1_10_V1.md`)
+Script `scripts/research/reverse_engineer_season_v1.py`; rows `data/research/reverse_engineer/`.
+Boards weeks 1, 2, 6-10 (3-5 lost).
+1. **PRISM's picked side:** no market/side positive in both weeks 6-10 and the out-of-sample
+   weeks 1-2. Consistent only in losing on RB/WR OVER calls (RB rush OVER -14.9% / -21.6%).
+   Week 6-10 "winners" (QB rush UNDER +20%, model/line 0.8-0.9 +4.5%) failed out of sample.
+2. **Game plans:** rush attempts track the final margin (r 0.54; won by 15+ = 30.8 rushes,
+   lost by 15+ = 20.2) far more than the spread (r 0.14; fav 7+ 27.1 vs dog 7+ 24.2).
+   Offense neutral PROE is stable (odd/even weeks r 0.54); **what a defense allows is not
+   (r 0.00)**, so team-vs-defense-type game plans are not measurable.
+3. **Production game script:** constant pass share 0.57 for all teams. Team average + spread
+   + total cuts team rush-attempt MAE 6.02 -> 5.51 walk-forward, better in 7/7 weeks;
+   dropbacks not improvable. A production candidate, needs its own promotion test.
+4. **Market pattern (every FanDuel offer, model ignored):** RB rushing UNDER when the team is
+   an underdog by 3+: **61.4% hit, +15.5%, 6 of 7 weeks above breakeven, DraftKings
+   61.3%**. Median actual 30 vs line 39.9. After removing partial/role-cut games: 59.3%,
+   +11.6%, game-clustered CI [-6%, +28%]. **Lines under 60: 63.7%, +19.9% (n=91); 60+ lines
+   (stars): 48%, no edge.** Alt RB rush OVER rungs on underdogs weeks 9-10: -30.4%.
+5. **Not a ticket rule.** Presented to the operator as a proposal on 2026-11-19; only he can
+   add it to the CURRENT RULES block.
+
+### Week 11
+TNF IND @ HOU: HOU favored by 12.5, total 43.5. Paid odds credits: **34 of 500** (a
+single-game pull costs ~13-15). No paid run without the operator's explicit go-ahead.
+
+---
+
+## CARRIED FORWARD FROM V28 (2026-11-16; still binding unless V29 above says otherwise) — **WEEK 10 CLOSED AND GRADED. THE OPERATOR'S TICKET RULES ARE NOW WRITTEN DOWN; READ THEM BEFORE BUILDING ANY CARD**
 
 **Repo:** dkaps6/imtiredofthis. **Branch:** `claude/nice-cori-4qkwqs` (not yet merged to `main`).
 V27 is archived verbatim at `docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V27_PRE_V28_2026-11-16.md`;

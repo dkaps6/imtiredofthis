@@ -1,0 +1,7 @@
+measure,offense_odd_vs_even,defense_allowed_odd_vs_even
+neutral_proe,0.54,0.0
+neutral_pass,0.43,-0.06
+pass_rate,0.32,0.06
+plays,0.22,0.26
+rushes,0.27,0.12
+dropbacks,0.28,0.08
