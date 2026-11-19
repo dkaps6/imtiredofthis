@@ -55,8 +55,17 @@ Boards weeks 1, 2, 6-10 (3-5 lost).
     * The coupled fixes **were tested**: `PRISM_PLAYER_EVIDENCE_SHRINKAGE_RESULTS_V1.md`.
       Evidence-precision weighting is closed negative. The allocative prior is a strong
       candidate never given its own preregistration, and its universe/K was outcome-known.
-    * Next: the allocative prior on a **pregame** universe through the production chain
-      (`RB_ALLOCATIVE_PRIOR_PREGAME_PREREGISTRATION_V1.md`).
+11. **Allocative prior, pregame universe, production chain:** two preregistered runs.
+    * **RB-only** (`RB_ALLOCATIVE_PRIOR_PREGAME_RESULTS_V1.md`): RB carry MAE -14 to -16%,
+      **K3 fired** (team RB mass worse; carries moved to an over-allocated QB block).
+    * **All blocks** (`ALLOCATIVE_PRIOR_ALL_BLOCKS_PREGAME_RESULTS_V1.md`): RB carry MAE
+      3.256→2.761 (2025, +0.495 [+0.419,+0.573]) and 3.457→2.854 (2026, +0.603
+      [+0.460,+0.748]); lead-back bias +3.7→+1.75; QB mass fixed (K4 clear). **K3 fired
+      again, smaller** (team RB mass worse by 0.14/0.21 carries). The remaining loss is the
+      0.95 cap/residual and non-playing backs. **Not passed; nothing promoted.**
+    * **Operator decision needed:** fixing the cap/residual reopens the CLOSED
+      "residual/top-five normalization rescue" family (closed 2026-09-26/29). The newer
+      mass-budget evidence (empirical budget ~1.0) is the case for reopening.
 
 ### Week 11
 * Paid full-week pull run **44580190319** (Thu-MNF, alt ladders), archived by 44581177692 to
