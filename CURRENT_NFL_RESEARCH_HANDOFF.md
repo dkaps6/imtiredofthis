@@ -89,8 +89,9 @@ Boards weeks 1, 2, 6-10 (3-5 lost).
     written, but NI-2 (team mass) was uninformative by construction; block mass shows **WRs still
     short ~1.5-2 targets/team-game and TEs over**, likely the rules layer's TE x1.265 / RB x1.20
     target multipliers (measured on wk 8/9/11 replay inputs). Prospective test frozen before
-    week 11 (`TARGET_ALLOCATIVE_PRIOR_BUDGET_PROSPECTIVE_PREREGISTRATION_V1.md`). Next: check
-    `RECEIVING_RULE_SEMANTICS_INTEGRITY_V1` before any multiplier study.
+    week 11 (`TARGET_ALLOCATIVE_PRIOR_BUDGET_PROSPECTIVE_PREREGISTRATION_V1.md`). The multiplier question
+    is already settled: D2 (delete multipliers) was withdrawn in `PRISM_JOINT_D1_D2_D3_RESULTS_V1.md`
+    because it worsens yards. TD1 must be validated on yards (`TD1_REC_YARDS_VS_MARKET_*`).
 
 ### Week 11
 * Paid full-week pull run **44580190319** (Thu-MNF, alt ladders), archived by 44581177692 to

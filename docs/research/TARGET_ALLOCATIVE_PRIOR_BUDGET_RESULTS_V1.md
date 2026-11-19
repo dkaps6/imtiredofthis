@@ -62,8 +62,15 @@ The likely mechanism is the rules layer's measured target multipliers:
 - **TE x1.265** and **RB x1.20** inflate those blocks before the team stage;
 - under the cap (C0, T3) or renormalization (TD1), that mass comes out of WRs.
 
-**Not tested here.** Next: `RECEIVING_RULE_SEMANTICS_INTEGRITY_V1_STAGE1_RESULT.md` found
-receiving-rule semantic defects, which must be checked before any study of those multipliers.
+**Already settled by prior work, so no multiplier study is opened:**
+- `PRISM_D2_MULTIPLIER_MASS_RESULTS_V1.md` found that the TE/RB target multipliers carry no
+  information, and recommended deleting them.
+- `PRISM_JOINT_D1_D2_D3_RESULTS_V1.md` then **withdrew** that recommendation on yards evidence.
+  Moving targets from TE/RB to WR raises projected yards, because WRs have a higher
+  yards-per-target, and receiving yards were already too high in that harness.
+
+**The lesson that binds this result:** a share-level fix must be validated on **yards**. That
+test is preregistered in `TD1_REC_YARDS_VS_MARKET_PREREGISTRATION_V1.md`.
 
 ## Prediction scored
 
