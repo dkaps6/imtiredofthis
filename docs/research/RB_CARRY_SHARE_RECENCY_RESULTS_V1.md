@@ -62,6 +62,14 @@ oracle in 2025 (0.0043 of 0.0171) and about **18%** in 2026 (0.0055 of 0.0298).
   - Steady rows also gain, with CIs that exclude 0 in both holdouts.
   - **The named risk** (steady roles add noise and wash out the gain) **did not happen.**
 
+## Validity caveat found after this write-up (2026-11-19)
+
+**C0 here is PlayerForm's blended `rush_share`, which the simulator does not consume.**
+`bayesian_v2` rebuilds the share from the split `rush_share_prior` and `rush_share_current`,
+with its own weights. This result therefore shows the **input** improves. Whether the gain
+survives Bayes, top-5 and the 0.95 cap is tested separately in
+`RB_CARRY_SHARE_RECENCY_END_TO_END_PREREGISTRATION_V1.md`.
+
 ## What this does and does not establish
 
 - PlayerForm's RB carry share should include a recent-games component. This is measured
