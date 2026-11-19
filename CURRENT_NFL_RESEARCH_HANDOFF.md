@@ -28,8 +28,17 @@ Boards weeks 1, 2, 6-10 (3-5 lost).
    add it to the CURRENT RULES block.
 
 ### Week 11
-TNF IND @ HOU: HOU favored by 12.5, total 43.5. Paid odds credits: **34 of 500** (a
-single-game pull costs ~13-15). No paid run without the operator's explicit go-ahead.
+* Paid full-week pull run **44580190319** (Thu-MNF, alt ladders), archived by 44581177692 to
+  `data/market_track_record/{boards,alt_props,raw_props,game_odds}/2026_wk11*`. First attempt
+  44578946345 failed closed at the live-prop identity gate (Andrew/Drew Ogletree; 141 credits
+  lost, not replayable); fixed with a verified `manual_roster_overrides.csv` row.
+  **218 credits left.** Sunday props were thin at capture (NYJ 8 rows, LAC 20); a weekend
+  re-pull is expected.
+* TNF IND @ HOU card: `docs/research/TNF_2026_WK11_IND_HOU_CARD_V1.md`. SAFE +158, MODERATE +170,
+  HIGH +610 (naive). MEDIUM not buildable and LOTTERY UNSOLVED under the two-ticket cap and the
+  never-above-projection rule (all eight eligible players at their deepest rungs = +1,638).
+  Every ticket is priced below its blended chance. Pattern play shown separately: Taylor
+  UNDER 51.5 rush (operator's call; conflicts with PRISM 55).
 
 ---
 
