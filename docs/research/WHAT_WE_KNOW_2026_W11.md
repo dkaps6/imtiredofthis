@@ -91,3 +91,15 @@ The method changed after each losing week. **One week is far too small to judge 
 3-leg ticket with 70% legs hits 34% of the time, so a sound method still loses about two weeks
 in three. Changing rules after each result chases noise. A method is judged on 50+ bets, under
 rules frozen in advance.
+
+## 9. "Which of our picks will win?" Tested 2026-11-20 on 2024-2025: the price already says
+
+`SELECTIVE_PICK_IDENTIFICATION_RESULTS_V1.md`: six pregame filters, each fit on one season and
+scored on the other. **None was profitable in both seasons.**
+- **The best filter hit 58.5% and still lost 1.4%.** It picked the expensive bets, around -150.
+- Across 17,000 lines, the actual hit rate matches the price-implied rate in every price band.
+- **The book's price is already an accurate "will this win" score.** Judge any rule at the
+  price paid, never by hit rate.
+- **The model's direction is real but small.** When it says OVER, the under loses 7.9%, vs
+  2.3% when it also says UNDER. That is 1-5 points, against about 4.5 of vig.
+- **Use it to avoid bets, not to find them.**

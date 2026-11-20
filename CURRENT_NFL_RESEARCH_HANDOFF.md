@@ -1,10 +1,53 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-11-19 — V29 — **EVERY 2026 GAME REVERSE-ENGINEERED (WEEKS 1-10): PRISM HAS NO CONSISTENTLY PROFITABLE SIDE; UNDERDOG RBs GOING UNDER THEIR RUSHING LINE HELD IN 6 OF 7 WEEKS**
+## TOP CHECKPOINT — 2026-11-20 — V30 — **NO PREGAME FILTER PICKS OUT WINNING MODEL BETS ON 2024-25 LINES; THE PRICE ALREADY PREDICTS HIT RATE; THE RB-UNDER RULE AND THE PASSING-YARDS EDGE BOTH FAILED OUT OF SAMPLE**
 
-**Repo:** dkaps6/imtiredofthis. **Branch:** `claude/nice-cori-4qkwqs`. V28 is archived verbatim
-at `docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V28_PRE_V29_2026-11-19.md` and carried forward
-below (its §0 mandatory reading before any card still binds).
+**Repo:** dkaps6/imtiredofthis. **Branch:** `claude/nice-cori-4qkwqs`.
+- V29 is archived verbatim at `docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V29_PRE_V30_2026-11-20.md`.
+  Its items 1-15 are kept below, still current except where V30 says otherwise.
+- V28 is at `docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V28_PRE_V29_2026-11-19.md`. Its §0
+  mandatory reading before any card still binds.
+
+### V30, added 2026-11-20 (read first)
+
+**Start with `docs/research/WHAT_WE_KNOW_2026_W11.md`:** the one-page settled summary, §1-9.
+
+16. **Team and player identity, and how FanDuel builds lines**
+    (`TEAM_PLAYER_IDENTITY_2026_V1.md`).
+    - Teams' efficiency, pass lean and quality repeat; volume and beating the spread do not.
+    - Player shares repeat.
+    - **A FanDuel line ≈ the season average shaded 5-16%,** with about 0.04 weight on the last
+      3 games.
+    - Player-level misses vs the line **reverse** between halves.
+17. **Alt ladders** (`ALT_LADDER_GENERIC_SHAPE_EXPLORATORY_V1.md`): rung prices are about 95%
+    explained by market + rung/main ratio, i.e. generic. Exploratory only.
+18. **RB-under rule and role-change rule on 2024-25 lines**
+    (`ROLE_CHANGE_AND_RB_UNDER_HISTORICAL_RESULTS_V1.md`): **both FAIL.**
+    - RB-under: 2024 60.2%, 2025 47.7%.
+    - Blind overs lose 7-12% in every market in both seasons.
+    - The weekly tracker (`RB_UNDER_TRACKER.md`) continues as a record only, with **no
+      demonstrated edge**. Week 11 picks are logged.
+    - Scheduled check-ins: Sun 11-22 (inactives) and Tue 11-24 (grade week 11).
+19. **Passing-yards edge, weeks 9-10:** 49.1%, -7.2% (n=112), after the 2026-11-04 retraction.
+    Dead.
+20. **Selective pick identification** (`SELECTIVE_PICK_IDENTIFICATION_RESULTS_V1.md`),
+    preregistered, fit on one season and scored on the other: **all six filters FAIL.**
+    - Filters tried: model unders, big edges, winning cells, price, the model's record on the
+      player, and a logistic classifier.
+    - The classifier hit 58.5% and lost 1.4%: it picked -150 bets.
+    - **Hit rate tracks the price-implied rate in every band.**
+    - The model's direction is real but small: an under the model calls OVER loses 7.9%, vs
+      -2.3% when it agrees.
+    - **Data defect:** the full-stack/base benchmark `game_id` is the prior season's game.
+      Team, opponent, line and actual are correct. Do not cluster or join on it.
+21. **What is left that the model cannot do by itself**, not yet tested:
+    - **line shopping:** the better of the FanDuel and DraftKings numbers on the same player;
+      the 2026 boards carry both books;
+    - **timing:** news the line has not absorbed yet.
+    - Each needs its own preregistration. Check the prior work first:
+      `VEGAS_CONFIRMATION_LIKELIHOOD_V1_PLAN.md` mentions cross-book prices.
+
+### V29 items (2026-11-19)
 
 ### Reverse-engineering study (`docs/research/REVERSE_ENGINEER_2026_W1_10_V1.md`)
 Script `scripts/research/reverse_engineer_season_v1.py`; rows `data/research/reverse_engineer/`.
