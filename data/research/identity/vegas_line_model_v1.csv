@@ -1,0 +1,5 @@
+market,n,r2_full,r2_season_avg_only,w_season,w_last3,per_implied_pt,line_vs_season_avg_ratio
+pass_yards,125,0.788,0.658,0.272,0.041,3.037,0.984
+rec_yards,694,0.846,0.845,0.775,0.042,-0.015,0.837
+receptions,692,0.823,0.817,0.727,0.107,-0.015,0.951
+rush_yards,338,0.856,0.854,0.791,0.035,0.274,0.904

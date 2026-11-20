@@ -1,0 +1,1274 @@
+player_display_name,team,position,games,tgt_share,car_share,rec_ypg,rush_ypg,fp,pt_diff_pg,off_epa,quality,identity
+A'Shawn Robinson,TB,DT,9,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+A.J. Brown,NE,WR,4,0.222,0.0,32.0,0.0,5.95,-2.1,0.018,offense-led,balanced
+A.J. Epenesa,PHI,LB,4,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+A.J. Haulcy,IND,SAF,9,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+A.J. Terrell,ATL,CB,6,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+AJ Barner,SEA,TE,10,0.139,0.024,22.9,0.8,6.77,4.8,-0.01,defense-led,run-first
+AJ Cole,LV,P,10,0.0,0.0,0.0,0.0,0.052,-3.8,-0.01,defense-led,balanced
+AJ Dillon,CAR,RB,4,0.014,0.179,0.75,10.75,1.65,-1.889,0.016,offense-led,pass-first
+Aaron Brewer,MIA,C,5,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Aaron Donald,LA,DE,8,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Aaron Hall,CAR,DT,6,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Aaron Jones,MIN,RB,9,0.095,0.521,11.444,57.889,10.6,5.556,-0.108,defense-led,balanced
+Aaron Rodgers,PIT,QB,9,0.0,0.065,0.0,2.444,14.751,1.778,0.011,offense-led,balanced
+Abdul Carter,NYG,LB,9,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Abraham Lucas,SEA,OT,4,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Adam Butler,LV,DT,10,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Adam Prentice,DEN,FB,8,0.009,0.005,1.5,0.375,0.438,1.333,0.009,offense-led,balanced
+Adam Trautman,DEN,TE,5,0.065,0.0,11.0,0.0,2.3,1.333,0.009,offense-led,balanced
+Adetomiwa Adebawore,IND,DT,8,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Adin Huntington,CLE,DE,10,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Adonai Mitchell,NYJ,WR,6,0.222,0.0,54.0,0.0,9.567,-6.0,-0.012,defense-led,balanced
+Aidan Hutchinson,DET,DE,9,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Aireontae Ersery,HOU,OT,6,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Akayleb Evans,CAR,CB,5,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Akeem Davis-Gaither,IND,LB,8,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Akheem Mesidor,LAC,LB,9,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Al-Quadin Muhammad,TB,LB,6,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Alaric Jackson,LA,OT,5,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Alec Anderson,BUF,OT,4,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Alex Anzalone,TB,MLB,9,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Alex Bachman,LA,WR,5,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Alex Highsmith,PIT,LB,8,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Alex Singleton,DEN,LB,9,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Alijah Clark,DAL,DB,6,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Alim McNeill,DET,DT,9,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Alohi Gilman,KC,SAF,9,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Alontae Taylor,TEN,CB,7,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Alvin Kamara,NO,RB,8,0.127,0.244,20.0,20.125,11.262,-3.778,-0.041,defense-led,balanced
+Amani Hooker,TEN,SAF,7,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Ameer Abdullah,JAX,RB,8,0.014,0.1,0.25,11.0,1.375,13.889,0.117,good both sides,run-first
+Ameer Speed,DAL,CB,6,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Amik Robertson,WAS,CB,9,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Amon-Ra St. Brown,DET,WR,9,0.302,0.008,83.889,1.0,20.378,6.444,0.106,offense-led,balanced
+Andre Cisco,NYJ,SAF,8,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Andre Szmyt,CLE,K,10,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Andrew Armstrong,KC,WR,5,0.031,0.0,11.8,0.0,2.98,9.0,0.108,good both sides,pass-first
+Andrew Beck,NYJ,FB,5,0.0,0.018,0.0,0.2,0.02,-6.0,-0.012,defense-led,balanced
+Andrew Mukuba,PHI,SAF,9,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Andrew Ogletree,IND,TE,7,0.034,0.0,3.0,0.0,0.871,-6.3,-0.11,bad both sides,balanced
+Andrew Van Ginkel,MIN,OLB,9,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Andrew Wingard,ARI,SAF,7,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Andru Phillips,NYG,DB,9,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Andy Borregales,NE,K,10,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Anfernee Jennings,NO,LB,6,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Anthony Belton,GB,OT,5,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Anthony Campbell,GB,DT,6,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Anthony Gould,IND,WR,7,0.022,0.0,6.286,0.0,1.057,-6.3,-0.11,bad both sides,balanced
+Anthony Hill Jr.,TEN,LB,8,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Anthony Nelson,TB,LB,8,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Anthony Tyus III,CAR,RB,6,0.0,0.021,0.0,3.833,1.383,-1.889,0.016,offense-led,pass-first
+Antoine Winfield Jr.,TB,SAF,6,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Antonio Johnson,JAX,SAF,8,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Antonio Williams,WAS,WR,9,0.146,0.0,36.222,0.0,8.067,-3.0,-0.004,defense-led,balanced
+Ar'Darius Washington,NYG,SAF,8,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Arden Key,IND,DE,5,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Arik Armstead,JAX,DT,7,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Arnold Ebiketie,PHI,LB,8,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Arvell Reese,NYG,LB,9,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Asante Samuel Jr.,PIT,CB,9,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Ashton Dulin,IND,WR,6,0.068,0.012,19.0,1.0,3.833,-6.3,-0.11,bad both sides,balanced
+Ashton Gillotte,KC,DE,9,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Ashton Jeanty,LV,RB,10,0.175,0.5,41.7,38.0,14.97,-3.8,-0.01,defense-led,balanced
+Ashtyn Davis,SF,SAF,7,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Asim Richards,NO,OT,4,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Austin Ajiake,IND,LB,8,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Austin Barber,CLE,OT,6,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Austin Booker,CHI,DE,9,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Austin Ekeler,WAS,RB,6,0.064,0.224,12.333,18.167,5.05,-3.0,-0.004,defense-led,balanced
+Austin Hooper,ATL,TE,7,0.059,0.0,12.0,0.0,3.486,-5.7,-0.068,bad both sides,run-first
+Austin Jackson,MIA,OT,4,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Austin McNamara,NYJ,P,10,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Austin Schlottmann,TEN,C,5,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Avery Smith,SEA,CB,4,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Avieon Terrell,ATL,CB,6,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Azareye'h Thomas,NYJ,CB,10,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Azeez Al-Shaair,HOU,LB,7,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+B.J. Hill,CIN,DT,6,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Baker Mayfield,TB,QB,6,0.0,0.085,0.0,13.333,8.48,2.667,-0.073,defense-led,run-first
+Bam Knight,ARI,RB,6,0.053,0.25,7.167,31.167,4.5,-10.5,-0.071,bad both sides,balanced
+Barion Brown,NO,WR,8,0.017,0.01,14.25,-0.25,2.025,-3.778,-0.041,defense-led,balanced
+Baron Browning,ARI,LB,8,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Barrett Carter,CIN,LB,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Barryn Sorrell,GB,DE,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Basil Okoye,NYG,DT,4,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Bauer Sharp,TB,TE,7,0.005,0.0,3.0,0.0,0.443,2.667,-0.073,defense-led,run-first
+Ben Sinnott,WAS,TE,4,0.05,0.0,12.0,0.0,3.95,-3.0,-0.004,defense-led,balanced
+Ben Skowronek,PIT,WR,4,0.037,0.0,8.0,0.0,3.3,1.778,0.011,offense-led,balanced
+Ben Yurosek,MIN,TE,4,0.034,0.0,10.25,0.0,1.775,5.556,-0.108,defense-led,balanced
+Bhayshul Tuten,JAX,RB,9,0.078,0.556,22.889,67.667,16.389,13.889,0.117,good both sides,run-first
+Bijan Robinson,ATL,RB,10,0.158,0.665,25.6,95.1,19.77,-5.7,-0.068,bad both sides,run-first
+Billy Bowman Jr.,ATL,CB,5,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Blake Brandel,MIN,C,4,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Blake Cashman,MIN,LB,8,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Blake Corum,LA,RB,10,0.058,0.358,11.8,54.7,11.55,6.1,0.06,good both sides,pass-first
+Blake Gillikin,ARI,P,10,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Blake Miller,DET,OT,5,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Blake Whiteheart,CLE,TE,7,0.032,0.0,6.857,0.0,2.114,-3.2,-0.036,defense-led,balanced
+Bo Melton,GB,WR,10,0.028,0.0,3.4,0.0,0.84,0.5,0.016,offense-led,balanced
+Bo Nix,DEN,QB,9,0.0,0.166,0.0,12.889,14.533,1.333,0.009,offense-led,balanced
+Bo Richter,MIN,LB,4,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Bobby Brown III,CAR,DT,7,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Bobby Jamison-Travis,NYG,DT,4,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Bobby Okereke,CAR,ILB,7,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Boye Mafe,CIN,DE,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Braden Fiske,LA,DE,10,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Braden Mann,PHI,P,9,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Bradley Chubb,BUF,OLB,8,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Bradley Pinion,MIA,P,9,0.0,0.004,0.0,0.0,0.204,-8.444,-0.06,bad both sides,run-first
+Brady Russell,SEA,RB,7,0.013,0.0,5.714,0.0,1.0,4.8,-0.01,defense-led,run-first
+Braelon Allen,NYJ,RB,10,0.084,0.504,10.8,63.8,11.06,-6.0,-0.012,defense-led,balanced
+Brandin Cooks,SF,WR,5,0.068,0.0,11.6,0.0,3.36,9.444,0.187,good both sides,balanced
+Brandon Aubrey,DAL,K,10,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Brandon Cisse,GB,CB,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Brandon Coleman,WAS,G,8,0.004,0.0,1.625,0.0,0.288,-3.0,-0.004,defense-led,balanced
+Brandon Dorlus,ATL,DE,10,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Brandon Jones,DEN,SAF,8,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Brandon McManus,LA,K,4,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Brandon Stephens,NYJ,CB,9,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Branson Combs,JAX,LB,8,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Braxton Berrios,NYG,WR,4,0.009,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Brayden Willis,SF,TE,6,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Breece Hall,NYJ,RB,5,0.109,0.579,39.0,53.0,13.8,-6.0,-0.012,defense-led,balanced
+Brenton Cox Jr.,GB,DE,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Brenton Strange,JAX,TE,9,0.157,0.0,40.556,0.0,8.944,13.889,0.117,good both sides,run-first
+Brett Thorson,MIN,P,7,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Brevin Jordan,HOU,TE,5,0.013,0.0,2.4,0.0,0.64,1.556,0.062,offense-led,pass-first
+Brevyn Spann-Ford,DAL,TE,10,0.064,0.0,15.6,0.0,3.16,0.4,0.119,offense-led,balanced
+Brian Branch,DET,CB,4,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Brian O'Neill,MIN,OT,4,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Brian Robinson,ATL,RB,6,0.038,0.299,5.0,35.167,8.85,-5.7,-0.068,bad both sides,run-first
+Brian Thomas Jr.,JAX,WR,8,0.109,0.0,18.25,0.0,4.95,13.889,0.117,good both sides,run-first
+Britain Covey,PHI,WR,7,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Brock Bowers,LV,TE,8,0.254,0.006,84.5,0.25,18.725,-3.8,-0.01,defense-led,balanced
+Brock Hoffman,PIT,G,4,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Brock Purdy,SF,QB,9,0.0,0.156,0.0,24.667,22.551,9.444,0.187,good both sides,balanced
+Brock Wright,DET,TE,6,0.036,0.0,7.0,0.0,1.867,6.444,0.106,offense-led,balanced
+Broderick Washington,BAL,DT,7,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Bryan Anger,DAL,P,10,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Bryan Cook,CIN,SAF,8,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Bryce Boettcher,IND,LB,8,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Bryce Lance,NO,WR,9,0.07,0.0,8.667,0.0,2.533,-3.778,-0.041,defense-led,balanced
+Bryce Young,CAR,QB,9,0.0,0.054,0.0,5.333,17.187,-1.889,0.016,offense-led,pass-first
+Brycen Tremayne,CAR,WR,9,0.038,0.0,14.0,0.0,2.178,-1.889,0.016,offense-led,pass-first
+Bucky Irving,TB,RB,9,0.121,0.568,11.778,91.667,17.678,2.667,-0.073,defense-led,run-first
+Bud Dupree,LAC,OLB,5,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Budda Baker,ARI,S,10,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Byron Murphy,MIN,CB,9,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Byron Murphy II,SEA,DT,10,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Byron Young,LA,LB,10,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Byron Young,PHI,DT,6,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+C.J. Gardner-Johnson,BUF,SAF,6,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+C.J. Henderson,ATL,CB,9,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+C.J. Stroud,HOU,QB,9,0.0,0.105,0.0,13.333,20.498,1.556,0.062,offense-led,pass-first
+CJ Allen,IND,LB,6,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+CJ Donaldson,NO,RB,6,0.027,0.11,1.667,13.5,1.85,-3.778,-0.041,defense-led,balanced
+Cade Otton,TB,TE,8,0.167,0.0,26.375,0.0,5.512,2.667,-0.073,defense-led,run-first
+Cade Stover,HOU,TE,6,0.016,0.02,2.833,0.833,1.2,1.556,0.062,offense-led,pass-first
+Caden Curry,IND,DE,10,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Cairo Santos,CHI,K,9,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Calais Campbell,BAL,DE,9,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Caleb Banks,MIN,DT,7,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Caleb Douglas,MIA,WR,6,0.227,0.0,61.167,0.0,11.783,-8.444,-0.06,bad both sides,run-first
+Caleb Downs,DAL,SAF,10,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Caleb Williams,CHI,QB,6,0.0,0.163,0.0,24.167,18.39,6.333,0.034,offense-led,balanced
+Calen Bullock,HOU,SAF,8,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Calijah Kancey,TB,DT,8,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Calvin Ridley,TEN,WR,6,0.074,0.0,15.167,0.0,2.517,-8.0,-0.059,bad both sides,run-first
+Cam Hart,LAC,CB,9,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Cam Lewis,CHI,CB,8,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Cam Little,JAX,K,9,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Cam Skattebo,NYG,RB,7,0.076,0.558,17.143,70.857,13.943,0.778,0.021,offense-led,run-first
+Cam Taylor-Britt,IND,CB,5,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Cam Ward,TEN,QB,9,0.0,0.141,0.0,16.778,13.296,-8.0,-0.059,bad both sides,run-first
+Cameron Dicker,LAC,K,9,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Cameron Heyward,PIT,DE,9,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Cameron Johnston,PIT,P,9,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Cameron Jordan,NO,LB,6,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Cameron Latu,NE,TE,5,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Cameron Thomas,ATL,DE,9,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Camryn Bynum,IND,SAF,9,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Carl Granderson,NO,DE,8,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Carlton Davis III,NE,CB,5,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Carnell Tate,TEN,WR,7,0.262,0.0,59.0,0.0,11.043,-8.0,-0.059,bad both sides,run-first
+Carrington Valentine,GB,DB,5,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Carson Bruener,PIT,LB,7,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Carson Schwesinger,CLE,LB,10,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Cashius Howell,CIN,DE,5,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Cedric Gray,TEN,LB,8,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Cedric Johnson,CIN,DE,8,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+CeeDee Lamb,DAL,WR,10,0.321,0.008,97.6,-0.6,22.2,0.4,0.119,offense-led,balanced
+Chad Ryland,ARI,K,10,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Chamarri Conner,KC,DB,6,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Chandler Rivers,BAL,CB,5,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Charles Omenihu,WAS,DE,6,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Charles Snowden,ATL,DE,4,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Charles Woods,NE,CB,9,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Charlie Jones,NYG,WR,6,0.014,0.0,11.0,0.0,1.433,0.778,0.021,offense-led,run-first
+Charlie Kolar,LAC,TE,7,0.124,0.005,20.714,0.429,3.971,-10.556,-0.16,bad both sides,run-first
+Charlie Woerner,ATL,TE,7,0.038,0.01,3.286,0.429,1.657,-5.7,-0.068,bad both sides,run-first
+Charvarius Ward,IND,CB,10,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Chase Brown,CIN,RB,9,0.163,0.574,27.333,49.0,14.411,9.444,0.169,offense-led,pass-first
+Chase McLaughlin,TB,K,9,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Chase Young,NO,DE,9,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Chau Smith-Wade,CAR,CB,6,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Chauncey Golston,NYG,DE,4,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Chaz Chambliss,MIN,LB,6,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Chidobe Awuzie,BAL,CB,4,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Chig Okonkwo,WAS,TE,7,0.18,0.0,37.571,0.0,7.329,-3.0,-0.004,defense-led,balanced
+Chimere Dike,TEN,WR,9,0.059,0.005,15.556,0.556,3.722,-8.0,-0.059,bad both sides,run-first
+Chop Robinson,MIA,LB,8,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Chris Bell,MIA,WR,8,0.125,0.009,18.5,3.0,3.65,-8.444,-0.06,bad both sides,run-first
+Chris Blair,ATL,WR,8,0.04,0.0,4.0,0.0,0.9,-5.7,-0.068,bad both sides,run-first
+Chris Boswell,PIT,K,9,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Chris Brooks,GB,RB,5,0.034,0.189,5.2,14.2,2.74,0.5,0.016,offense-led,balanced
+Chris Godwin Jr.,TB,WR,9,0.165,0.014,28.778,3.333,6.433,2.667,-0.073,defense-led,run-first
+Chris Johnson,MIA,CB,9,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Chris Jones,KC,DE,7,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Chris McClellan,GB,DT,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Chris Moore,BAL,WR,4,0.058,0.0,15.75,0.0,3.825,-5.0,-0.018,defense-led,balanced
+Chris Olave,NO,WR,9,0.265,0.0,84.889,0.0,16.378,-3.778,-0.041,defense-led,balanced
+Chris Rodriguez Jr.,JAX,RB,9,0.02,0.222,4.0,25.889,6.1,13.889,0.117,good both sides,run-first
+Chris Rumph II,NO,LB,5,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Christen Miller,NO,DT,4,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Christian Barmore,NE,DT,8,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Christian Benford,BUF,CB,8,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Christian Elliss,NE,LB,10,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Christian Gonzalez,NE,CB,8,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Christian Harris,ATL,LB,4,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Christian Izien,DET,SAF,6,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Christian McCaffrey,SF,RB,9,0.191,0.437,47.889,57.667,23.667,9.444,0.187,good both sides,balanced
+Christian Roland-Wallace,KC,CB,8,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Christian Rozeboom,TB,LB,4,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Christian Watson,GB,WR,10,0.221,0.0,91.6,0.0,18.36,0.5,0.016,offense-led,balanced
+Chuba Hubbard,CAR,RB,9,0.115,0.729,27.444,79.0,20.089,-1.889,0.016,offense-led,pass-first
+Chuck Clark,DET,SAF,9,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Cobie Durant,DAL,CB,6,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Cody Barton,TEN,LB,8,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Cody Lindenberg,LV,LB,6,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Cody Mauch,TB,G,4,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Cody Simon,ARI,LB,9,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Cody White,LV,WR,8,0.071,0.0,16.75,0.0,5.3,-3.8,-0.01,defense-led,balanced
+Colby Parkinson,LA,TE,8,0.087,0.0,15.875,0.0,4.838,6.1,0.06,good both sides,pass-first
+Colby Wooden,NO,DE,9,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Cole Bishop,BUF,SAF,9,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Cole Holcomb,PIT,LB,7,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Cole Kmet,CHI,TE,7,0.062,0.0,12.429,0.0,3.529,6.333,0.034,offense-led,balanced
+Cole Strange,LAC,G,4,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Coleman Owen,GB,WR,4,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Colson Yankoff,WAS,TE,8,0.02,0.0,2.75,0.0,0.65,-3.0,-0.004,defense-led,balanced
+Colston Loveland,CHI,TE,9,0.195,0.0,40.333,0.0,9.256,6.333,0.034,offense-led,balanced
+Connor Colby,SF,G,5,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Connor Heyward,LV,FB,9,0.013,0.022,3.111,-0.222,0.733,-3.8,-0.01,defense-led,balanced
+Connor O'Toole,SEA,LB,5,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Cooper DeJean,PHI,CB,9,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Cooper Kupp,SEA,WR,10,0.119,0.0,27.2,0.0,6.82,4.8,-0.01,defense-led,run-first
+Cooper McDonald,KC,LB,4,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Cordale Flott,TEN,CB,8,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Corey Bojorquez,CLE,P,10,0.0,0.004,0.0,0.0,-0.2,-3.2,-0.036,defense-led,balanced
+Corey Kiner,NE,RB,10,0.007,0.216,1.6,26.9,3.45,-2.1,0.018,offense-led,balanced
+Corliss Waitman,SF,P,8,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Cory Durden,NE,DT,9,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Courtland Sutton,DEN,WR,9,0.178,0.0,29.556,0.0,7.067,1.333,0.009,offense-led,balanced
+Craig Woodson,NE,SAF,9,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Creed Humphrey,KC,C,8,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Cyrus Allen,KC,WR,7,0.066,0.0,15.571,0.0,3.414,9.0,0.108,good both sides,pass-first
+D'Andre Swift,CHI,RB,9,0.099,0.512,18.0,64.0,17.089,6.333,0.034,offense-led,balanced
+D'Angelo Ponds,NYJ,CB,4,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+D'Marco Jackson,CHI,LB,9,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+D.J. Ivey,CIN,CB,8,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+D.J. Jones,DEN,DT,9,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+D.J. Reed,DET,CB,7,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+DJ Moore,BUF,WR,7,0.195,0.022,53.571,3.429,11.271,9.778,0.147,good both sides,run-first
+DJ Reader,NYG,DT,9,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+DJ Turner II,CIN,CB,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+DJ Wonnum,DET,DE,8,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+DK Metcalf,PIT,WR,9,0.236,0.005,48.0,1.222,10.367,1.778,0.011,offense-led,balanced
+DaQuan Jones,NE,DE,8,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+DaRon Bland,DAL,CB,10,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+DaVon Hamilton,JAX,DT,7,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Dadrion Taylor-Demerson,ARI,SAF,5,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Daiyan Henley,LAC,LB,9,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Dak Prescott,DAL,QB,10,0.0,0.113,0.0,10.9,20.186,0.4,0.119,offense-led,balanced
+Dallas Goedert,PHI,TE,7,0.174,0.006,44.0,0.286,10.571,-8.111,-0.081,bad both sides,balanced
+Dallas Turner,MIN,LB,9,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Dalton Kincaid,BUF,TE,9,0.169,0.0,54.111,0.0,10.3,9.778,0.147,good both sides,run-first
+Dalton Schultz,HOU,TE,9,0.161,0.0,41.667,0.0,8.833,1.556,0.062,offense-led,pass-first
+Dalvin Tomlinson,LAC,DE,5,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Damar Hamlin,BUF,SAF,9,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Dane Belton,NYJ,SAF,10,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Dani Dennis-Sutton,GB,LB,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Daniel Bellinger,TEN,TE,9,0.066,0.0,8.444,0.0,2.733,-8.0,-0.059,bad both sides,run-first
+Daniel Carlson,NO,K,7,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Daniel Hardy,CHI,DE,6,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Daniel Jones,IND,QB,10,0.0,0.117,0.0,9.5,8.67,-6.3,-0.11,bad both sides,balanced
+Daniel Thomas,CLE,SAF,7,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Daniel Whelan,GB,P,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Danielle Hunter,HOU,DE,8,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Danny Striggow,JAX,DE,8,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Danny Stutsman,NO,LB,8,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Dante Fowler Jr.,SEA,LB,4,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Dante Stills,ARI,DT,9,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Dante Trader Jr.,MIA,SAF,9,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Dareke Young,LV,WR,8,0.012,0.0,4.5,0.0,0.7,-3.8,-0.01,defense-led,balanced
+Darien Porter,LV,CB,6,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Darius Alexander,NYG,DT,6,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Darius Cooper,PHI,WR,9,0.112,0.0,22.222,0.0,6.333,-8.111,-0.081,bad both sides,balanced
+Darius Muasau,NE,LB,8,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Darius Robinson,ARI,DL,10,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Darnell Mooney,NYG,WR,9,0.105,0.015,19.444,3.111,3.811,0.778,0.021,offense-led,run-first
+Darnell Washington,PIT,TE,9,0.104,0.0,28.778,0.0,7.1,1.778,0.011,offense-led,balanced
+Daron Payne,WAS,NT,6,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Darrell Jackson Jr.,NYJ,DT,10,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Darren Waller,CAR,TE,9,0.125,0.0,35.889,0.0,9.033,-1.889,0.016,offense-led,pass-first
+Davante Adams,LA,WR,6,0.202,0.0,80.0,0.0,17.0,6.1,0.06,good both sides,pass-first
+David Bailey,NYJ,LB,9,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+David Montgomery,HOU,RB,5,0.041,0.444,13.4,27.6,9.1,1.556,0.062,offense-led,pass-first
+David Moore,CAR,WR,6,0.018,0.0,4.5,0.0,0.617,-1.889,0.016,offense-led,pass-first
+David Walker,TB,LB,8,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Davis Allen,LA,TE,9,0.053,0.004,12.222,0.0,4.667,6.1,0.06,good both sides,pass-first
+Davison Igbinosun,BUF,CB,9,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Davon Godchaux,NO,DT,7,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Dawson Knox,BUF,TE,9,0.082,0.003,9.556,0.0,3.178,9.778,0.147,good both sides,run-first
+Daxton Hill,CIN,DB,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Daylen Everette,PIT,CB,8,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Dayo Odeyingbo,CHI,DE,5,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+DeAndre Carter,DET,WR,4,0.009,0.0,1.25,0.0,0.375,6.444,0.106,offense-led,balanced
+DeForest Buckner,IND,DT,7,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+DeMarcco Hellams,ATL,SAF,7,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+DeMarcus Lawrence,SEA,LB,10,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+DeMario Douglas,NE,WR,10,0.169,0.0,43.8,0.0,9.78,-2.1,0.018,offense-led,balanced
+DeMarvion Overshown,DAL,LB,4,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+DeVonta Smith,PHI,WR,4,0.328,0.0,77.5,0.0,17.25,-8.111,-0.081,bad both sides,balanced
+DeWayne Carter,BUF,DT,9,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Deane Leonard,LAC,CB,4,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Deatrich Wise,WAS,DE,4,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Dee Alford,BUF,CB,7,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Dee Winters,DAL,LB,8,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+DeeJay Dallas,MIN,RB,9,0.021,0.017,4.0,1.556,1.111,5.556,-0.108,defense-led,balanced
+Deebo Samuel Sr.,SF,WR,6,0.139,0.071,39.5,26.0,14.383,9.444,0.187,good both sides,balanced
+Deion Burks,IND,WR,8,0.045,0.013,7.5,2.625,1.763,-6.3,-0.11,bad both sides,balanced
+Del'Shawn Phillips,LAC,LB,9,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Demario Davis,NYJ,OLB,10,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Demetrius Knight Jr.,CIN,LB,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Demond Claiborne,MIN,RB,4,0.019,0.051,2.0,3.25,1.025,5.556,-0.108,defense-led,balanced
+Dennis Gardeck,JAX,LB,9,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Denzel Boston,CLE,WR,10,0.196,0.0,52.3,0.0,10.53,-3.2,-0.036,defense-led,balanced
+Denzel Burke,ARI,CB,10,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Denzel Ward,CLE,CB,10,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Deommodore Lenoir,SF,CB,9,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Deone Walker,BUF,DT,9,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Deonte Banks,NYG,CB,7,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Derek Barnett,CLE,DE,6,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Derek Stingley Jr.,HOU,CB,8,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Derick Hall,SEA,LB,10,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Derius Davis,LAC,WR,9,0.02,0.004,2.333,0.444,1.167,-10.556,-0.16,bad both sides,run-first
+Derrick Barnes,DET,LB,9,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Derrick Brown,CAR,DT,9,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Derrick Harmon,PIT,DT,4,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Derrick Henry,BAL,RB,10,0.066,0.661,8.5,69.9,16.128,-5.0,-0.018,defense-led,balanced
+Derrick Moore,DET,DE,6,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Deshaun Watson,CLE,QB,9,0.0,0.266,0.0,29.556,15.48,-3.2,-0.036,defense-led,balanced
+Desjuan Johnson,LA,LB,6,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Devaughn Vele,NO,WR,9,0.165,0.0,42.111,0.0,10.322,-3.778,-0.041,defense-led,balanced
+Devin Bush,CHI,LB,9,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Devin Duvernay,ARI,WR,10,0.019,0.0,5.7,0.0,1.17,-10.5,-0.071,bad both sides,balanced
+Devin Lloyd,CAR,LB,8,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Devin Singletary,NYG,RB,6,0.062,0.235,10.5,19.0,6.617,0.778,0.021,offense-led,run-first
+Devon Key,DEN,SAF,9,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Devon Witherspoon,SEA,CB,10,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Devonte Wyatt,GB,DT,9,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Devontez Walker,BAL,WR,5,0.064,0.0,15.0,0.0,3.5,-5.0,-0.018,defense-led,balanced
+Dexter Lawrence,CIN,DT,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Dillon Thieneman,CHI,SAF,9,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Dion Dawkins,BUF,OT,4,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Divine Deablo,ATL,LB,6,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Dohnte Meyers,CIN,WR,9,0.085,0.01,26.889,2.889,5.867,9.444,0.169,offense-led,pass-first
+Dominic Zvada,NYG,K,9,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Dominique Robinson,HOU,DE,7,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Domonique Orange,MIN,DT,6,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Dondrea Tillman,DEN,LB,8,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Doneiko Slaughter,PIT,DB,4,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Donovan Ezeiruaku,DAL,LB,8,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Donovan McMillon,CLE,SAF,8,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Dontayvion Wicks,PHI,WR,6,0.171,0.0,47.333,0.0,8.9,-8.111,-0.081,bad both sides,balanced
+Donte Jackson,LAC,CB,6,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Dorance Armstrong,WAS,DE,7,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Dorian Williams,BUF,LB,9,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Drake London,ATL,WR,10,0.278,0.007,80.1,0.4,13.85,-5.7,-0.068,bad both sides,run-first
+Drake Maye,NE,QB,10,0.0,0.173,0.0,23.0,18.22,-2.1,0.018,offense-led,balanced
+Drake Thomas,SEA,LB,8,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Dre Greenlaw,SF,LB,8,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Dre'Mont Jones,NE,LB,8,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Drew Lock,SEA,QB,4,0.0,0.1,0.0,12.25,15.595,4.8,-0.01,defense-led,run-first
+Drew Sample,CIN,TE,5,0.064,0.0,12.6,0.0,5.66,9.444,0.169,offense-led,pass-first
+Drew Stevens,WAS,K,9,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Drue Tranquill,KC,LB,9,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Dyami Brown,WAS,WR,7,0.075,0.0,13.429,0.0,2.343,-3.0,-0.004,defense-led,balanced
+Dylan Laube,LV,RB,10,0.012,0.02,1.5,0.9,1.84,-3.8,-0.01,defense-led,balanced
+Dylan Sampson,CLE,RB,5,0.139,0.154,30.4,15.8,7.82,-3.2,-0.036,defense-led,balanced
+Easton Mascarenas-Arnold,CLE,LB,8,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Ed Oliver,BUF,DT,6,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Eddy Pineiro,SF,K,9,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Edgerrin Cooper,GB,LB,4,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Efton Chism III,NE,WR,9,0.1,0.004,22.222,0.222,5.649,-2.1,0.018,offense-led,balanced
+Eku Leota,ARI,LB,4,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Elgton Jenkins,CLE,C,4,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Eli Raridon,NE,TE,9,0.104,0.0,25.667,0.0,5.789,-2.1,0.018,offense-led,balanced
+Elic Ayomanor,TEN,WR,9,0.133,0.0,32.222,0.0,5.889,-8.0,-0.059,bad both sides,run-first
+Elijah Campbell,NYG,DB,6,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Elijah Garcia,DAL,DE,6,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Elijah Hicks,CHI,SAF,6,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Elijah Higgins,ARI,TE,8,0.066,0.0,20.25,0.0,5.025,-10.5,-0.071,bad both sides,balanced
+Elijah Molden,LAC,CB,7,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Elijah Ponder,NE,LB,10,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Elijah Roberts,TB,DE,7,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Elijah Simmons,TB,DL,5,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Emanuel Wilson,SEA,RB,7,0.042,0.539,9.286,57.571,10.686,4.8,-0.01,defense-led,run-first
+Emeka Egbuka,TB,WR,7,0.249,0.016,39.714,1.714,11.143,2.667,-0.073,defense-led,run-first
+Emmanuel Forbes,LA,CB,8,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Emmanuel McNeil-Warren,CLE,SAF,10,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Emmanuel Pregnon,JAX,G,6,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Emmett Johnson,KC,RB,9,0.082,0.197,34.111,23.556,10.656,9.0,0.108,good both sides,pass-first
+Ennis Rakestraw Jr.,DET,CB,6,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Eric Murray,JAX,S,5,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Eric O'Neill,DET,DE,7,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Eric Saubert,SEA,TE,8,0.025,0.0,2.5,0.0,1.375,4.8,-0.01,defense-led,run-first
+Eric Stokes,LV,CB,10,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Eric Wilson,MIN,LB,9,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Erick Hunter,NE,LB,8,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Ernest Jones,SEA,LB,10,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Ethan Burke,BAL,LB,7,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Ethan Evans,LA,P,10,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Evan Engram,DEN,TE,9,0.116,0.0,18.778,0.0,4.433,1.333,0.009,offense-led,balanced
+Evan McPherson,CIN,K,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Evan Williams,GB,SAF,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Eyioma Uwazurike,DEN,DT,8,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Feleipe Franks,CAR,TE,6,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Felix Anudike-Uzomah,KC,DE,8,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Foley Fatukasi,LV,DT,9,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Foster Moreau,HOU,TE,6,0.069,0.0,12.0,0.0,6.033,1.556,0.062,offense-led,pass-first
+Foyesade Oluokun,JAX,LB,9,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Frankie Luvu,WAS,LB,7,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Fred Warner,SF,MLB,9,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Gabe Jacas,NE,LB,10,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Gabe Rubio,PIT,DE,4,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Garret Wallow,SF,LB,4,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Garrett Bradbury,CHI,C,4,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Garrett Williams,ARI,CB,6,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Garrett Wilson,NYJ,WR,9,0.287,0.0,70.333,0.0,14.367,-6.0,-0.012,defense-led,balanced
+Gavin Bartholomew,MIN,TE,4,0.103,0.0,22.5,0.0,6.25,5.556,-0.108,defense-led,balanced
+Genesis Smith,LAC,SAF,8,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Geno Smith,NYJ,QB,10,0.0,0.094,0.0,5.4,13.644,-6.0,-0.012,defense-led,balanced
+George Gumbs Jr.,IND,DE,4,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+George Holani,SEA,RB,9,0.054,0.143,9.778,13.0,4.056,4.8,-0.01,defense-led,run-first
+George Karlaftis,KC,DE,9,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+George Kittle,SF,TE,9,0.242,0.0,61.889,0.0,14.189,9.444,0.187,good both sides,balanced
+George Pickens,DAL,WR,9,0.233,0.0,75.333,0.0,16.422,0.4,0.119,offense-led,balanced
+Germie Bernard,PIT,WR,8,0.173,0.01,35.5,1.75,8.475,1.778,0.011,offense-led,balanced
+Gervon Dexter Sr.,ATL,DT,10,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Gracen Halton,SF,DT,5,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Grady Jarrett,CHI,DT,8,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Graham Barton,TB,C,5,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Grant Delpit,CLE,SAF,10,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Grant Stuard,LA,LB,4,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Greg Dortch,BUF,WR,9,0.004,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Greg Dulcich,MIA,TE,8,0.158,0.0,33.75,0.0,6.625,-8.444,-0.06,bad both sides,run-first
+Greg Gaines,BUF,DT,6,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Greg Newsome II,NYG,CB,8,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Greg Rousseau,BUF,LB,9,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Grover Stewart,IND,DT,10,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Gunnar Helm,TEN,TE,8,0.12,0.0,22.875,0.0,5.413,-8.0,-0.059,bad both sides,run-first
+Harold Fannin Jr.,CLE,TE,10,0.196,0.0,54.4,0.0,11.84,-3.2,-0.036,defense-led,balanced
+Harold Perkins Jr.,ATL,LB,10,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Harrison Butker,KC,K,9,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Harrison Mevis,LA,K,5,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Harrison Phillips,NYJ,DT,10,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Harrison Smith,MIN,FS,9,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Hayden Rucci,LAC,TE,4,0.008,0.0,1.75,0.0,1.925,-10.556,-0.16,bad both sides,run-first
+Henry To'oTo'o,HOU,LB,5,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Hezekiah Masses,LV,CB,10,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Hjalte Froholdt,ARI,C,4,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Hunter Henry,NE,TE,10,0.138,0.0,38.3,0.0,8.43,-2.1,0.018,offense-led,balanced
+Hunter Long,ARI,TE,5,0.024,0.0,4.4,0.0,1.04,-10.5,-0.071,bad both sides,balanced
+Hunter Luepke,DAL,RB,8,0.017,0.026,2.125,3.125,1.15,0.4,0.119,offense-led,balanced
+Hunter Wohler,IND,SAF,7,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Ian Thomas,LV,TE,5,0.033,0.0,14.6,0.0,3.86,-3.8,-0.01,defense-led,balanced
+Ifeatu Melifonwu,TB,SAF,5,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Irvin Charles,SEA,WR,4,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Isaac TeSlaa,DET,WR,8,0.101,0.0,28.125,0.0,5.188,6.444,0.106,offense-led,balanced
+Isaiah Bond,CLE,WR,6,0.044,0.0,14.333,0.0,2.267,-3.2,-0.036,defense-led,balanced
+Isaiah Davis,NYJ,RB,9,0.022,0.07,7.556,4.889,1.8,-6.0,-0.012,defense-led,balanced
+Isaiah Likely,NYG,TE,9,0.272,0.0,63.889,0.0,17.389,0.778,0.021,offense-led,run-first
+Isaiah McDuffie,GB,LB,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Isaiah McGuire,CLE,DE,10,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Isaiah Pola-Mao,LV,SAF,7,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Isaiah Rodgers,MIN,CB,9,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Isaiah Simmons,CAR,SAF,7,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Isaiah Stalbird,NO,LB,7,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Isaiah Williams,NYJ,WR,10,0.074,0.016,19.3,2.5,4.98,-6.0,-0.012,defense-led,balanced
+Ivan Pace Jr.,MIN,LB,9,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+J. Michael Sturdivant,GB,WR,9,0.028,0.0,8.333,0.0,2.167,0.5,0.016,offense-led,balanced
+J.J. McCarthy,NYG,QB,5,0.0,0.107,0.0,17.0,10.22,0.778,0.021,offense-led,run-first
+J.K. Dobbins,DEN,RB,9,0.039,0.439,3.444,36.0,6.944,1.333,0.009,offense-led,balanced
+J.K. Scott,LAC,P,9,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+JC Latham,TEN,OT,5,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+JJ Pegues,LV,DT,4,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+JL Skinner,DEN,SAF,8,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Ja'Kobi Lane,BAL,WR,6,0.14,0.0,25.0,0.0,4.5,-5.0,-0.018,defense-led,balanced
+Ja'Marcus Ingram,HOU,CB,4,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Ja'Marr Chase,CIN,WR,9,0.263,0.0,97.556,0.0,21.533,9.444,0.169,offense-led,pass-first
+Ja'Quan McMillian,DEN,CB,8,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Jack Bech,LV,WR,4,0.128,0.0,16.75,0.0,5.175,-3.8,-0.01,defense-led,balanced
+Jack Campbell,DET,LB,7,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Jack Cochrane,KC,LB,9,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Jack Fox,DET,P,9,0.0,0.0,0.0,0.0,0.049,6.444,0.106,offense-led,balanced
+Jack Gibbens,ARI,LB,10,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Jack Heflin,NYJ,DT,4,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Jack Jones,SF,CB,5,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Jack Sanborn,CHI,LB,4,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Jack Sawyer,PIT,LB,8,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Jackson Hawes,BUF,TE,6,0.025,0.0,2.5,0.0,0.583,9.778,0.147,good both sides,run-first
+Jackson Kuwatch,CAR,LB,7,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Jackson Woodard,MIA,LB,4,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Jacob Cowing,SF,WR,9,0.043,0.008,5.778,1.333,1.267,9.444,0.187,good both sides,balanced
+Jacob Martin,TEN,DE,9,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Jacob Parrish,TB,CB,8,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Jacob Rodriguez,MIA,LB,9,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Jacob Saylors,DET,RB,8,0.0,0.008,0.0,1.125,0.112,6.444,0.106,offense-led,balanced
+Jacob Thomas,MIN,SAF,5,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Jacoby Brissett,ARI,QB,8,0.003,0.139,0.875,10.875,13.895,-10.5,-0.071,bad both sides,balanced
+Jacory Croskey-Merritt,WAS,RB,5,0.046,0.453,8.0,47.8,8.98,-3.0,-0.004,defense-led,balanced
+Jadarian Price,SEA,RB,6,0.092,0.335,15.167,34.667,7.15,4.8,-0.01,defense-led,run-first
+Jaden Crumedy,HOU,DT,4,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Jaden Dugger,SF,LB,8,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Jaden Hicks,KC,SAF,9,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Jadeveon Clowney,HOU,DE,7,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Jadon Canady,KC,CB,5,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Jaelan Phillips,CAR,LB,6,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Jahan Dotson,ATL,WR,10,0.134,0.0,41.6,0.0,7.26,-5.7,-0.068,bad both sides,run-first
+Jahdae Barron,DEN,CB,7,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Jahdae Walker,CHI,WR,6,0.01,0.0,0.167,0.0,1.183,6.333,0.034,offense-led,balanced
+Jahlani Tavai,JAX,LB,7,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Jahmyr Gibbs,DET,RB,9,0.176,0.754,42.667,111.111,28.156,6.444,0.106,offense-led,balanced
+Jaishawn Barham,DAL,LB,9,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Jake Bailey,ATL,P,10,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Jake Bates,DET,K,9,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Jake Briningstool,KC,TE,6,0.04,0.0,6.333,0.0,1.3,9.0,0.108,good both sides,pass-first
+Jake Elliott,PHI,K,9,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Jake Ferguson,DAL,TE,8,0.09,0.0,17.0,0.0,6.825,0.4,0.119,offense-led,balanced
+Jake Golday,MIN,LB,9,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Jake Hansen,HOU,LB,9,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Jake Matthews,ATL,OT,4,0.008,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Jakobi Meyers,JAX,WR,9,0.169,0.008,45.333,0.222,9.111,13.889,0.117,good both sides,run-first
+Jaleel McLaughlin,CLE,RB,5,0.039,0.083,2.8,14.4,3.72,-3.2,-0.036,defense-led,balanced
+Jalen Brooks,ARI,WR,6,0.072,0.0,13.5,0.0,2.183,-10.5,-0.071,bad both sides,balanced
+Jalen Carter,PHI,DT,9,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Jalen Coker,CAR,WR,8,0.194,0.01,49.125,0.0,11.038,-1.889,0.016,offense-led,pass-first
+Jalen Hurts,PHI,QB,5,0.0,0.19,0.0,21.4,16.004,-8.111,-0.081,bad both sides,balanced
+Jalen McLeod,JAX,LB,6,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Jalen Nailor,LV,WR,8,0.126,0.0,15.125,0.0,4.138,-3.8,-0.01,defense-led,balanced
+Jalen Pitre,HOU,SAF,7,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Jalen Ramsey,PIT,CB,9,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Jalen Redmond,MIN,DL,9,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Jalen Royals,KC,WR,9,0.05,0.0,7.0,0.0,2.256,9.0,0.108,good both sides,pass-first
+Jalen Sundell,SEA,C,4,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Jalen Tolbert,MIA,WR,4,0.057,0.0,19.75,0.0,4.475,-8.444,-0.06,bad both sides,run-first
+Jalon Daniels,TB,QB,5,0.007,0.133,-0.6,24.6,7.008,2.667,-0.073,defense-led,run-first
+Jalyx Hunt,PHI,LB,8,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Jamaree Caldwell,LAC,DT,7,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Jameis Winston,NYG,QB,8,0.0,0.09,0.0,7.75,9.165,0.778,0.021,offense-led,run-first
+Jamel Dean,PIT,CB,8,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+James Cook,BUF,RB,9,0.078,0.638,12.222,107.889,18.9,9.778,0.147,good both sides,run-first
+James Houston,DAL,LB,6,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+James Lynch,CHI,DT,8,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+James Pierre,MIN,CB,8,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+James Thompson Jr.,SF,DT,5,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+James Williams,TEN,LB,6,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Jameson Williams,DET,WR,9,0.176,0.004,57.556,1.0,12.744,6.444,0.106,offense-led,balanced
+Jamien Sherwood,NYJ,LB,10,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Jammie Robinson,ATL,SAF,4,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Jaquan Brisker,PIT,SAF,9,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Jared Goff,DET,QB,9,0.0,0.076,0.0,2.556,18.642,6.444,0.106,offense-led,balanced
+Jared Ivey,ATL,LB,4,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Jared Verse,CLE,DE,10,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Jared Wayne,HOU,WR,4,0.083,0.0,16.25,0.0,2.625,1.556,0.062,offense-led,pass-first
+Jarran Reed,SEA,DT,9,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Jarrian Jones,JAX,CB,8,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Jarvis Brownlee Jr.,NYJ,DB,7,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Jason Marshall Jr.,MIA,CB,9,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Jason Myers,SEA,K,10,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Jason Pinnock,NYG,SAF,5,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Jason Sanders,NYJ,K,10,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Jauan Jennings,MIN,WR,6,0.062,0.0,9.0,0.0,1.9,5.556,-0.108,defense-led,balanced
+Javon Bullard,GB,SAF,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Javon Hargrave,GB,NT,4,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Javon Kinlaw,WAS,DT,6,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Javon Solomon,BUF,LB,7,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Javonte Williams,DAL,RB,10,0.08,0.661,13.1,69.2,16.73,0.4,0.119,offense-led,balanced
+Jawaan Taylor,ATL,OT,4,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Jaxon Smith-Njigba,SEA,WR,10,0.371,0.01,120.7,2.9,26.316,4.8,-0.01,defense-led,run-first
+Jay Higgins,BAL,LB,6,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Jay Ward,MIN,SAF,7,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Jayden Daniels,WAS,QB,7,0.0,0.222,0.0,40.0,19.423,-3.0,-0.004,defense-led,balanced
+Jayden Price,NO,CB,4,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Jaylahn Tuimoloau,IND,DE,10,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Jaylen McCollough,LA,SAF,8,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Jaylen Reed,NE,SAF,7,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Jaylen Waddle,DEN,WR,9,0.201,0.009,37.444,2.556,9.111,1.333,0.009,offense-led,balanced
+Jaylen Warren,PIT,RB,9,0.141,0.583,35.556,79.889,16.656,1.778,0.011,offense-led,balanced
+Jaylen Watson,LA,CB,7,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Jaylen Wright,MIA,RB,7,0.023,0.132,2.429,5.571,1.086,-8.444,-0.06,bad both sides,run-first
+Jaylin Lane,WAS,WR,4,0.016,0.0,6.25,0.0,1.125,-3.0,-0.004,defense-led,balanced
+Jaylin Noel,HOU,WR,7,0.1,0.024,47.286,3.714,9.529,1.556,0.062,offense-led,pass-first
+Jaylinn Hawkins,BAL,SAF,6,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Jaylon Carlies,IND,LB,5,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Jaylon Johnson,CHI,CB,8,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Jaylon Moore,KC,OT,4,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Jeffery Simmons,TEN,DT,7,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Jeffrey Bassa,KC,LB,9,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Jelani Woods,NYJ,TE,6,0.03,0.0,6.5,0.0,1.317,-6.0,-0.012,defense-led,balanced
+Jeremiah Trotter Jr.,PHI,LB,7,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Jeremiyah Love,ARI,RB,6,0.06,0.51,6.0,44.667,8.9,-10.5,-0.071,bad both sides,balanced
+Jeremy Chinn,LV,SAF,10,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Jeremy Crawshaw,DEN,P,9,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Jeremy Reaves,WAS,DB,9,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Jeremy Ruckert,NYJ,TE,5,0.049,0.0,9.6,0.0,3.76,-6.0,-0.012,defense-led,balanced
+Jermaine Eluemunor,NYG,G,5,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Jermaine Johnson II,TEN,DE,9,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Jermod McCoy,LV,CB,6,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Jerry Jeudy,CLE,WR,9,0.112,0.0,31.333,0.0,5.356,-3.2,-0.036,defense-led,balanced
+Jerry Tillery,IND,DT,7,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Jessie Bates,ATL,FS,9,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Jevon Holland,NYG,SAF,8,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Ji'Ayir Brown,SF,SAF,9,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Jihaad Campbell,PHI,LB,7,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Jimmy Rolder,DET,LB,5,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Joe Alt,LAC,OT,4,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Joe Andreessen,BUF,LB,7,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Joe Burrow,CIN,QB,9,0.0,0.122,0.0,9.444,25.811,9.444,0.169,offense-led,pass-first
+Joe Giles-Harris,CIN,LB,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Joe Tippmann,NYJ,G,4,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Joey Porter Jr.,DAL,CB,4,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Joey Slye,TEN,K,9,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+John Bates,WAS,TE,6,0.034,0.0,4.5,0.0,1.283,-3.0,-0.004,defense-led,balanced
+John Franklin-Myers,TEN,DE,9,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+John Jenkins,BAL,DT,8,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+John Metchie III,CAR,WR,8,0.083,0.0,19.75,0.0,4.6,-1.889,0.016,offense-led,pass-first
+Johnny Mundt,PHI,TE,5,0.036,0.0,3.2,0.0,1.12,-8.111,-0.081,bad both sides,balanced
+Jon Runyan,NYG,G,4,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Jonah Coleman,DEN,RB,5,0.097,0.395,25.6,38.2,12.58,1.333,0.009,offense-led,balanced
+Jonah Elliss,DEN,LB,6,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Jonah Laulu,LV,DT,4,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Jonas Sanker,NO,SAF,9,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Jonathan Allen,CIN,DT,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Jonathan Bullard,DAL,DE,4,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Jonathan Greenard,PHI,LB,4,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Jonathan Mingo,DAL,WR,7,0.043,0.0,7.571,0.0,1.329,0.4,0.119,offense-led,balanced
+Jonathan Owens,IND,SAF,6,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Jonathan Taylor,IND,RB,10,0.13,0.625,24.0,73.9,16.59,-6.3,-0.11,bad both sides,balanced
+Jonnu Smith,GB,TE,4,0.049,0.0,23.5,0.0,3.85,0.5,0.016,offense-led,balanced
+Jordan Addison,MIN,WR,7,0.198,0.011,39.571,0.286,7.7,5.556,-0.108,defense-led,balanced
+Jordan Battle,CIN,SAF,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Jordan Burch,ARI,LB,8,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Jordan Davis,PHI,DT,9,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Jordan Elliott,TEN,DT,5,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Jordan Howden,NO,SAF,6,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Jordan James,SF,RB,6,0.006,0.046,1.833,5.333,0.883,9.444,0.187,good both sides,balanced
+Jordan Love,GB,QB,10,0.0,0.059,0.0,2.3,19.582,0.5,0.016,offense-led,balanced
+Jordan Mailata,PHI,OT,4,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Jordan Mason,MIN,RB,5,0.044,0.484,1.4,48.2,6.56,5.556,-0.108,defense-led,balanced
+Jordan Phillips,MIA,DT,9,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Jordan Stout,NYG,P,9,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Jordan Turner,DEN,LB,6,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Jordan Watkins,SF,WR,5,0.11,0.0,54.6,0.0,9.06,9.444,0.187,good both sides,balanced
+Jordan Whittington,LA,WR,6,0.018,0.0,2.0,0.0,0.533,6.1,0.06,good both sides,pass-first
+Jordyn Brooks,MIA,LB,9,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Josaiah Stewart,LA,LB,9,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Josh Allen,BUF,QB,9,0.004,0.225,0.111,32.222,24.78,9.778,0.147,good both sides,run-first
+Josh Blackwell,CHI,CB,4,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Josh Cameron,JAX,WR,9,0.067,0.0,21.111,0.0,5.444,13.889,0.117,good both sides,run-first
+Josh Conerly Jr.,WAS,OT,6,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Josh Cuevas,BAL,TE,8,0.068,0.0,21.375,0.0,4.512,-5.0,-0.018,defense-led,balanced
+Josh Downs,IND,WR,9,0.199,0.004,39.333,0.778,8.344,-6.3,-0.11,bad both sides,balanced
+Josh Hines-Allen,JAX,DE,9,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Josh Jobe,SEA,CB,10,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Josh Metellus,MIN,SAF,9,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Josh Newton,CIN,CB,4,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Josh Palmer,BUF,WR,5,0.081,0.0,23.4,0.0,5.54,9.778,0.147,good both sides,run-first
+Josh Sweat,ARI,LB,10,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Josh Wallace,LA,CB,9,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Josh Woods,ATL,LB,9,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Joshua Farmer,NE,DT,6,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Joshua Josephs,WAS,LB,6,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Joshua Uche,MIA,LB,9,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Joshua Williams,TEN,CB,4,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Josiah Trotter,TB,LB,8,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Jourdan Lewis,JAX,CB,8,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Jowon Briggs,NYJ,DE,8,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Juanyeh Thomas,DAL,DB,5,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Julian Blackmon,NO,SAF,9,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Julian Love,SEA,SAF,9,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Julius Brents,MIA,CB,9,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Julius Chestnut,TEN,RB,6,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Julius Wood,MIA,DB,6,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Justice Hill,BAL,RB,10,0.122,0.129,14.5,24.4,6.99,-5.0,-0.018,defense-led,balanced
+Justin Barron,DAL,LB,4,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Justin Eboigbe,LAC,DT,8,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Justin Herbert,LAC,QB,9,0.004,0.159,0.0,26.778,10.767,-10.556,-0.16,bad both sides,run-first
+Justin Jefferson,MIN,WR,8,0.308,0.005,58.375,-1.375,13.95,5.556,-0.108,defense-led,balanced
+Justin Reid,NO,S,9,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Justin Strnad,DEN,LB,9,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Justin Walley,IND,CB,8,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Juwan Johnson,NO,TE,9,0.128,0.0,35.222,0.0,9.3,-3.778,-0.041,defense-led,balanced
+K'Lavon Chaisson,WAS,LB,9,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+K'Von Wallace,BAL,SAF,4,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+KC Concepcion,CLE,WR,10,0.199,0.043,45.8,4.3,10.01,-3.2,-0.036,defense-led,balanced
+Ka'imi Fairbairn,HOU,K,9,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+KaVontae Turpin,DAL,WR,7,0.035,0.021,7.0,2.714,2.543,0.4,0.119,offense-led,balanced
+Kaden Elliss,NO,LB,6,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Kaden Wetjen,PIT,WR,9,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Kaelon Black,SF,RB,9,0.031,0.3,1.889,39.556,5.811,9.444,0.187,good both sides,balanced
+Kaevon Merriweather,JAX,SAF,4,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Kai Kroeger,HOU,P,9,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Kain Medrano,WAS,LB,6,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Kaleb Elarms-Orr,BUF,LB,9,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Kaleb Johnson,GB,RB,8,0.011,0.299,1.25,26.75,3.425,0.5,0.016,offense-led,balanced
+Kalen King,ARI,CB,7,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Kalif Raymond,CHI,WR,9,0.14,0.007,32.222,4.111,7.856,6.333,0.034,offense-led,balanced
+Kam Curl,LA,SAF,10,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Kamal Hadden,GB,CB,7,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Kamari Lassiter,HOU,CB,9,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Kamari Ramsey,HOU,SAF,6,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Kameron Johnson,TB,WR,8,0.009,0.0,0.375,0.0,0.162,2.667,-0.073,defense-led,run-first
+Kamren Kinchens,LA,SAF,8,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Kapena Gushiken,IND,CB,8,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Karene Reid,DEN,LB,6,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Karl Brooks,GB,DT,9,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Karson Sharar,ARI,LB,7,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Kayden McDonald,HOU,DT,5,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Kayshon Boutte,HOU,WR,9,0.095,0.0,35.444,0.0,6.989,1.556,0.062,offense-led,pass-first
+Kayvon Thibodeaux,NYG,LB,8,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Keaton Mitchell,LAC,RB,9,0.092,0.19,11.444,20.222,5.611,-10.556,-0.16,bad both sides,run-first
+Keeanu Benton,PIT,DT,9,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Keenan Allen,IND,WR,8,0.225,0.0,43.875,0.0,10.138,-6.3,-0.11,bad both sides,balanced
+Kei'Trel Clark,ARI,CB,9,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Keion White,SF,DE,8,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Keionte Scott,TB,CB,9,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Keisean Nixon,GB,DB,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Keith Abney II,DET,CB,4,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Keldric Faulk,TEN,DE,8,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Kelee Ringo,PHI,CB,6,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Keleki Latu,BUF,TE,8,0.005,0.0,3.125,0.0,1.188,9.778,0.147,good both sides,run-first
+Kendal Daniels,ATL,LB,10,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Kendall Williamson,LAC,SAF,4,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Kendre Miller,NO,RB,6,0.056,0.396,6.167,26.5,6.433,-3.778,-0.041,defense-led,balanced
+Kendrick Bourne,ARI,WR,7,0.137,0.0,37.571,0.0,7.471,-10.5,-0.071,bad both sides,balanced
+Kene Nwangwu,NYJ,RB,5,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Kenneth Grant,MIA,DT,4,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Kenneth Harris,IND,CB,5,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Kenneth Walker III,KC,RB,8,0.146,0.733,21.5,109.0,24.55,9.0,0.108,good both sides,pass-first
+Kenny Clark,DAL,NT,10,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Kenny Gainwell,TB,RB,9,0.091,0.214,13.444,33.889,7.067,2.667,-0.073,defense-led,run-first
+Kenny Moore II,PHI,CB,4,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Kentavius Street,CHI,DE,6,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Kenyon Sadiq,NYJ,TE,10,0.111,0.004,23.8,0.3,5.61,-6.0,-0.012,defense-led,balanced
+Keon Coleman,BUF,WR,9,0.148,0.0,35.0,0.0,8.167,9.778,0.147,good both sides,run-first
+Keondre Jackson,BAL,SAF,8,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Kevin Byard,NE,FS,10,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Kevin Coleman Jr.,MIA,WR,8,0.129,0.005,11.0,2.0,3.925,-8.444,-0.06,bad both sides,run-first
+Kevin Knowles,TB,DB,9,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Kevin Winston Jr.,TEN,SAF,7,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Keyon Martin,BAL,CB,6,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+KhaDarel Hodge,SF,WR,4,0.019,0.0,8.75,0.0,1.375,9.444,0.187,good both sides,balanced
+Khalid Kareem,SF,DE,8,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Khalil Dorsey,DET,CB,9,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Khalil Herbert,ATL,RB,4,0.065,0.069,7.75,7.0,2.975,-5.7,-0.068,bad both sides,run-first
+Khalil Mack,LAC,OLB,9,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Khalil Shakir,BUF,WR,9,0.185,0.01,48.667,3.222,9.3,9.778,0.147,good both sides,run-first
+Khristian Boyd,NO,DT,6,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Khyiris Tonga,KC,DT,9,0.0,0.008,0.0,0.333,0.033,9.0,0.108,good both sides,pass-first
+Kimani Vidal,LAC,RB,8,0.085,0.16,8.75,20.25,5.9,-10.556,-0.16,bad both sides,run-first
+Kingsley Enagbare,NYJ,LB,9,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Kirk Cousins,LV,QB,9,0.0,0.099,0.0,0.778,19.144,-3.8,-0.01,defense-led,balanced
+Kitan Crawford,ARI,SAF,6,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Kitan Oladapo,GB,SAF,4,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Ko Kieft,TB,TE,5,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Kobie Turner,LA,DE,6,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Konata Mumpfield,LA,WR,9,0.087,0.0,27.0,0.0,4.922,6.1,0.06,good both sides,pass-first
+Kool-Aid McKinstry,NO,CB,9,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Kris Abrams-Draine,DEN,CB,8,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Kris Jenkins,CIN,DT,8,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Kristian Fulton,KC,CB,7,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Kristian Welch,GB,LB,5,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Kwity Paye,LV,DE,9,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Kyle Hamilton,BAL,SAF,10,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Kyle Juszczyk,SF,FB,6,0.066,0.006,12.667,0.667,4.667,9.444,0.187,good both sides,balanced
+Kyle Louis,MIA,SAF,4,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Kyle Monangai,CHI,RB,4,0.041,0.377,9.75,81.0,14.825,6.333,0.034,offense-led,balanced
+Kyle Pitts,ATL,TE,10,0.148,0.0,27.0,0.0,7.8,-5.7,-0.068,bad both sides,run-first
+Kyle Van Noy,MIN,MLB,8,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Kyle Williams,NE,WR,10,0.055,0.0,19.0,0.0,3.8,-2.1,0.018,offense-led,balanced
+Kyler Gordon,CHI,CB,4,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Kyler Murray,MIN,QB,6,0.0,0.17,0.0,27.833,12.263,5.556,-0.108,defense-led,balanced
+Kyren Williams,LA,RB,10,0.14,0.483,26.7,61.6,16.43,6.1,0.06,good both sides,pass-first
+L'Jarius Sneed,KC,CB,6,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+L.J. Collier,ARI,DE,9,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+LT Overton,DAL,DT,8,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+LaCale London,ATL,DE,10,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+LaJohntay Wester,BAL,WR,10,0.021,0.0,5.8,0.0,1.08,-5.0,-0.018,defense-led,balanced
+Ladd McConkey,LAC,WR,6,0.131,0.0,47.667,0.0,8.6,-10.556,-0.16,bad both sides,run-first
+Laiatu Latu,IND,DE,10,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Lamar Jackson,BAL,QB,5,0.0,0.13,0.0,28.8,15.816,-5.0,-0.018,defense-led,balanced
+Lan Larison,NE,RB,4,0.054,0.038,6.0,3.0,3.4,-2.1,0.018,offense-led,balanced
+Landon Jackson,BUF,DE,7,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Laquon Treadwell,IND,WR,10,0.104,0.0,23.9,0.0,4.89,-6.3,-0.11,bad both sides,balanced
+Larrell Murchison,LA,DT,4,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Lathan Ransom,CAR,SAF,8,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+LeQuint Allen Jr.,JAX,RB,8,0.034,0.004,1.125,0.125,0.375,13.889,0.117,good both sides,run-first
+Lee Hunter,CAR,DT,8,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Leonard Taylor III,NE,DT,6,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Leonard Williams,SEA,DE,8,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Levi Drake Rodriguez,MIN,DL,8,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Lew Nichols III,PIT,RB,6,0.005,0.058,0.333,8.167,1.017,1.778,0.011,offense-led,balanced
+Lil'Jordan Humphrey,DEN,WR,4,0.048,0.0,5.75,0.0,1.325,1.333,0.009,offense-led,balanced
+Logan Cooke,JAX,P,9,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Logan Hall,HOU,DE,8,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Lukas Van Ness,GB,LB,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Luke Farrell,SF,TE,8,0.026,0.0,4.125,0.0,0.788,9.444,0.187,good both sides,balanced
+Luke Fortner,CAR,C,4,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Luke Gifford,SF,LB,7,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Luke Goedeke,TB,OT,5,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Luke McCaffrey,WAS,WR,6,0.011,0.0,1.0,0.0,0.267,-3.0,-0.004,defense-led,balanced
+Luke Schoonmaker,DAL,TE,4,0.031,0.0,10.5,0.0,2.05,0.4,0.119,offense-led,balanced
+Luther Burden III,CHI,WR,9,0.225,0.026,71.556,3.222,15.144,6.333,0.034,offense-led,balanced
+M.J. Stewart,HOU,SAF,4,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Maason Smith,ATL,DT,10,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Mack Hollins,NE,WR,6,0.178,0.0,48.833,0.0,9.717,-2.1,0.018,offense-led,balanced
+Mack Wilson,ARI,LB,10,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Makai Lemon,PHI,WR,9,0.189,0.005,34.667,-0.556,8.189,-8.111,-0.081,bad both sides,balanced
+Malachi Corley,CLE,WR,10,0.013,0.0,3.7,0.0,0.67,-3.2,-0.036,defense-led,balanced
+Malachi Fields,NYG,WR,9,0.133,0.0,38.889,0.0,7.0,0.778,0.021,offense-led,run-first
+Malachi Lawrence,DAL,LB,8,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Malachi Moore,NYJ,SAF,10,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Malaki Starks,BAL,SAF,10,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Malcolm Koonce,LV,DE,6,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Malcolm Roach,DEN,DT,9,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Malcolm Rodriguez,DET,LB,9,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Maliek Collins,CLE,DT,9,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Malik Benson,LV,WR,7,0.035,0.006,1.714,-1.143,0.343,-3.8,-0.01,defense-led,balanced
+Malik Harrison,NYG,LB,4,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Malik Herring,MIA,DE,7,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Malik Hooker,DAL,FS,8,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Malik McClain,NYJ,WR,5,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Malik Muhammad,CHI,CB,7,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Malik Mustapha,SF,SAF,9,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Malik Nabers,NYG,WR,9,0.289,0.0,76.889,0.0,15.244,0.778,0.021,offense-led,run-first
+Malik Washington,MIA,WR,9,0.22,0.037,44.444,4.222,9.907,-8.444,-0.06,bad both sides,run-first
+Malik Willis,MIA,QB,8,0.0,0.177,0.0,29.0,13.13,-8.444,-0.06,bad both sides,run-first
+Mansoor Delane,KC,CB,6,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+MarShawn Lloyd,GB,RB,9,0.06,0.326,11.667,18.0,6.522,0.5,0.016,offense-led,balanced
+Marcus Epps,PHI,SAF,5,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Marcus Harris,TEN,CB,8,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Marcus Jones,NE,CB,10,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Mark Andrews,BAL,TE,10,0.178,0.007,31.9,0.0,7.49,-5.0,-0.018,defense-led,balanced
+Markquese Bell,DAL,SAF,9,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Marlon Humphrey,BAL,CB,10,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Marlowe Wax,LAC,LB,6,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Marques Sigle,SF,SAF,6,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Marquise Brown,PHI,WR,4,0.061,0.018,15.75,3.0,3.125,-8.111,-0.081,bad both sides,balanced
+Martin Emerson,NO,CB,7,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Marvin Harrison Jr.,ARI,WR,4,0.088,0.0,21.25,0.0,4.875,-10.5,-0.071,bad both sides,balanced
+Marvin Mims Jr.,DEN,WR,7,0.08,0.029,13.143,4.286,3.171,1.333,0.009,offense-led,balanced
+Mason Graham,CLE,DT,6,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Mason Taylor,NYJ,TE,7,0.137,0.0,23.857,0.0,7.529,-6.0,-0.012,defense-led,balanced
+Matt Araiza,KC,P,9,0.0,0.004,0.0,1.333,0.133,9.0,0.108,good both sides,pass-first
+Matt Dickerson,JAX,DT,6,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Matt Gay,LV,K,10,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Matthew Golden,GB,WR,10,0.282,0.005,85.3,0.6,17.59,0.5,0.016,offense-led,balanced
+Matthew Hibner,BAL,TE,6,0.054,0.0,12.5,0.0,3.25,-5.0,-0.018,defense-led,balanced
+Matthew Stafford,LA,QB,10,0.0,0.059,0.0,1.7,16.262,6.1,0.06,good both sides,pass-first
+Max Melton,ARI,CB,9,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Maxwell Hairston,BUF,CB,9,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Maxx Crosby,LV,DE,10,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Mekhi Blackmon,CLE,DB,5,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Micah McFadden,NYG,LB,6,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Micah Robinson,TEN,CB,7,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Michael Carter II,PHI,CB,4,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Michael Dickson,SEA,P,10,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Michael Hoecht,BUF,LB,8,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Michael Mayer,LV,TE,10,0.145,0.004,40.4,0.2,8.56,-3.8,-0.01,defense-led,balanced
+Michael Penix Jr.,ATL,QB,8,0.0,0.112,0.0,11.75,13.575,-5.7,-0.068,bad both sides,run-first
+Michael Taaffe,MIA,SAF,9,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Michael Wilson,ARI,WR,9,0.257,0.013,60.667,3.111,13.409,-10.5,-0.071,bad both sides,balanced
+Mike Brown,NE,SAF,8,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Mike Evans,SF,WR,6,0.235,0.0,70.0,0.0,14.833,9.444,0.187,good both sides,balanced
+Mike Ford,ATL,DB,8,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Mike Gesicki,CIN,TE,8,0.093,0.0,32.625,0.0,10.262,9.444,0.169,offense-led,pass-first
+Mike Green,BAL,LB,9,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Mike Hall Jr.,CLE,DT,4,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Mike Hughes,ATL,CB,9,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Mike Morris,SEA,DE,6,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Mike Sainristil,WAS,CB,6,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Mike Washington Jr.,LV,RB,10,0.021,0.321,1.5,29.8,4.13,-3.8,-0.01,defense-led,balanced
+Miles Killebrew,TB,SAF,6,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Milton Williams,NE,DT,10,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Minkah Fitzpatrick,NYJ,FS,7,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Mitch Wishnowsky,NE,P,10,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Mitchell Evans,CAR,TE,9,0.048,0.005,16.333,0.111,2.978,-1.889,0.016,offense-led,pass-first
+Mo Alie-Cox,IND,TE,4,0.044,0.0,7.75,0.0,3.275,-6.3,-0.11,bad both sides,balanced
+Monroe Freeling,CAR,OT,4,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Montaric Brown,JAX,CB,7,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Montez Sweat,CHI,DE,7,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Morgan Moses,NE,OT,6,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Moro Ojomo,PHI,DT,8,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Mykel Williams,SF,DE,4,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Myles Harden,CLE,CB,10,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Myles Murphy,CIN,DE,8,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Myles Price,MIN,WR,9,0.062,0.008,9.0,1.556,3.278,5.556,-0.108,defense-led,balanced
+Najee Harris,NYG,RB,5,0.006,0.238,1.0,19.8,2.28,0.778,0.021,offense-led,run-first
+Nakobe Dean,LV,LB,10,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Namdi Obiazor,NE,LB,7,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Nate Adkins,DEN,TE,6,0.04,0.007,7.333,1.0,4.833,1.333,0.009,offense-led,balanced
+Nate Boerkircher,JAX,TE,8,0.062,0.0,19.5,0.0,4.7,13.889,0.117,good both sides,run-first
+Nate Landman,LA,LB,9,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Nate Wiggins,BAL,CB,9,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Nathan Shepherd,NO,DE,6,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Nazir Stackhouse,TEN,DT,7,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Nehemiah Pritchett,SEA,CB,9,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Neville Gallimore,CHI,DT,7,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Nic Jones,NYG,CB,5,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Nick Barrett,LAC,DT,7,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Nick Bolton,KC,LB,9,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Nick Bosa,SF,DE,4,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Nick Cross,WAS,SAF,6,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Nick Emmanwori,SEA,SAF,9,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Nick Folk,ATL,K,9,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Nick Hampton,CAR,LB,4,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Nick Herbig,PIT,LB,8,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Nick Moore,BAL,LS,4,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Nick Muse,ATL,TE,7,0.01,0.0,0.286,0.0,1.171,-5.7,-0.068,bad both sides,run-first
+Nick Niemann,GB,LB,7,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Nick Scott,CAR,SAF,8,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Nico Collins,HOU,WR,7,0.24,0.011,68.286,1.714,16.571,1.556,0.062,offense-led,pass-first
+Nik Bonitto,DEN,LB,9,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Nikko Remigio,KC,WR,8,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Nnamdi Madubuike,BAL,DT,8,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Noah Fant,NO,TE,8,0.068,0.0,12.0,0.0,4.95,-3.778,-0.041,defense-led,balanced
+Noah Gray,KC,TE,9,0.072,0.0,21.111,0.0,4.556,9.0,0.108,good both sides,pass-first
+Noah Sewell,CHI,LB,5,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Nohl Williams,KC,CB,9,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Nolan Smith,PHI,LB,8,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+O'Cyrus Torrence,BUF,G,4,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Odafe Oweh,WAS,LB,9,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Olamide Zaccheaus,ATL,WR,9,0.079,0.0,4.778,0.0,1.367,-5.7,-0.068,bad both sides,run-first
+Ollie Gordon II,MIA,RB,8,0.073,0.57,7.75,67.375,11.888,-8.444,-0.06,bad both sides,run-first
+Olumuyiwa Fashanu,NYJ,OT,5,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Oluwafemi Oladejo,TEN,DE,8,0.0,0.0,0.0,0.0,0.75,-8.0,-0.059,bad both sides,run-first
+Omar Cooper Jr.,NYJ,WR,4,0.216,0.0,76.5,0.0,15.65,-6.0,-0.012,defense-led,balanced
+Omar Speights,LA,LB,10,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Omarion Hampton,LAC,RB,9,0.06,0.481,7.0,52.667,9.522,-10.556,-0.16,bad both sides,run-first
+Oren Burks,CIN,ILB,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Oronde Gadsden II,LAC,TE,9,0.12,0.004,19.889,0.222,4.9,-10.556,-0.16,bad both sides,run-first
+Osa Odighizuwa,SF,DT,9,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Oscar Delp,NO,TE,6,0.02,0.0,3.333,0.0,1.0,-3.778,-0.041,defense-led,balanced
+Otito Ogbonnia,DAL,DT,10,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+P.J. Locke,DAL,DB,4,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+PJ Jules,CIN,SAF,7,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Parker Washington,JAX,WR,9,0.251,0.008,71.667,1.444,15.311,13.889,0.117,good both sides,run-first
+Pat Bryant,DEN,WR,5,0.107,0.009,37.8,3.2,9.5,1.333,0.009,offense-led,balanced
+Pat Freiermuth,PIT,TE,9,0.128,0.019,30.0,0.556,10.056,1.778,0.011,offense-led,balanced
+Pat Surtain II,DEN,CB,6,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Patrick Johnson,LV,DE,5,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Patrick Jones II,CAR,LB,7,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Patrick Mahomes,KC,QB,9,0.0,0.102,0.0,11.111,19.711,9.0,0.108,good both sides,pass-first
+Patrick O'Connell,SEA,LB,7,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Patrick Queen,PIT,LB,9,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Payton Wilson,PIT,LB,9,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Penei Sewell,DET,OT,4,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Pete Werner,NO,LB,9,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Peter Woods,KC,DT,5,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Pierre Strong,GB,RB,4,0.088,0.227,15.25,14.75,5.5,0.5,0.016,offense-led,balanced
+Poona Ford,LA,DT,5,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Princely Umanmielen,CAR,LB,9,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Puka Nacua,LA,WR,7,0.36,0.037,102.143,5.857,24.8,6.1,0.06,good both sides,pass-first
+Quan Martin,WAS,SAF,9,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Quay Walker,LV,LB,10,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Que Robinson,DEN,LB,9,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Quentin Johnston,LAC,WR,8,0.135,0.013,33.25,1.0,5.925,-10.556,-0.16,bad both sides,run-first
+Quentin Lake,LA,SAF,10,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Quincy Riley,NO,CB,8,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Quincy Williams,CLE,LB,10,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Quinnen Williams,DAL,DT,10,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Quinshon Judkins,CLE,RB,9,0.1,0.555,18.778,47.0,12.022,-3.2,-0.036,defense-led,balanced
+Quintin Morris,JAX,TE,7,0.011,0.0,1.0,0.0,0.243,13.889,0.117,good both sides,run-first
+Quinyon Mitchell,PHI,CB,9,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Qwan'tez Stiggers,NYJ,DB,8,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+R Mason Thomas,KC,DE,8,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+R.J. Mickens,LAC,SAF,8,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+RJ Harvey,DEN,RB,6,0.168,0.166,36.167,14.5,11.233,1.333,0.009,offense-led,balanced
+Rachaad White,WAS,RB,8,0.094,0.294,16.75,34.375,9.738,-3.0,-0.004,defense-led,balanced
+Raheim Sanders,CLE,RB,5,0.082,0.071,14.8,8.6,4.54,-3.2,-0.036,defense-led,balanced
+Rakeem Nunez-Roches,TB,DT,4,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Rashan Gary,DAL,LB,9,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Rashee Rice,KC,WR,6,0.199,0.0,62.333,0.0,13.233,9.0,0.108,good both sides,pass-first
+Rasheed Walker,CAR,OT,6,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Rasheen Ali,BAL,RB,8,0.0,0.026,0.0,3.0,0.3,-5.0,-0.018,defense-led,balanced
+Rashid Shaheed,SEA,WR,8,0.138,0.017,21.375,4.875,5.5,4.8,-0.01,defense-led,run-first
+Rashod Bateman,BAL,WR,10,0.125,0.0,33.6,0.0,6.26,-5.0,-0.018,defense-led,balanced
+Rasul Douglas,WAS,CB,9,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Ray Davis,BUF,RB,8,0.018,0.062,5.0,6.5,1.525,9.778,0.147,good both sides,run-first
+Rayuan Lane III,JAX,SAF,8,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Reed Blankenship,HOU,SAF,7,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Renardo Green,SF,CB,9,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Rhamondre Stevenson,NE,RB,10,0.11,0.388,25.9,40.3,11.52,-2.1,0.018,offense-led,balanced
+Rico Dowdle,PIT,RB,6,0.096,0.336,15.0,33.333,8.333,1.778,0.011,offense-led,balanced
+Rigoberto Sanchez,IND,P,10,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Riley Dixon,TB,P,8,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Riley Moss,DEN,CB,8,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Riley Nowakowski,PIT,FB,4,0.008,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Riley Patterson,MIA,K,5,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Riq Woolen,PHI,CB,9,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Robert Hainsey,JAX,C,4,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Robert Hunt,CAR,G,4,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Robert Spears-Jennings,PIT,SAF,9,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Robert Spillane,NE,LB,10,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Rock Ya-Sin,DET,CB,7,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Rodney McGraw,MIA,DE,5,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Rodney Shelley,LAC,DB,5,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Rodney Thomas,SEA,SAF,6,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Roger McCreary,DET,CB,9,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Roman Wilson,PIT,WR,5,0.144,0.0,37.6,0.0,8.96,1.778,0.011,offense-led,balanced
+Rome Odunze,CHI,WR,9,0.174,0.0,58.667,0.0,9.867,6.333,0.034,offense-led,balanced
+Romello Height,SF,DE,7,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Romeo Doubs,NE,WR,6,0.134,0.0,43.5,0.0,9.683,-2.1,0.018,offense-led,balanced
+Ronnie Hickman Jr.,CLE,SAF,9,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Ronnie Stanley,BAL,OT,6,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Roquan Smith,BAL,ILB,10,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Roschon Johnson,CHI,RB,7,0.048,0.122,12.286,14.714,4.557,6.333,0.034,offense-led,balanced
+Roy Lopez,ARI,DT,9,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Rueben Bain Jr.,TB,LB,5,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Ruke Orhorhoro,JAX,DT,6,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Russ Yeast,CIN,SAF,5,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Ryan Eckley,BAL,P,10,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Ryan Fitzgerald,CAR,K,9,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Ryan Flournoy,DAL,WR,10,0.143,0.004,46.6,0.3,10.29,0.4,0.119,offense-led,balanced
+Ryan Neuzil,ATL,C,5,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Ryan Rehkow,CIN,P,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Ryan Wright,NO,P,9,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Rylie Mills,SEA,DT,5,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Sabastian Harsh,HOU,DE,4,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Sai'vion Jones,DEN,DE,4,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Sam Darnold,SEA,QB,7,0.0,0.059,0.0,10.286,13.189,4.8,-0.01,defense-led,run-first
+Sam Franklin Jr.,BUF,SAF,7,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Sam Kamara,CLE,DT,5,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Sam LaPorta,DET,TE,9,0.176,0.004,46.111,0.222,10.633,6.444,0.106,offense-led,balanced
+Sam Martin,CAR,P,9,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Sam Roush,CHI,TE,6,0.034,0.0,9.333,0.0,1.767,6.333,0.034,offense-led,balanced
+Sam Williams,CLE,DE,8,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Samaje Perine,CIN,RB,9,0.045,0.264,10.556,21.444,6.533,9.444,0.169,offense-led,pass-first
+Samson Ebukam,ATL,DE,6,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Saquon Barkley,PHI,RB,7,0.054,0.379,5.857,42.286,8.386,-8.111,-0.081,bad both sides,balanced
+Sauce Gardner,IND,CB,9,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Savion Williams,GB,WR,5,0.085,0.067,27.2,8.8,7.4,0.5,0.016,offense-led,balanced
+Sean Fresch,DEN,DB,4,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Sean Tucker,TB,RB,5,0.0,0.074,0.0,16.0,4.0,2.667,-0.073,defense-led,run-first
+Sebastian Joseph-Day,PIT,DT,6,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Sebastian Valdez,SF,DT,6,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Segun Olubi,LV,LB,7,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Seth McGowan,IND,RB,10,0.019,0.194,0.9,28.5,4.64,-6.3,-0.11,bad both sides,balanced
+Seydou Traore,MIA,TE,5,0.008,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Shaun Dolac,LA,LB,7,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Shavon Revel Jr.,DAL,CB,7,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Shelby Harris,NYG,DE,8,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Sheldon Rankins,HOU,DT,9,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Shemar James,DAL,LB,8,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Shemar Turner,CHI,DT,4,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Shy Tuttle,WAS,DT,7,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Simi Fehoko,ARI,WR,8,0.014,0.0,4.75,0.0,0.725,-10.5,-0.071,bad both sides,balanced
+Sione Vaki,DET,RB,9,0.03,0.136,9.0,18.111,3.6,6.444,0.106,offense-led,balanced
+SirVocea Dennis,TB,LB,6,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Siran Neal,SF,DB,7,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Skyler Gill-Howard,DET,DT,7,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Skyler Thomas,CHI,SAF,6,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Skyy Moore,GB,WR,6,0.067,0.0,5.833,0.0,1.75,0.5,0.016,offense-led,balanced
+Smael Mondon Jr.,PHI,LB,8,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Solomon Thomas,TEN,DT,7,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Sonny Styles,WAS,LB,9,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Spencer Shrader,IND,K,10,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Stefon Diggs,WAS,WR,8,0.229,0.0,48.25,0.0,13.825,-3.0,-0.004,defense-led,balanced
+Sydney Brown,ATL,SAF,10,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+T'Vondre Sweat,NYJ,DT,7,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+T.J. Edwards,CHI,LB,7,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+T.J. Hockenson,MIN,TE,8,0.209,0.0,41.0,0.0,10.725,5.556,-0.108,defense-led,balanced
+T.J. Sanders,BUF,DT,5,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+T.J. Tampa,BAL,CB,4,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+T.J. Watt,PIT,OLB,8,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+TJ Parker,BUF,LB,8,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Tacario Davis,CIN,CB,9,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Tahj Brooks,CIN,RB,7,0.0,0.038,0.0,2.571,0.257,9.444,0.169,offense-led,pass-first
+Tahj Chambers,IND,LB,4,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Tai Felton,MIN,WR,5,0.085,0.0,14.8,0.0,2.68,5.556,-0.108,defense-led,balanced
+Talanoa Hufanga,DEN,SAF,5,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Tank Bigsby,PHI,RB,4,0.038,0.272,2.5,22.75,4.275,-8.111,-0.081,bad both sides,balanced
+Tanner Hudson,CIN,TE,4,0.045,0.0,8.25,0.0,4.075,9.444,0.169,offense-led,pass-first
+Tanor Bortolini,IND,C,5,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Tarheeb Still,LAC,CB,9,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Taron Johnson,LV,CB,10,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Tate Ratledge,DET,G,4,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Tavius Robinson,BAL,LB,6,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Tay Martin,DET,WR,7,0.004,0.0,1.571,0.0,0.3,6.444,0.106,offense-led,balanced
+Taylor Rapp,DEN,SAF,4,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+TeRah Edwards,CAR,DT,4,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Teair Tart,LAC,DT,8,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Ted Hurst III,TB,WR,8,0.121,0.0,21.0,0.0,4.225,2.667,-0.073,defense-led,run-first
+Tedarrell Slaton,CIN,DT,8,0.0,0.0,0.0,0.0,0.0,9.444,0.169,offense-led,pass-first
+Teddye Buchanan,BAL,LB,6,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Tee Higgins,CIN,WR,9,0.221,0.0,91.556,0.0,19.044,9.444,0.169,offense-led,pass-first
+Terrel Bernard,BUF,LB,9,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Terrell Burgess,TEN,SAF,7,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Terry McLaurin,WAS,WR,5,0.179,0.0,46.0,0.0,9.2,-3.0,-0.004,defense-led,balanced
+Tershawn Wharton,CAR,DE,5,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Tetairoa McMillan,CAR,WR,9,0.25,0.0,73.333,0.0,14.556,-1.889,0.016,offense-led,pass-first
+Tez Johnson,TB,WR,9,0.087,0.01,28.222,2.222,4.933,2.667,-0.073,defense-led,run-first
+Theo Jackson,MIN,DB,8,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Theo Johnson,NYG,TE,5,0.068,0.0,12.6,0.0,3.46,0.778,0.021,offense-led,run-first
+Thomas Booker,LV,DT,7,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Thomas Incoom,CAR,LB,5,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Tim Settle,WAS,DT,7,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Tim Smith,IND,DT,6,0.0,0.0,0.0,0.0,0.0,-6.3,-0.11,bad both sides,balanced
+Timmy Horne,TEN,DT,4,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Tom Kennedy,DET,WR,5,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Tommy Doman Jr.,BUF,P,9,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Tommy Eichenberg,LV,LB,8,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Tommy Togiai,HOU,DT,9,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Tommy Townsend,TEN,P,7,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Tommy Tremble,CAR,TE,9,0.112,0.0,25.222,0.0,7.3,-1.889,0.016,offense-led,pass-first
+Tonka Hemingway,LV,DT,8,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Tony Adams,TEN,SAF,8,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Tony Jefferson,LAC,S,9,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Tony Pollard,TEN,RB,9,0.111,0.689,15.111,69.778,15.6,-8.0,-0.059,bad both sides,run-first
+Tory Horton,SEA,WR,6,0.095,0.0,19.167,0.0,4.917,4.8,-0.01,defense-led,run-first
+Tory Taylor,CHI,P,8,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Trace Ford,NYG,LB,6,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Travis Etienne,NO,RB,4,0.115,0.369,17.75,35.5,9.325,-3.778,-0.041,defense-led,balanced
+Travis Homer,PIT,RB,6,0.0,0.043,0.0,2.5,0.25,1.778,0.011,offense-led,balanced
+Travis Hunter,JAX,CB,9,0.039,0.011,10.111,1.222,2.578,13.889,0.117,good both sides,run-first
+Travis Jones,BAL,DT,9,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Travis Kelce,KC,TE,9,0.179,0.004,56.889,0.111,11.589,9.0,0.108,good both sides,pass-first
+Travon Walker,JAX,DE,9,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Tre Harris,LAC,WR,8,0.187,0.0,43.5,0.0,7.6,-10.556,-0.16,bad both sides,run-first
+Tre Tucker,LV,WR,10,0.172,0.008,53.8,-0.6,11.12,-3.8,-0.01,defense-led,balanced
+Tre'von Moehrig,CAR,SAF,9,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+TreVeyon Henderson,NE,RB,6,0.039,0.301,7.5,33.833,5.633,-2.1,0.018,offense-led,balanced
+Tremaine Edmunds,NYG,MLB,6,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Tremon Smith,HOU,CB,9,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Trent Brown,HOU,OT,5,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Trent McDuffie,LA,CB,7,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Trent Williams,SF,OT,4,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Trenton Simpson,BAL,LB,10,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Tress Way,WAS,P,9,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Trevin Wallace,NYJ,LB,4,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Trevis Gipson,CAR,LB,9,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Trevor Etienne,CAR,RB,5,0.024,0.103,5.2,3.2,1.64,-1.889,0.016,offense-led,pass-first
+Trevor Lawrence,JAX,QB,9,0.0,0.094,0.0,11.778,19.329,13.889,0.117,good both sides,run-first
+Trevor Nowaske,DET,LB,9,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Trey Amos,WAS,CB,4,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Trey Hendrickson,BAL,LB,8,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Trey McBride,ARI,TE,10,0.275,0.0,63.5,0.0,17.15,-10.5,-0.071,bad both sides,balanced
+Trey Smack,GB,K,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Trey Smith,KC,G,4,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Treydan Stukes,LV,SAF,9,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Treylon Burks,WAS,WR,7,0.115,0.0,37.143,0.0,7.429,-3.0,-0.004,defense-led,balanced
+Troy Dye,LAC,LB,6,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Troy Fautanu,PIT,OT,5,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Troy Franklin,DEN,WR,8,0.068,0.005,12.5,0.625,2.438,1.333,0.009,offense-led,balanced
+Truman Jones,TEN,DE,7,0.0,0.0,0.0,0.0,0.0,-8.0,-0.059,bad both sides,run-first
+Tucker Kraft,GB,TE,10,0.156,0.018,37.0,1.3,9.33,0.5,0.016,offense-led,balanced
+Tuli Tuipulotu,LAC,LB,9,0.0,0.0,0.0,0.0,0.0,-10.556,-0.16,bad both sides,run-first
+Tutu Atwell,LA,WR,6,0.066,0.0,21.667,0.0,3.5,6.1,0.06,good both sides,pass-first
+Ty Hamilton,LA,DT,6,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Ty Johnson,BUF,RB,7,0.096,0.03,30.571,1.571,5.786,9.778,0.147,good both sides,run-first
+Ty Okada,SEA,SAF,6,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Ty Robinson,PHI,DT,4,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Ty'Ron Hopper,GB,LB,8,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Tyjae Spears,TEN,RB,7,0.089,0.149,10.714,13.429,4.414,-8.0,-0.059,bad both sides,run-first
+Tykee Smith,TB,SAF,9,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Tylan Wallace,CLE,WR,5,0.03,0.0,6.0,0.0,1.6,-3.2,-0.036,defense-led,balanced
+Tyleik Williams,DET,DT,7,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Tyler Allgeier,ARI,RB,10,0.072,0.397,12.8,38.3,9.21,-10.5,-0.071,bad both sides,balanced
+Tyler Badie,DEN,RB,5,0.049,0.045,13.4,4.4,3.38,1.333,0.009,offense-led,balanced
+Tyler Bass,BUF,K,9,0.0,0.0,0.0,0.0,0.0,9.778,0.147,good both sides,run-first
+Tyler Davis,LA,DE,9,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Tyler Goodson,DAL,RB,6,0.036,0.221,3.833,27.167,3.767,0.4,0.119,offense-led,balanced
+Tyler Higbee,LA,TE,9,0.129,0.0,33.778,0.0,7.711,6.1,0.06,good both sides,pass-first
+Tyler Huntley,BAL,QB,5,0.0,0.134,0.0,15.2,10.936,-5.0,-0.018,defense-led,balanced
+Tyler Lacy,DET,DE,8,0.0,0.0,0.0,0.0,0.0,6.444,0.106,offense-led,balanced
+Tyler Linderbaum,LV,C,5,0.0,0.0,0.0,0.0,0.0,-3.8,-0.01,defense-led,balanced
+Tyler Loop,BAL,K,8,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Tyler Nubin,NYG,SAF,7,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Tyler Owens,WAS,DB,7,0.0,0.0,0.0,0.0,0.0,-3.0,-0.004,defense-led,balanced
+Tyler Shough,NO,QB,9,0.0,0.177,0.0,20.778,17.291,-3.778,-0.041,defense-led,balanced
+Tyler Warren,IND,TE,8,0.225,0.018,34.5,1.125,10.812,-6.3,-0.11,bad both sides,balanced
+Tyquan Thornton,KC,WR,4,0.127,0.0,54.75,0.0,11.225,9.0,0.108,good both sides,pass-first
+Tyree Wilson,NO,DE,6,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Tyrel Dodson,CAR,LB,7,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Tyrice Knight,SEA,LB,4,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Tyrion Ingram-Dawkins,MIN,DT,6,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Tyrique Stevenson,CHI,CB,7,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Tyrone Tracy Jr.,NYG,RB,7,0.03,0.095,7.714,7.857,4.557,0.778,0.021,offense-led,run-first
+Tyson Campbell,CLE,CB,9,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Tytus Howard,CLE,OT,5,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Uchenna Nwosu,SEA,LB,7,0.0,0.0,0.0,0.0,0.0,4.8,-0.01,defense-led,run-first
+Upton Stout,SF,CB,8,0.0,0.0,0.0,0.0,0.0,9.444,0.187,good both sides,balanced
+Ventrell Miller,JAX,LB,9,0.0,0.0,0.0,0.0,0.0,13.889,0.117,good both sides,run-first
+Vernon Broughton,NO,DT,8,0.0,0.0,0.0,0.0,0.0,-3.778,-0.041,defense-led,balanced
+Vita Vea,TB,DT,9,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Von Miller,DAL,OLB,6,0.0,0.0,0.0,0.0,0.0,0.4,0.119,offense-led,balanced
+Wade Woodaz,HOU,LB,8,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Walter Nolen,ARI,DT,8,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Wan'Dale Robinson,TEN,WR,9,0.199,0.005,30.222,0.111,9.033,-8.0,-0.059,bad both sides,run-first
+Warren McClendon Jr.,LA,OT,5,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Wesley Bailey,LA,LB,9,0.0,0.0,0.0,0.0,0.0,6.1,0.06,good both sides,pass-first
+Wil Lutz,DEN,K,9,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Will Anderson Jr.,HOU,DE,9,0.0,0.0,0.0,0.0,0.0,1.556,0.062,offense-led,pass-first
+Will Campbell,NE,OT,4,0.0,0.0,0.0,0.0,0.0,-2.1,0.018,offense-led,balanced
+Will Fries,MIN,G,4,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Will Kacmarek,MIA,TE,8,0.047,0.0,4.375,0.0,1.062,-8.444,-0.06,bad both sides,run-first
+Will Lee III,CAR,CB,7,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Will McDonald IV,NYJ,DE,8,0.0,0.0,0.0,0.0,0.0,-6.0,-0.012,defense-led,balanced
+Will Reichard,MIN,K,9,0.0,0.0,0.0,0.0,0.0,5.556,-0.108,defense-led,balanced
+Will Shipley,PHI,RB,5,0.056,0.165,6.2,11.4,3.96,-8.111,-0.081,bad both sides,balanced
+Willie Gay Jr.,MIA,LB,6,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Winston Reid,CLE,LB,8,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Woody Marks,HOU,RB,9,0.072,0.489,12.556,43.444,8.711,1.556,0.062,offense-led,pass-first
+Wydett Williams Jr.,ARI,SAF,4,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Xavier Hutchinson,HOU,WR,9,0.178,0.018,38.333,1.778,9.122,1.556,0.062,offense-led,pass-first
+Xavier McKinney,GB,SAF,10,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Xavier Nwankpa,KC,SAF,5,0.0,0.0,0.0,0.0,0.0,9.0,0.108,good both sides,pass-first
+Xavier Smith,LA,WR,4,0.023,0.0,10.0,0.0,3.0,6.1,0.06,good both sides,pass-first
+Xavier Watts,ATL,SAF,10,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Xavier Woods,CHI,FS,4,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Xavier Worthy,KC,WR,9,0.179,0.0,30.889,0.0,7.422,9.0,0.108,good both sides,pass-first
+Yahya Black,PIT,DE,8,0.0,0.0,0.0,0.0,0.0,1.778,0.011,offense-led,balanced
+Yaya Diaby,TB,LB,7,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
+Za'Darius Smith,ATL,DE,7,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Zach Allen,DEN,DE,9,0.0,0.0,0.0,0.0,0.0,1.333,0.009,offense-led,balanced
+Zach Harrison,ATL,DE,9,0.0,0.0,0.0,0.0,0.0,-5.7,-0.068,bad both sides,run-first
+Zach Sieler,MIA,DE,8,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Zachariah Branch,ATL,WR,8,0.056,0.004,8.0,1.0,2.4,-5.7,-0.068,bad both sides,run-first
+Zack Baun,PHI,LB,8,0.0,0.0,0.0,0.0,0.0,-8.111,-0.081,bad both sides,balanced
+Zaire Barnes,NYG,LB,9,0.0,0.0,0.0,0.0,0.0,0.778,0.021,offense-led,run-first
+Zaire Franklin,GB,OLB,6,0.0,0.0,0.0,0.0,0.0,0.5,0.016,offense-led,balanced
+Zakee Wheatley,CAR,SAF,8,0.0,0.0,0.0,0.0,0.0,-1.889,0.016,offense-led,pass-first
+Zane Gonzalez,MIA,K,4,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Zaven Collins,ARI,LB,10,0.0,0.0,0.0,0.0,0.0,-10.5,-0.071,bad both sides,balanced
+Zavier Scott,CHI,RB,4,0.0,0.0,0.0,0.0,0.0,6.333,0.034,offense-led,balanced
+Zavion Thomas,CHI,WR,8,0.037,0.004,6.75,1.375,1.688,6.333,0.034,offense-led,balanced
+Zay Flowers,BAL,WR,9,0.275,0.023,76.444,5.667,15.433,-5.0,-0.018,defense-led,balanced
+Zayne Anderson,MIA,SAF,5,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Zeek Biggers,MIA,DT,9,0.0,0.0,0.0,0.0,0.0,-8.444,-0.06,bad both sides,run-first
+Zion Johnson,CLE,G,5,0.0,0.0,0.0,0.0,0.0,-3.2,-0.036,defense-led,balanced
+Zion Young,BAL,LB,8,0.0,0.0,0.0,0.0,0.0,-5.0,-0.018,defense-led,balanced
+Zyon McCollum,TB,CB,9,0.0,0.0,0.0,0.0,0.0,2.667,-0.073,defense-led,run-first
