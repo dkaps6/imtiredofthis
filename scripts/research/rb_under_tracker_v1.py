@@ -56,9 +56,14 @@ def grade(a) -> int:
     sn = nfl.load_snap_counts(seasons=[a.season]).to_pandas()
     played = set(zip(sn[sn.offense_snaps.fillna(0) > 0].player, sn[sn.offense_snaps.fillna(0) > 0].week))
     ry = st.groupby(["player_display_name", "week"]).rushing_yards.sum().to_dict()
+    sch = nfl.load_schedules(seasons=[a.season]).to_pandas()
+    sch = sch[(sch.week == a.week) & sch.home_score.notna()]
+    final = set(sch.home_team) | set(sch.away_team)          # teams whose week-N game is final
     m = (L.season == a.season) & (L.week == a.week) & (L.status == "OPEN")
     for i in L.index[m]:
         p, w = L.at[i, "player"], int(L.at[i, "week"])
+        if str(L.at[i, "team"]).replace("LAR", "LA") not in final:
+            continue                                         # game not played yet: leave OPEN
         if (p, w) not in played:
             L.loc[i, ["status", "result", "units"]] = ["VOID", "no snap", 0.0]; continue
         act = float(ry.get((p, w), 0.0)); price = float(L.at[i, "under_price"])

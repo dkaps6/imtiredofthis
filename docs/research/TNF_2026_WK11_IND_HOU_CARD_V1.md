@@ -96,3 +96,21 @@ the tickets. It bets against PRISM's 55 projection, and rule 2 forbids that on a
 | Recent: 23, 46, 83 on 8, 13, 16 carries; McGowan's carries are rising | |
 | The week-8 blowout as a 10-point dog: 23 yds | |
 | PRISM's RB rushing OVER picks lost in both samples (-14.9%, -21.6%), so its 55 is the weaker evidence | |
+
+## Graded 2026-11-20: HOU 26, IND 3
+
+| ticket | result | legs |
+|---|---|---|
+| SAFE +158 | **lost** (1/3) | Schultz 19.5+ **11** ✗ · Boutte 14.5+ **40** ✓ · Treadwell 14.5+ **0** ✗ (1 target on 80% snaps) |
+| MODERATE +170 | **lost** (1/3) | Boutte ✓ · Warren 3.5+ rec **1** ✗ (5 targets) · Hutchinson 2.5+ rec **2** ✗ |
+| HIGH +610 | **lost** (1/6) | Stroud 199.5+ **194** ✗ · Schultz 24.5+ ✗ · Treadwell ✗ · Collins 49.5+ **58** ✓ · Warren ✗ · Hutchinson ✗ |
+| **Pattern play: Taylor UNDER 51.5** | **WON** | **21 yards on 11 carries** |
+
+**What happened.** HOU led wire to wire and ran:
+- David Montgomery: 26 carries, 107 yards. He was excluded as RETURN_FROM_INJURY.
+- Stroud threw only 27 times.
+- IND's passing game collapsed: Jones went 27 attempts for 144 yards, Treadwell drew 1 target,
+  and Warren caught 1 of 5.
+
+The card bet on volume for both passing games, while the script was a favorite running out a
+blowout. The one leg built from the underdog-RB pattern won.
