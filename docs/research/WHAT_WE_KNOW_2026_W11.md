@@ -59,7 +59,14 @@ Yardage outcomes are right-skewed: a few big games pull the average above the ty
 - PRISM's OVER picks lost in 6 of 7 weeks.
 - When our carries model was above the RB rushing line, the over hit **38%**.
 
-## 6. The one rule that held up everywhere it was tested
+## 6. ~~The one rule that held up everywhere it was tested~~: CORRECTED 2026-11-20, it did not hold on unseen seasons
+
+**On 2024-2025 lines it went 60.2% and then 47.7%:** 54.0% and +1.5% across both, CI
+[-11%, +14%] (`ROLE_CHANGE_AND_RB_UNDER_HISTORICAL_RESULTS_V1.md`). The 2026 result did not
+generalize. **What does hold across three seasons is §1: blind overs lose 7-12% in every
+market.**
+
+Original text, kept for the record:
 
 **RB rushing UNDER, with 2+ of: team underdog by 3+, below-average YPC, book already cut the
 line; line ≥ 30.**

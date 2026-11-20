@@ -2,6 +2,11 @@
 
 **Started:** 2026-11-19, week 11. **Operator agreed:** "Sure why not."
 
+> **UPDATE 2026-11-20: the rule FAILED on unseen 2024-2025 lines.** 2024: 60.2%. 2025: 47.7%.
+> Both seasons together: 54.0%, +1.5%, CI [-10.8%, +13.5%]
+> (`ROLE_CHANGE_AND_RB_UNDER_HISTORICAL_RESULTS_V1.md`). Tracking continues as a record, with
+> **no demonstrated edge.** Do not size bets on it.
+
 **The point:** a clean forward record, on weeks nobody has looked at, of the one betting
 pattern that held up through the reverse-engineering
 (`REVERSE_ENGINEER_2026_W1_10_V1.md` §7-8, independently re-sighted in
