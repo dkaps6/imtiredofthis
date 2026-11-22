@@ -3,21 +3,21 @@
   "files": {
     "data/injuries.csv": {
       "archived_as": "injuries.csv.gz",
-      "bytes_gz": 3052,
-      "bytes_raw": 21218,
-      "sha256_raw": "8079fc726231e96372cebacc75452830b551e17fbbdaab75823eaea1d1497089"
+      "bytes_gz": 4303,
+      "bytes_raw": 29113,
+      "sha256_raw": "30b16c31541bc10a9e225ce3d8d802980028d6c093103c0b6cc194c4086da6aa"
     },
     "data/injuries_source_status.json": {
       "archived_as": "injuries_source_status.json.gz",
       "bytes_gz": 338,
-      "bytes_raw": 584,
-      "sha256_raw": "eed906b74d9feb45013f73f1fae13f7219d14914148137e3e2815d6d92edbdb3"
+      "bytes_raw": 585,
+      "sha256_raw": "f206743a0465aab0888ffaf7ed51aaf4f03a2cb3fbc205d852c0b8371b1ae8e7"
     },
     "data/metrics_ready.csv": {
       "archived_as": "metrics_ready.csv.gz",
-      "bytes_gz": 73479,
-      "bytes_raw": 2100219,
-      "sha256_raw": "1e0ae3e5fb4f39926865ea804f6c0ef45515f416e1bef436654414c8c15fe987"
+      "bytes_gz": 85108,
+      "bytes_raw": 2754564,
+      "sha256_raw": "fc0621b291062cf9f34a2304ac2f7f9cb361aa12383a53184b6af83def20798a"
     },
     "data/model_ensemble_diagnostics.csv": {
       "archived_as": "model_ensemble_diagnostics.csv.gz",
@@ -33,33 +33,33 @@
     },
     "data/model_ml_diagnostics.csv": {
       "archived_as": "model_ml_diagnostics.csv.gz",
-      "bytes_gz": 31912,
-      "bytes_raw": 134828,
-      "sha256_raw": "4504efdb6a66d58bd2ab2b840d7457627f45ad961e53453d1c32c936cc1dd6a2"
+      "bytes_gz": 29377,
+      "bytes_raw": 125285,
+      "sha256_raw": "3949e49d72ab55ec2d33211c239f53759becfb15e94125e434fe627ec0f09209"
     },
     "data/model_rule_simulation_inputs.csv": {
       "archived_as": "model_rule_simulation_inputs.csv.gz",
-      "bytes_gz": 123287,
-      "bytes_raw": 2671290,
-      "sha256_raw": "e99cf9313e15979520cdda3b9bce8e19a865c208b2700bc6404c10c1ee385741"
+      "bytes_gz": 144960,
+      "bytes_raw": 3504272,
+      "sha256_raw": "de1edb4e2f847ed16b65df71de743290311fcc00d2301529658ef513a9f37d69"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
-      "bytes_gz": 13120,
-      "bytes_raw": 194814,
-      "sha256_raw": "06b3d4f2f569df0638edf5204a8d5aa9cf0912acaf5c64aae489cec4b055ca1a"
+      "bytes_gz": 12292,
+      "bytes_raw": 179697,
+      "sha256_raw": "920a2f85f7d86cee9f26b82ca0d9ee906d9e7bcd39e9b24fae83b63f4ba8c94a"
     },
     "data/player_form_consensus.csv": {
       "archived_as": "player_form_consensus.csv.gz",
-      "bytes_gz": 59218,
-      "bytes_raw": 231035,
-      "sha256_raw": "c3af0c1564c8aebac1500fe1d97e2e8199066843a5977491a87f504e95bb3139"
+      "bytes_gz": 54792,
+      "bytes_raw": 213655,
+      "sha256_raw": "b414244d30c6de62686b8edfd376c9ab778a9a577402f93c75f3a8b1930ac718"
     },
     "data/qb_promoted_team_context.csv": {
       "archived_as": "qb_promoted_team_context.csv.gz",
-      "bytes_gz": 4706,
-      "bytes_raw": 12269,
-      "sha256_raw": "5e65e9a26cad969e0759626a856db57b9d3e6496c14ca29f7d705862ae2eee09"
+      "bytes_gz": 4714,
+      "bytes_raw": 12271,
+      "sha256_raw": "8fc3c360728006797208fc28bb36c5e44a2a7243336bc298948605aaae598905"
     },
     "data/rb_rush_synthesis_context.csv": {
       "archived_as": "rb_rush_synthesis_context.csv.gz",
@@ -75,15 +75,15 @@
     },
     "data/weather_week.csv": {
       "archived_as": "weather_week.csv.gz",
-      "bytes_gz": 1221,
-      "bytes_raw": 3726,
-      "sha256_raw": "723bbf22a217b1c26b973777cc9fbb1ff77e3bc20de7a7cb6e590f7a8c2d3844"
+      "bytes_gz": 859,
+      "bytes_raw": 2679,
+      "sha256_raw": "e2408d2804cc3328559cf626110e69c0e9966de0e97524d4650bd141c91fd18b"
     }
   },
   "required_column_stripped": {},
   "required_missing": [],
-  "source_git_sha": "a727ba660156d299a1f457346014a60f6e392583",
-  "source_run_id": "44580190319",
+  "source_git_sha": "86a3e36d0146f13deef1456c9eeb518b4e51f7a4",
+  "source_run_id": "45024058278",
   "stem": "2026_wk11",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
