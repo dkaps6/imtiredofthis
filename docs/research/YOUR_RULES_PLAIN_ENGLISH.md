@@ -70,6 +70,29 @@
 > 21. **Single-game slates (TNF/SNF/MNF) are built differently** from the full
 >     slate; the Sunday full slate comes first. (Nov 13)
 > 22. **His ideas get tested, not just acknowledged** (see bottom of this file).
+> 23. **Nothing goes in a parlay unless that kind of leg has been graded before.**
+>     "Stop putting shit in parlays that haven't been fucking graded before."
+>     (Nov 22, SNF). A leg type is market x side x line type (alt / main) x
+>     position, e.g. "QB rushing alt over" or "RB rushing main-line under, all
+>     six screens".
+>     - It is eligible only if our graded record for that type, taken from the
+>       committed graded boards, is **positive at the price actually paid** and
+>       has **at least 10 graded bets**.
+>     - Every week's grading is added to the record, so the pool can grow or
+>       shrink.
+>     - First application (weeks 9-10 alt grading, band 1.5-3.0x cushion, -150
+>       to -400):
+>       - QB rushing alt over: 12/13, +35%;
+>       - RB receptions alt: +8% (n=10);
+>       - TE receptions alt: +7% (n=12).
+>     - These were **negative** and are not eligible until they turn positive:
+>       - WR receiving-yards alt: -6.6% (n=100);
+>       - TE receiving-yards alt: -4.2% (n=55);
+>       - RB receiving-yards alt: -4.3% (n=34);
+>       - WR receptions alt: -22.7% (n=20);
+>       - RB rushing alt: -0.9% (n=39).
+>     - Main-line screened RB rushing unders are eligible (2026: 43 bets,
+>       +31%; 2024-25: 246 bets, +2.2%).
 >
 > ### Rules a session invented that are NOT his (do not reapply)
 > * one leg per game per ticket (removed Nov 9; reapplied by mistake Nov 15);
