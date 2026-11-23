@@ -51,10 +51,15 @@ QB_MISSING_SHARE = 0.30
 
 
 def matchup_pct(legs: pd.DataFrame) -> pd.Series:
-    """Percentile of def_allowed within the leg's own market (0 = toughest defense)."""
-    one = legs.drop_duplicates(["market", "opponent"])[["market", "opponent", "def_allowed"]]
-    one["pct"] = one.groupby("market").def_allowed.rank(pct=True)
-    return one.set_index(["market", "opponent"]).pct
+    """Percentile of def_allowed within the leg's own market AND defense group
+    (QB / RB / WRTE; 0 = toughest defense). Keyed (market, def_group, opponent)."""
+    legs = legs.copy()
+    if "def_group" not in legs:
+        legs["def_group"] = ""
+    legs["def_group"] = legs["def_group"].fillna("")
+    one = legs.drop_duplicates(["market", "def_group", "opponent"])[["market", "def_group", "opponent", "def_allowed"]]
+    one["pct"] = one.groupby(["market", "def_group"]).def_allowed.rank(pct=True)
+    return one.set_index(["market", "def_group", "opponent"]).pct
 
 
 def teammate_context(st, played, team_now, inj_out, player, team, market, thr):
@@ -167,7 +172,8 @@ def main() -> int:
         proj, thr, ml = float(r.model_proj), float(c.threshold), float(r.main_line)
         cush, frac = proj / thr, thr / ml if ml > 0 else np.nan
         own = r.own_hits / r.own_games if r.own_games else np.nan
-        pct = float(mpct.get((c.market, r.opponent), np.nan))
+        grp = r.def_group if "def_group" in r.index and isinstance(r.def_group, str) else ""
+        pct = float(mpct.get((c.market, grp, r.opponent), np.nan))
         gwt, tstate, hist = team_change_state(
             st[st.player_display_name == c.player].sort_values("week").team.tolist(), c.team)
         n, h, notes = teammate_context(st, played, team_now, inj_out, c.player, c.team, c.market, thr)

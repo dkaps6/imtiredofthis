@@ -226,3 +226,29 @@ def test_g7_cut_is_computed_within_each_market():
     killed = set(rej[rej.gate == "G7_matchup"].player)
     assert killed == {"R0", "Q0"}
     assert {"R1", "R2", "R3", "R4", "Q1", "Q2", "Q3", "Q4"} <= set(surv.player)
+
+
+def test_g7_judges_qb_rushing_against_qb_run_defense():
+    """2026-11-22 SNF: Brock Purdy 10+ rush passed G7 because QB rushing legs were
+    matched against yards allowed to RUNNING BACKS (MIN 62nd pct). MIN allowed the
+    6th-fewest QB rushing yards. The cut must be per market AND defense group."""
+    rows = [_leg(player=f"RB{i}", market="rush_yards", def_group="RB", def_allowed=float(d), event_id=f"r{i}")
+            for i, d in enumerate([70, 85, 100, 115, 130])]
+    rows += [_leg(player=f"QB{i}", market="rush_yards", def_group="QB", def_allowed=float(d), event_id=f"q{i}")
+             for i, d in enumerate([5, 10, 15, 20, 25])]
+    surv, rej = _gates(rows)
+    killed = set(rej[rej.gate == "G7_matchup"].player)
+    # with one shared rush_yards quantile every QB row (5-25) would fall under the
+    # RB-driven cut; per group, only the toughest of each group is cut
+    assert killed == {"RB0", "QB0"}
+    assert {"QB1", "QB2", "QB3", "QB4", "RB1", "RB2", "RB3", "RB4"} <= set(surv.player)
+
+
+def test_def_group_maps_position_to_the_right_defense():
+    from scripts.research.build_slate_alt_legs_v1 import def_group
+    assert def_group("rush_yards", "QB") == "QB"
+    assert def_group("rush_yards", "RB") == "RB"
+    assert def_group("rec_yards", "RB") == "RB"
+    assert def_group("rec_yards", "WR") == "WRTE"
+    assert def_group("receptions", "TE") == "WRTE"
+    assert def_group("pass_yards", "QB") == "QB"

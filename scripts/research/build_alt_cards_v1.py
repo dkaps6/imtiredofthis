@@ -231,11 +231,15 @@ def apply_gates(df: pd.DataFrame, book: str | None) -> tuple[pd.DataFrame, pd.Da
     # allowed (~170-270) never did, so every rush_yards rung failed G7 and no
     # pass_yards rung could. The doc above says "toughest quartile of prior yards
     # allowed to the position group", which is a within-market quantile.
+    # Since 2026-11-22 the cut is also per defense group (QB / RB / WRTE) when the
+    # legs carry `def_group`: QB rushing allowed and RB rushing allowed are
+    # different numbers and must not share one quantile.
     cuts: dict = {}
+    has_grp = "def_group" in df
     if "def_allowed" in df and df["def_allowed"].notna().any():
-        for mk, g in df.groupby("market"):
+        for key, g in df.groupby(["market", "def_group"] if has_grp else "market"):
             if g["def_allowed"].notna().any():
-                cuts[mk] = float(np.nanquantile(g["def_allowed"], DEF_EXCLUDE_Q))
+                cuts[key] = float(np.nanquantile(g["def_allowed"], DEF_EXCLUDE_Q))
     for row in df.to_dict("records"):
         if book and str(row.get("book", "")).lower() != book.lower():
             _fail(log, row, "G9_book", f"book={row.get('book')}"); continue
@@ -276,7 +280,7 @@ def apply_gates(df: pd.DataFrame, book: str | None) -> tuple[pd.DataFrame, pd.Da
         if rate < OWN_RATE_MIN:
             _fail(log, row, "G6_own_rate", f"own_rate={rate:.2f} < {OWN_RATE_MIN}"); continue
         if cuts:
-            cut = cuts.get(row.get("market"))
+            cut = cuts.get((row.get("market"), row.get("def_group")) if has_grp else row.get("market"))
             da = row.get("def_allowed")
             if cut is None or da is None or not np.isfinite(da):
                 _fail(log, row, "G7_matchup_unknown", "no opponent data"); continue

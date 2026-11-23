@@ -37,6 +37,24 @@ STAT = {"rec_yards": "receiving_yards", "rush_yards": "rushing_yards", "pass_yar
 FAM_COL = {"rec_yards": (("WR", "TE"), "receiving_yards"), "receptions": (("WR", "TE"), "receiving_yards"),
            "rush_yards": (("RB",), "rushing_yards"), "rush_rec_yards": (("RB",), "rushing_yards"),
            "pass_yards": (("QB",), "passing_yards")}
+# The defense a leg is judged against must be the defense against THAT player's
+# position. Until 2026-11-22 every rush_yards leg was matched against yards allowed
+# to running backs, so a QB rushing leg was graded on the opponent's run defense vs
+# RBs. Brock Purdy 10+ rush (SNF wk11) passed G7 at the 62nd percentile of RB run
+# defense while MIN allowed the 6th-fewest QB rushing yards (10.4/g vs 15.9 league).
+DEF_GROUPS = {"QB": ("QB",), "RB": ("RB", "FB"), "WRTE": ("WR", "TE")}
+
+
+def def_group(market: str, position: str) -> str:
+    """Which position group's yards-allowed a leg's matchup is measured against."""
+    p = str(position or "").upper()
+    if market == "pass_yards":
+        return "QB"
+    if market in ("rush_yards", "rush_rec_yards"):
+        return "QB" if p == "QB" else "RB"
+    return "RB" if p in ("RB", "FB") else "WRTE"
+
+
 NFL_TEAM = {"LAR": "LA"}
 NEW_TEAM_MIN_GAMES = 3
 nm = lambda s: s.astype(str).str.lower().str.replace(r"[^a-z]", "", regex=True)
@@ -88,9 +106,10 @@ def main() -> int:
     pos = st.groupby("k").position.first(); st["fam"] = st.k.map(pos)
 
     allowed = {}
-    for mk, (fams, col) in FAM_COL.items():
-        sub = st[st.fam.isin(fams)]
-        allowed[mk] = sub.groupby(["opponent_team", "week"])[col].sum().groupby("opponent_team").mean()
+    for mk, (_, col) in FAM_COL.items():
+        for grp, fams in DEF_GROUPS.items():
+            sub = st[st.fam.isin(fams)]
+            allowed[(mk, grp)] = sub.groupby(["opponent_team", "week"])[col].sum().groupby("opponent_team").mean()
 
     first = board.drop_duplicates(["k", "market"]).set_index(["k", "market"])
     rows = []
@@ -112,7 +131,8 @@ def main() -> int:
         vals = s[STAT[mk]].fillna(0).to_numpy(float)
         gwt, state, hist = team_change_state(s.sort_values("week").team.tolist(), b.team)
         opp = NFL_TEAM.get(str(b.opponent), str(b.opponent))
-        da = float(allowed[mk].get(opp, np.nan))
+        grp = def_group(mk, pos.get(k, ""))
+        da = float(allowed[(mk, grp)].get(opp, np.nan))
         ml = main_line(g)
         best = g.loc[g.groupby(["line", "book"]).price_american.idxmax()]
         for r in best.itertuples(index=False):
@@ -122,7 +142,7 @@ def main() -> int:
                 main_line=ml, frac_of_line=(thr / ml if ml == ml and ml > 0 else np.nan),
                 snap_pct=float(snap.get(k, np.nan)), own_games=int(len(vals)), own_hits=int((vals > thr).sum()),
                 own_floor=float(vals.min()) if len(vals) else np.nan, own_median=float(np.median(vals)) if len(vals) else np.nan,
-                def_allowed=da, injury_status="", quarantined=False,
+                def_allowed=da, def_group=grp, injury_status="", quarantined=False,
                 games_with_team=gwt, team_history=hist, state_label=state,
                 model_prob=float((draws > thr).mean()), breakeven=ip(r.price_american)))
     out = pd.DataFrame(rows)
