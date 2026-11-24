@@ -41,6 +41,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from scripts._opponent_map import canon_team
+
 VERSION = "RB_CARRY_SHARE_RECENCY_V2"
 WEIGHT = 0.85
 MIN_GAMES = 3
@@ -50,6 +52,7 @@ DROP_RATIO = 0.5
 SPIKE_RATIO = 2.0
 MIN_ABS_GAP = 0.20
 HEALTHY = "HEALTHY_FULL"
+SOURCE_INCOMPLETE = "SNAP_SOURCE_INCOMPLETE"
 
 _LISTED_REPORT = {"questionable", "doubtful", "out"}
 _LISTED_PRACTICE = {"limited participation in practice", "did not participate in practice"}
@@ -183,9 +186,10 @@ def apply(form: pd.DataFrame, windows: pd.DataFrame | None, *, key_col: str = "p
     out["rb_carry_recency_window_states"] = k.map(windows["window_states"]).fillna("")
     out["rb_carry_recency_window_weeks"] = k.map(windows["window_weeks"]).fillna("")
     cg = pd.to_numeric(out.get("current_games"), errors="coerce").fillna(0)
+    incomplete = out["rb_carry_recency_window_states"].astype(str).str.startswith(SOURCE_INCOMPLETE)
     status = np.select(
-        [~is_rb, cg.lt(MIN_GAMES) | l3s.isna(), std.isna(), ~clean],
-        ["NOT_RB", "FEWER_THAN_3_GAMES", "NO_SEASON_SHARE", "WITHHELD_ANOMALY"],
+        [~is_rb, incomplete, cg.lt(MIN_GAMES) | l3s.isna(), std.isna(), ~clean],
+        ["NOT_RB", "WITHHELD_SOURCE_INCOMPLETE", "FEWER_THAN_3_GAMES", "NO_SEASON_SHARE", "WITHHELD_ANOMALY"],
         default="APPLIED",
     )
     out["rb_carry_recency_status"] = status
@@ -208,6 +212,7 @@ def snap_games(snaps: pd.DataFrame, pfr_to_key: dict, logs: pd.DataFrame, before
     s["week"] = pd.to_numeric(s["week"], errors="coerce")
     s = s[(s["week"] < int(before_week)) & (pd.to_numeric(s["offense_snaps"], errors="coerce").fillna(0) > 0)]
     s["key"] = s["pfr_player_id"].map(pfr_to_key)
+    s["team"] = s["team"].astype(str).map(canon_team)
     s = s.dropna(subset=["key"])
     s = s[["key", "team", "week", "offense_pct"]].drop_duplicates(["key", "team", "week"])
     car = logs[["key", "team", "week", "rushes"]].groupby(["key", "team", "week"], as_index=False)["rushes"].sum()

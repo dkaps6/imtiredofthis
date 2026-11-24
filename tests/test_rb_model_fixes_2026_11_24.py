@@ -1,6 +1,6 @@
 """Tests for the two model fixes promoted 2026-11-24.
 
-RB_CARRY_SHARE_RECENCY_V1 (scripts/player_form_v2.py) and
+RB_CARRY_SHARE_RECENCY_V2 (scripts/modeling/rb_carry_recency_v2.py, used by scripts/player_form_v2.py) and
 RB_RECEPTIONS_OPPONENT_ADJ_V1 (scripts/modeling/rb_receptions_opponent_adj_v1.py).
 """
 import numpy as np
@@ -11,53 +11,143 @@ import scripts.player_form_v2 as pf
 import scripts.modeling.rb_receptions_opponent_adj_v1 as adj
 
 
-# ---------------------------------------------------------------- recency
-def _logs(rows):
-    return pd.DataFrame(rows, columns=["player_identity_key", "team", "week", "rushes", "team_rushes"])
+# ---------------------------------------------------------------- recency (V2)
+import scripts.modeling.rb_carry_recency_v2 as rec
+
+
+def _games(rows):
+    # (key, team, week, offense_pct, carries, team_carries)
+    return pd.DataFrame(rows, columns=["key", "team", "week", "offense_pct", "carries", "team_carries"])
+
+
+def _tw(team, weeks):
+    return pd.DataFrame({"team": team, "week": list(weeks)})
+
+
+def _inj(rows):
+    return pd.DataFrame(rows, columns=["key", "week", "report_status", "practice_status"])
+
+
+def _states(labeled, key):
+    return dict(zip(labeled.loc[labeled.key.eq(key), "week"], labeled.loc[labeled.key.eq(key), "game_state"]))
+
+
+def test_game_states_follow_the_anomaly_gate():
+    g = _games(
+        [("inj", "KC", w, p, 10, 25) for w, p in [(1, .6), (2, .6), (3, .6), (4, .25), (5, .6)]]
+        + [("exit", "KC", w, p, 10, 25) for w, p in [(1, .6), (2, .6), (3, .2), (4, .6)]]
+        + [("bench", "KC", w, p, 10, 25) for w, p in [(1, .6), (2, .6), (3, .2), (4, .6)]]
+        + [("spike", "KC", w, p, 10, 25) for w, p in [(1, .15), (2, .15), (3, .7), (4, .15)]]
+        + [("ret", "KC", w, p, 10, 25) for w, p in [(1, .6), (2, .6), (5, .3), (6, .6)]]
+        + [("back_ok", "KC", w, p, 10, 25) for w, p in [(1, .6), (2, .6), (5, .6), (6, .6)]]
+    )
+    inj = _inj([("inj", 4, "Questionable", None), ("exit", 4, None, "Did Not Participate In Practice")])
+    lab = rec.label_games(g, _tw("KC", range(1, 7)), inj)
+    assert _states(lab, "inj")[4] == "INJURY_LIMITED"
+    assert _states(lab, "exit")[3] == "PARTIAL_GAME"          # big drop, on next week's report
+    assert _states(lab, "bench")[3] == "UNRESOLVED_CONTEXT"   # big drop, no injury record
+    assert _states(lab, "spike")[3] == "UNRESOLVED_CONTEXT"   # teammate absence / exit not resolved
+    assert _states(lab, "ret")[5] == "RETURN_FROM_INJURY"     # missed weeks 3-4, limited on return
+    assert set(_states(lab, "back_ok").values()) == {rec.HEALTHY}  # returned at his normal share
+
+
+def test_persistent_new_role_is_not_an_anomaly():
+    g = _games([("rb", "KC", w, p, 10, 25) for w, p in [(1, .7), (2, .7), (3, .3), (4, .3), (5, .3)]])
+    lab = rec.label_games(g, _tw("KC", range(1, 6)), _inj([]))
+    # the three games at the new level judge clean, so the window can use them
+    assert [_states(lab, "rb")[w] for w in (3, 4, 5)] == [rec.HEALTHY] * 3
+    win = rec.last3(lab, pd.DataFrame({"key": ["rb"], "team": ["KC"]}))
+    assert bool(win.loc["rb", "window_clean"])
+
+
+def test_zero_touch_snap_games_count_in_the_window():
+    # review finding: PlayerForm logs drop zero-touch games; the window must still count them
+    snaps = pd.DataFrame([dict(pfr_player_id="p1", team="KC", week=w, offense_snaps=20, offense_pct=.3) for w in range(1, 7)])
+    logs = pd.DataFrame([dict(key="rb1", team="KC", week=w, rushes=10, team_rushes=25) for w in range(1, 5)]
+                        + [dict(key="rbX", team="KC", week=w, rushes=25, team_rushes=25) for w in (5, 6)])
+    games = rec.snap_games(snaps, {"p1": "rb1"}, logs, 7)
+    assert games.set_index("week").carries.to_dict() == {1: 10, 2: 10, 3: 10, 4: 10, 5: 0, 6: 0}
+    win = rec.last3(rec.label_games(games, logs[["team", "week"]].drop_duplicates(), _inj([])),
+                    pd.DataFrame({"key": ["rb1"], "team": ["KC"]}))
+    assert win.loc["rb1", "window_weeks"] == "4|5|6"
+    assert win.loc["rb1", "rush_share_last3"] == pytest.approx(10 / 75)
+
+
+def test_snap_team_codes_are_canonicalised():
+    snaps = pd.DataFrame([dict(pfr_player_id="p1", team="LA", week=1, offense_snaps=20, offense_pct=.5)])
+    logs = pd.DataFrame([dict(key="rb1", team="LAR", week=1, rushes=10, team_rushes=25)])
+    assert len(rec.snap_games(snaps, {"p1": "rb1"}, logs, 2)) == 1
 
 
 def _form(rows):
     return pd.DataFrame(rows, columns=["player_identity_key", "team", "position", "current_games", "rush_share_current"])
 
 
-def test_recency_blends_season_and_last3_for_rbs():
-    # 5 games: 5/25 carries each early, then 15/25 in the last three (a role change)
-    logs = _logs([("rb1", "KC", w, r, 25) for w, r in [(1, 5), (2, 5), (3, 15), (4, 15), (5, 15)]])
-    std = 55 / 125
-    form = _form([("rb1", "KC", "RB", 5, std)])
-    out = pf.apply_rb_carry_share_recency(form, logs)
-    l3 = 45 / 75
-    assert out.rush_share_last3.iat[0] == pytest.approx(l3)
-    assert out.rush_share_current.iat[0] == pytest.approx(0.15 * std + 0.85 * l3)
-    assert out.rush_share_current_season.iat[0] == pytest.approx(std)
-    assert out.rb_carry_recency_applied.iat[0] == 1
-    assert out.rb_carry_recency_version.iat[0] == pf.RB_RECENCY_VERSION
+def _win(rows):
+    return pd.DataFrame(rows, columns=["key", "rush_share_last3", "window_games", "window_states", "window_weeks",
+                                       "window_clean"]).set_index("key")
 
 
-def test_recency_leaves_other_positions_and_thin_histories_alone():
-    logs = _logs([("wr1", "KC", w, 1, 25) for w in (1, 2, 3, 4)] + [("rb2", "KC", w, 10, 25) for w in (1, 2)])
-    form = _form([("wr1", "KC", "WR", 4, 0.04), ("rb2", "KC", "RB", 2, 0.40)])
-    out = pf.apply_rb_carry_share_recency(form, logs)
-    assert out.rush_share_current.tolist() == pytest.approx([0.04, 0.40])
-    assert out.rb_carry_recency_applied.tolist() == [0, 0]
+def test_apply_changes_only_clean_rb_windows():
+    form = _form([("clean", "KC", "RB", 5, .40), ("dirty", "KC", "RB", 5, .40), ("wr", "KC", "WR", 5, .04),
+                  ("thin", "KC", "RB", 2, .40), ("fb", "KC", "FB", 4, .10)])
+    win = _win([("clean", .60, 3, "HEALTHY_FULL|HEALTHY_FULL|HEALTHY_FULL", "3|4|5", True),
+                ("dirty", .10, 3, "HEALTHY_FULL|INJURY_LIMITED|HEALTHY_FULL", "3|4|5", False),
+                ("wr", .50, 3, "HEALTHY_FULL|HEALTHY_FULL|HEALTHY_FULL", "2|3|4", True),
+                ("fb", .20, 3, "HEALTHY_FULL|HEALTHY_FULL|HEALTHY_FULL", "2|3|4", True)])
+    out = rec.apply(form, win).set_index("player_identity_key")
+    assert out.loc["clean", "rush_share_current"] == pytest.approx(.15 * .40 + .85 * .60)
+    assert out.loc["fb", "rush_share_current"] == pytest.approx(.15 * .10 + .85 * .20)
+    for k, v in (("dirty", .40), ("wr", .04), ("thin", .40)):
+        assert out.loc[k, "rush_share_current"] == pytest.approx(v)
+    assert out.rb_carry_recency_status.to_dict() == {
+        "clean": "APPLIED", "dirty": "WITHHELD_ANOMALY", "wr": "NOT_RB", "thin": "FEWER_THAN_3_GAMES", "fb": "APPLIED"}
+    assert out.loc["dirty", "rb_carry_recency_window_states"] == "HEALTHY_FULL|INJURY_LIMITED|HEALTHY_FULL"
+    assert out.loc["clean", "rush_share_current_season"] == pytest.approx(.40)
+    assert set(out.rb_carry_recency_version) == {rec.VERSION}
 
 
-def test_recency_uses_only_games_with_the_current_team():
-    # traded: three games for NYJ, then two for KC -> no 3 games with KC yet, so no change
-    logs = _logs([("rb3", "NYJ", w, 20, 25) for w in (1, 2, 3)] + [("rb3", "KC", w, 5, 25) for w in (4, 5)])
-    form = _form([("rb3", "KC", "RB", 5, 0.6)])
-    out = pf.apply_rb_carry_share_recency(form, logs)
-    assert out.rb_carry_recency_applied.iat[0] == 0
-    assert out.rush_share_current.iat[0] == pytest.approx(0.6)
+def test_unavailable_sources_change_nothing_and_say_why():
+    form = _form([("rb", "KC", "RB", 5, .40)])
+    out = rec.apply(form, None, unavailable_reason="nflreadpy:ConnectionError")
+    assert out.rush_share_current.iat[0] == pytest.approx(.40)
+    assert out.rb_carry_recency_status.iat[0] == "SOURCE_UNAVAILABLE:nflreadpy:ConnectionError"
+
+
+def test_only_games_with_the_slate_team_count():
+    g = _games([("rb3", "NYJ", w, .6, 20, 25) for w in (1, 2, 3)] + [("rb3", "KC", w, .6, 5, 25) for w in (4, 5)])
+    tw = pd.concat([_tw("NYJ", range(1, 6)), _tw("KC", range(1, 6))])
+    win = rec.last3(rec.label_games(g, tw, _inj([])), pd.DataFrame({"key": ["rb3"], "team": ["KC"]}))
+    assert win.loc["rb3", "window_games"] == 2 and np.isnan(win.loc["rb3", "rush_share_last3"])
+
+
+def _sources(snap_weeks):
+    snaps = pd.DataFrame([dict(pfr_player_id="p1", team="KC", week=w, offense_snaps=30, offense_pct=.6, game_type="REG")
+                          for w in snap_weeks])
+    players = pd.DataFrame({"gsis_id": ["g1"], "pfr_id": ["p1"]})
+    inj = pd.DataFrame(columns=["gsis_id", "week", "report_status", "practice_status"])
+    logs = pd.DataFrame([dict(player_id="g1", player_identity_key="rb1", team="KC", week=w, rushes=12, team_rushes=25)
+                         for w in range(1, 6)])
+    form = _form([("rb1", "KC", "RB", 5, 12 / 25)])
+    return snaps, players, inj, logs, form
+
+
+def test_production_windows_end_to_end_and_incomplete_snap_source():
+    snaps, players, inj, logs, form = _sources(range(1, 6))
+    win, reason = pf.build_rb_recency_windows(snaps, players, inj, logs, logs, form, 6)
+    out = rec.apply(form, win, unavailable_reason=reason)
+    assert reason == "" and out.rb_carry_recency_status.iat[0] == "APPLIED"
+    snaps, players, inj, logs, form = _sources([1, 2, 3, 4])          # week 5 snaps not published yet
+    win, reason = pf.build_rb_recency_windows(snaps, players, inj, logs, logs, form, 6)
+    out = rec.apply(form, win, unavailable_reason=reason)
+    assert out.rb_carry_recency_status.iat[0] == "WITHHELD_SOURCE_INCOMPLETE"
+    assert out.rush_share_current.iat[0] == pytest.approx(12 / 25)
 
 
 def test_recency_kill_switch(monkeypatch):
-    monkeypatch.setenv("RB_CARRY_SHARE_RECENCY_V1", "0")
-    logs = _logs([("rb1", "KC", w, 15, 25) for w in (1, 2, 3, 4)])
-    form = _form([("rb1", "KC", "RB", 4, 0.3)])
-    out = pf.apply_rb_carry_share_recency(form, logs)
-    assert out.rb_carry_recency_applied.iat[0] == 0
-    assert out.rush_share_current.iat[0] == pytest.approx(0.3)
+    monkeypatch.setenv("RB_CARRY_SHARE_RECENCY", "0")
+    win, reason = pf.rb_recency_windows(2026, 6, pd.DataFrame(), pd.DataFrame({"x": [1]}), pd.DataFrame())
+    assert win is None and reason == "KILL_SWITCH"
 
 
 # ---------------------------------------------------------------- opponent adjustment
@@ -146,7 +236,9 @@ def test_full_slate_builds_the_context_before_odds_and_pricing():
     assert step > wf.index("Build PlayerForm from production-eligible current roles")
 
 
-def test_playerform_build_applies_recency():
+def test_playerform_and_the_validation_share_one_recency_module():
     from pathlib import Path
     text = Path("scripts/player_form_v2.py").read_text(encoding="utf-8")
-    assert "form = apply_rb_carry_share_recency(form, current_logs)" in text
+    assert "form = rb_recency.apply(form, rb_windows, unavailable_reason=rb_reason)" in text
+    research = Path("scripts/research/evaluate_rb_recency_end_to_end_v2.py").read_text(encoding="utf-8")
+    assert "import scripts.modeling.rb_carry_recency_v2 as rec" in research
