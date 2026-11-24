@@ -70,20 +70,28 @@
 24. **G7 matchup fix** (commit 246d8f6). Legs are judged against the defense versus the
     player's own position group (QB / RB / WRTE). Previously QB rushing used RB run defense.
     Regression tests are in `tests/test_build_alt_cards_gates_v1.py`.
-25. **Problem 1: the model ignores the opponent's defense.**
-    - **Code read:**
-      - rushing only uses a light-box/heavy-box switch;
-      - `def_rush_epa` is loaded and never used;
-      - ML v2 has no opponent features.
-    - **Preregistered test** (`OPPONENT_POSITION_DEFENSE_ADJUSTMENT_RESULTS_V1.md`): only
-      **RB receptions** passed the promotion gate (b=0.1932, shrink k=4,
-      `data/research/opponent_position_defense/promoted_coefficients_v1.json`).
-    - **QB rushing,** tested on 2,100+ starts: no opponent measure, spread or total predicts it
-      beyond the QB's own norm.
-    - **OPEN, AND THE ONLY ACTIVE WORK ITEM:** integrate the RB-receptions adjustment into
-      production, with tests and a full-slate dry run, then open a PR for the operator.
-      - The operator demanded that problems be finished, not left buried.
-      - Do not open new research until this ships.
+25. **SHIPPED 2026-11-24 into the model** (`docs/production/RB_MODEL_FIXES_PROMOTION_2026_11_24.md`,
+    commits c88c49f and 716ddae on `claude/nice-cori-4qkwqs`; every 2026 paid Full Slate run has
+    been dispatched from this branch):
+    - **`RB_CARRY_SHARE_RECENCY_V1`** (PlayerForm): RB/FB with 3+ games feeds Bayes
+      0.15 x season-to-date + 0.85 x last-3 carry share.
+    - **`RB_RECEPTIONS_OPPONENT_ADJ_V1`** (pricing): RB receptions mean x (1 + 0.1932 x D),
+      with a new context step in Full Slate.
+    - **Validation:**
+      - 12 tests;
+      - repo and readiness audits;
+      - the real pricing loop on week-11 inputs (35 RB players adjusted, nothing else touched);
+      - week-12 no-odds dry run: PlayerForm "applied to 99 RB/FB rows"; the context step passed.
+    - **Both are small.** The week-11 forward checks were flat.
+    - **NOT fixed:** the Emmett Johnson class of miss.
+      - Cause: Bayes gives zero-history backups the group-mean share. Before week 11, Carter
+        (0 games) had 0.32 and Ott (1 game) 0.26, above Johnson's 0.23.
+      - The fix is the allocative depth-chart prior (D1), in its frozen prospective test.
+      - **Next decision:** D1 at the week-14 interim.
+    - **Replay limitation:** a Full Slate replay of a completed week fails closed at
+      "Ourlads role universe is empty". Logged for infrastructure.
+    - **Main is 116 commits behind this branch.** Merging to main is a separate operator
+      decision.
 26. **Week 12:** a full-slate Thursday paid capture is needed for the RB-under tracker and the
     line-movement check. It uses credits, so wait for the operator's go.
     - **Credits:** 364 left after the 2026-11-22 Sunday pull (run 45024058278). The account
