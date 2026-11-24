@@ -1,0 +1,82 @@
+{
+  "complete": false,
+  "files": {
+    "data/injuries.csv": {
+      "archived_as": "injuries.csv.gz",
+      "bytes_gz": 111,
+      "bytes_raw": 105,
+      "sha256_raw": "ad0e2260bbb8e9485fce9c12fec0f137065e87f018d923523333140816914881"
+    },
+    "data/injuries_source_status.json": {
+      "archived_as": "injuries_source_status.json.gz",
+      "bytes_gz": 225,
+      "bytes_raw": 282,
+      "sha256_raw": "b404a286e2d1cfbd46e3142b5091ce0cdb6ea9169ac20195ace56a29d774db91"
+    },
+    "data/model_ensemble_diagnostics.csv": {
+      "archived_as": "model_ensemble_diagnostics.csv.gz",
+      "bytes_gz": 393,
+      "bytes_raw": 774,
+      "sha256_raw": "e3cf299079287c825a0b72ca07aa7f2f009e472288da64fa9f33bb1de003a857"
+    },
+    "data/model_ensemble_weights.csv": {
+      "archived_as": "model_ensemble_weights.csv.gz",
+      "bytes_gz": 664,
+      "bytes_raw": 1375,
+      "sha256_raw": "ceef91a0369e2ae82055f7fe949e4ad3e61e46c4b666504c7135709f1cb38f7d"
+    },
+    "data/model_ml_diagnostics.csv": {
+      "archived_as": "model_ml_diagnostics.csv.gz",
+      "bytes_gz": 39251,
+      "bytes_raw": 167182,
+      "sha256_raw": "485394d28a77a91ad719e5171cb6b78ef853d7183b087eb215dddcf56249ed6e"
+    },
+    "data/model_state_diagnostics.csv": {
+      "archived_as": "model_state_diagnostics.csv.gz",
+      "bytes_gz": 15645,
+      "bytes_raw": 241620,
+      "sha256_raw": "eb9ab90955990969a76ca97a4825d34a389bfdea25fe96e2a1a563b9f2ed2691"
+    },
+    "data/player_form_consensus.csv": {
+      "archived_as": "player_form_consensus.csv.gz",
+      "bytes_gz": 80535,
+      "bytes_raw": 343338,
+      "sha256_raw": "0739c675053041cdb088d23be38f283a55b7de1afaa547d9a020c5b98406267f"
+    },
+    "data/qb_promoted_team_context.csv": {
+      "archived_as": "qb_promoted_team_context.csv.gz",
+      "bytes_gz": 4731,
+      "bytes_raw": 12245,
+      "sha256_raw": "6de3e2e926a7d05c31daf09ffc3005856c277fb56205f8576b56b8192d15813f"
+    },
+    "data/rb_receptions_opponent_context.csv": {
+      "archived_as": "rb_receptions_opponent_context.csv.gz",
+      "bytes_gz": 667,
+      "bytes_raw": 2925,
+      "sha256_raw": "d4abeb22851daa574a44011eef6a26bb5516700e88b7cf45c653270f8fb492a2"
+    },
+    "data/team_week_map.csv": {
+      "archived_as": "team_week_map.csv.gz",
+      "bytes_gz": 5913,
+      "bytes_raw": 39326,
+      "sha256_raw": "c64d51441908d7c5009e39a82e4ae97ca5521626ea0dc76c0c360990b27d5c6e"
+    },
+    "data/weather_week.csv": {
+      "archived_as": "weather_week.csv.gz",
+      "bytes_gz": 1362,
+      "bytes_raw": 4539,
+      "sha256_raw": "523605e4682e020f9f9f1ab5510221c15b5628c651495096f065b9619a7543c9"
+    }
+  },
+  "required_column_stripped": {},
+  "required_missing": [
+    "data/metrics_ready.csv",
+    "data/model_rule_simulation_inputs.csv"
+  ],
+  "source_git_sha": "24c8bc2d6199d04b8c036744ba3b70634ecdb971",
+  "source_run_id": "45468439042",
+  "stem": "2026_wk12",
+  "version": "REPLAY_INPUT_SET_V1",
+  "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
+  "week": "12"
+}
