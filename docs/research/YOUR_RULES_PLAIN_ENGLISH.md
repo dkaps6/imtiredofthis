@@ -92,7 +92,16 @@
 >       - WR receptions alt: -22.7% (n=20);
 >       - RB rushing alt: -0.9% (n=39).
 >     - Main-line screened RB rushing unders are eligible (2026: 43 bets,
->       +31%; 2024-25: 246 bets, +2.2%).
+>       +31%; 2024-25: 246 bets, +2.2%). First forward week (wk 11): 1-3.
+>     - **Current record:**
+>       `data/market_track_record/graded/w9_w11_2026_leg_type_record_v1.csv`,
+>       updated every week. After week 11 the eligible types are:
+>       - TE receptions alt: +11%, n=23;
+>       - QB rushing alt: +15%, n=19;
+>       - RB receptions alt: +2%, n=17;
+>       - RB rushing alt: +1%, n=62.
+>     - Every receiving-yards alt type and WR receptions alts are still
+>       negative.
 > 24. **Think about each game like a football person first; the model comes
 >     second. This is NOT a rule or a checklist.** (Nov 23, after his MNF
 >     CIN @ WAS ticket went 6/6 at about +511, while the gated card missed.)
