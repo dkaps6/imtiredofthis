@@ -47,6 +47,48 @@
     - Each needs its own preregistration. Check the prior work first:
       `VEGAS_CONFIRMATION_LIKELIHOOD_V1_PLAN.md` mentions cross-book prices.
 
+### V30 additions, 2026-11-22 to 11-24 (week 11 closed)
+
+22. **Week 11 is fully graded** (`WK11_2026_BACKTEST_V1.md`).
+    - **Sunday card v2:** SAFE +158 won 3/3. MODERATE, MEDIUM, HIGH and LOTTERY lost.
+    - **The three legs the fixed G7 would have removed all missed:** Purdy 10+ rush (0),
+      Hubbard 10+ rec (0), Warren 10+ rec (1).
+    - **The operator's MNF ticket won 6/6** (about +511). The card's entry lost.
+    - **Screened rushing unders went 1-3** in their first forward week.
+    - **Line movement:** the model's Thursday picks at Thursday prices made +0.4%; at Sunday
+      prices -1.2%. Thursday lines that later moved toward the model hit 58.9% (n=158).
+    - **Only week 11 can be checked.** Week 10's Thursday board was TNF-only.
+23. **Operator rules added** (`YOUR_RULES_PLAIN_ENGLISH.md`):
+    - **23:** no leg type on a ticket without a positive graded record (≥10 bets). The record
+      is `data/market_track_record/graded/w9_w11_2026_leg_type_record_v1.csv`; update it every
+      week.
+    - **24:** think about each game like a football person first; the model checks and sizes
+      the read.
+      - **It is NOT a rule or checklist.** Every game is different.
+      - The operator corrected an attempt to turn it into four fixed questions.
+      - Do not template it.
+24. **G7 matchup fix** (commit 246d8f6). Legs are judged against the defense versus the
+    player's own position group (QB / RB / WRTE). Previously QB rushing used RB run defense.
+    Regression tests are in `tests/test_build_alt_cards_gates_v1.py`.
+25. **Problem 1: the model ignores the opponent's defense.**
+    - **Code read:**
+      - rushing only uses a light-box/heavy-box switch;
+      - `def_rush_epa` is loaded and never used;
+      - ML v2 has no opponent features.
+    - **Preregistered test** (`OPPONENT_POSITION_DEFENSE_ADJUSTMENT_RESULTS_V1.md`): only
+      **RB receptions** passed the promotion gate (b=0.1932, shrink k=4,
+      `data/research/opponent_position_defense/promoted_coefficients_v1.json`).
+    - **QB rushing,** tested on 2,100+ starts: no opponent measure, spread or total predicts it
+      beyond the QB's own norm.
+    - **OPEN, AND THE ONLY ACTIVE WORK ITEM:** integrate the RB-receptions adjustment into
+      production, with tests and a full-slate dry run, then open a PR for the operator.
+      - The operator demanded that problems be finished, not left buried.
+      - Do not open new research until this ships.
+26. **Week 12:** a full-slate Thursday paid capture is needed for the RB-under tracker and the
+    line-movement check. It uses credits, so wait for the operator's go.
+    - **Credits:** 364 left after the 2026-11-22 Sunday pull (run 45024058278). The account
+      reset to 500 after a top-up.
+
 ### V29 items (2026-11-19)
 
 ### Reverse-engineering study (`docs/research/REVERSE_ENGINEER_2026_W1_10_V1.md`)
