@@ -1,6 +1,6 @@
 season,week,capture,player,team,opponent,fav_by,line,under_price,dog,cold,cut,n_flags,injury_at_log,status,actual,result,units
-2026,11,thu 2026-11-19 ~12:45 ET run 44580190319,Ashton Jeanty,LV,DEN,-10.0,32.5,-114.0,1,1,1,3,none,OPEN,,,
-2026,11,thu 2026-11-19 ~12:45 ET run 44580190319,Derrick Henry,BAL,CAR,-3.0,67.5,-114.0,1,1,0,2,none,OPEN,,,
-2026,11,thu 2026-11-19 ~12:45 ET run 44580190319,Aaron Jones,MIN,SF,-3.0,30.5,-114.0,1,0,1,2,none,OPEN,,,
+2026,11,thu 2026-11-19 ~12:45 ET run 44580190319,Ashton Jeanty,LV,DEN,-10.0,32.5,-114.0,1,1,1,3,none,GRADED,79.0,LOSS,-1.0
+2026,11,thu 2026-11-19 ~12:45 ET run 44580190319,Derrick Henry,BAL,CAR,-3.0,67.5,-114.0,1,1,0,2,none,GRADED,94.0,LOSS,-1.0
+2026,11,thu 2026-11-19 ~12:45 ET run 44580190319,Aaron Jones,MIN,SF,-3.0,30.5,-114.0,1,0,1,2,none,GRADED,30.0,WIN,0.8771929824561403
 2026,11,thu 2026-11-19 ~12:45 ET run 44580190319,Jonathan Taylor,IND,HOU,-12.5,51.5,-113.0,1,0,1,2,none,GRADED,21.0,WIN,0.8849557522123894
-2026,11,thu 2026-11-19 ~12:45 ET run 44580190319,Cam Skattebo,NYG,JAX,-6.0,52.5,-114.0,1,0,1,2,None,OPEN,,,
+2026,11,thu 2026-11-19 ~12:45 ET run 44580190319,Cam Skattebo,NYG,JAX,-6.0,52.5,-114.0,1,0,1,2,None,GRADED,34.0,WIN,0.8771929824561403
