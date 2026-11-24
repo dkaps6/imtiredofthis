@@ -104,8 +104,13 @@
       - **Next decision:** D1 at the week-14 interim.
     - **Replay limitation:** a Full Slate replay of a completed week fails closed at
       "Ourlads role universe is empty". Logged for infrastructure.
-    - **Main is 116 commits behind this branch.** Merging to main is a separate operator
-      decision.
+    - **Merged to main 2026-11-24** (PR #716, merge commit 24c8bc2), at the operator's request.
+      - Main now carries recency V2, the RB receptions adjustment and every earlier branch fix.
+      - The PR's `replay` check stays red: its pinned week-5 artifact 11584521127 is gone
+        (404). This is pre-existing and the check is not disabled.
+      - Week-12 V2 dry run (45467603678): 68 applied, 31 withheld by the gate, 40 with fewer
+        than 3 games. It stopped at the readiness audit only because the week-12 injury report
+        publishes Wednesday.
 26. **Week 12:** a full-slate Thursday paid capture is needed for the RB-under tracker and the
     line-movement check. It uses credits, so wait for the operator's go.
     - **Credits:** 364 left after the 2026-11-22 Sunday pull (run 45024058278). The account
