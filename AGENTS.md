@@ -159,6 +159,8 @@ Promoted production concepts currently include:
 - M89/M90 football-only QB passing-yards residual synthesis;
 - frozen STACK1 RB ensemble calibration for `rush_att` and `rush_yards`;
 - `RB_P3_SYNTHESIS_V1` for **2026 Week-1 RB rushing yards only**, using the exact STACK3 Week-1 route `WEEK1_STACK_OVERRIDE`.
+- `RB_CARRY_SHARE_RECENCY_V1` (2026-11-24): an RB/FB with >= 3 current games feeds Bayes `0.15 x season-to-date + 0.85 x last-3` carry share (`scripts/player_form_v2.py`);
+- `RB_RECEPTIONS_OPPONENT_ADJ_V1` (2026-11-24): non-Week-1 RB receptions mean x `(1 + 0.1932 x D)`, D = shrunk opponent RB-receptions-allowed ratio, strictly prior (`scripts/modeling/rb_receptions_opponent_adj_v1.py`). Record: `docs/production/RB_MODEL_FIXES_PROMOTION_2026_11_24.md`.
 
 A model is not fully integrated merely because its Python module runs. Its **validated calibration/weights, feature semantics and provenance** must also survive a clean production checkout.
 

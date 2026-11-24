@@ -415,6 +415,64 @@ def _blend(prior: pd.DataFrame, current: pd.DataFrame, universe: pd.DataFrame) -
     return out
 
 
+# RB_CARRY_SHARE_RECENCY_V1, promoted 2026-11-24.
+# Evidence: RB_CARRY_SHARE_RECENCY_RESULTS_V1 (input level, a fitted on 2023-2024 only, CIs
+# exclude 0 on 2025 and 2026) and RB_CARRY_SHARE_RECENCY_END_TO_END_RESULTS_V1 (through
+# Bayes, top-5 and the 0.95 cap: expected-carry MAE gain +0.073 [+0.035, +0.112] in 2025 and
+# +0.046 [+0.013, +0.078] in 2026; lead backs improve in both). Week 11 2026 grading: the
+# largest RB misses were backs whose role had just changed (Emmett Johnson, two weeks
+# running), which a season-to-date share is slow to see.
+# For an RB/FB with >= 3 current-season games, the current-season carry share that feeds the
+# Bayesian baseline becomes 0.15 x season-to-date + 0.85 x his last 3 games with today's team.
+# Everything else (prior share, game counts, other metrics, other positions) is unchanged.
+RB_RECENCY_VERSION = "RB_CARRY_SHARE_RECENCY_V1"
+RB_RECENCY_WEIGHT = 0.85
+RB_RECENCY_MIN_GAMES = 3
+RB_RECENCY_POSITIONS = {"RB", "FB"}
+
+
+def _rb_recency_disabled() -> bool:
+    # Emergency kill switch only; production default is ON.
+    return os.getenv("RB_CARRY_SHARE_RECENCY_V1", "1").strip().lower() in {"0", "false", "off", "no"}
+
+
+def apply_rb_carry_share_recency(form: pd.DataFrame, current_logs: pd.DataFrame) -> pd.DataFrame:
+    """Blend each eligible RB's season-to-date carry share with his last-3-game share.
+
+    Strictly prior: `current_logs` must already exclude the slate week and later.
+    Last 3 games are the player's most recent games with his current (slate) team,
+    as in the validated end-to-end test.
+    """
+    out = form.copy()
+    out["rush_share_current_season"] = pd.to_numeric(out.get("rush_share_current"), errors="coerce")
+    out["rush_share_last3"] = np.nan
+    out["rb_carry_recency_applied"] = 0
+    out["rb_carry_recency_version"] = ""
+    if _rb_recency_disabled() or current_logs.empty or "player_identity_key" not in out.columns:
+        return out
+    need = {"player_identity_key", "team", "week", "rushes", "team_rushes"}
+    if not need.issubset(current_logs.columns):
+        raise RuntimeError(f"RB carry recency requires current logs with {sorted(need)}")
+    slate_team = out[["player_identity_key", "team"]].drop_duplicates("player_identity_key")
+    h = current_logs[list(need)].merge(slate_team, on=["player_identity_key", "team"], how="inner")
+    h = h.sort_values(["player_identity_key", "week"])
+    l3 = h.groupby("player_identity_key", sort=False).tail(RB_RECENCY_MIN_GAMES)
+    agg = l3.groupby("player_identity_key").agg(l3_rushes=("rushes", "sum"), l3_team=("team_rushes", "sum"), l3_games=("week", "nunique"))
+    agg["rush_share_last3"] = np.where(
+        (agg["l3_games"] >= RB_RECENCY_MIN_GAMES) & (agg["l3_team"] > 0), agg["l3_rushes"] / agg["l3_team"].where(agg["l3_team"] > 0), np.nan
+    )
+    out["rush_share_last3"] = out["player_identity_key"].map(agg["rush_share_last3"])
+    pos = out.get("position", pd.Series("", index=out.index)).astype("string").fillna("").str.upper()
+    cg = pd.to_numeric(out.get("current_games"), errors="coerce").fillna(0)
+    std = out["rush_share_current_season"]
+    l3s = pd.to_numeric(out["rush_share_last3"], errors="coerce")
+    eligible = pos.isin(RB_RECENCY_POSITIONS) & cg.ge(RB_RECENCY_MIN_GAMES) & std.notna() & l3s.notna()
+    out.loc[eligible, "rush_share_current"] = (1.0 - RB_RECENCY_WEIGHT) * std[eligible] + RB_RECENCY_WEIGHT * l3s[eligible]
+    out.loc[eligible, "rb_carry_recency_applied"] = 1
+    out.loc[eligible, "rb_carry_recency_version"] = RB_RECENCY_VERSION
+    return out
+
+
 def build(season: int, prior_season: int, week: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     frames: list[pd.DataFrame] = []
     for yr in (prior_season, season):
@@ -476,6 +534,11 @@ def build(season: int, prior_season: int, week: int) -> tuple[pd.DataFrame, pd.D
             form["position"] = form["position"].replace("", pd.NA).combine_first(form["historical_position"])
     form["position"] = form.get("position", pd.Series(pd.NA, index=form.index)).astype("string").str.upper()
     form["role"] = form.get("role", pd.Series(pd.NA, index=form.index)).astype("string").str.upper()
+    form = apply_rb_carry_share_recency(form, current_logs)
+    print(
+        f"[player_form_v2] {RB_RECENCY_VERSION} applied to "
+        f"{int(form['rb_carry_recency_applied'].sum())} RB/FB rows (a={RB_RECENCY_WEIGHT}, min games {RB_RECENCY_MIN_GAMES})"
+    )
     form["team_abbr"] = form["team"]
     form["opponent_abbr"] = form["opponent"]
     form["player_canonical"] = form["player"]

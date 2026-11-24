@@ -61,6 +61,7 @@ OPTIONAL = (
     "data/team_week_map.csv",
     "data/qb_promoted_team_context.csv",
     "data/rb_rush_synthesis_context.csv",
+    "data/rb_receptions_opponent_context.csv",
 )
 
 README = """# replay_inputs — reproduction fixtures, NOT research inputs

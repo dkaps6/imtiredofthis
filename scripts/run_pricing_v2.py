@@ -31,6 +31,7 @@ import scripts.modeling.bayesian_v2 as bayesian_v2
 from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics
 from scripts.modeling.ensemble_v2 import apply_ensemble, load_weights
 from scripts.modeling.discrete_count_alignment_v1 import align_prealigned_outcomes
+import scripts.modeling.rb_receptions_opponent_adj_v1 as rb_rec_opp
 from scripts.modeling.mc_dispersion_calibration_v1 import (
     VERSION as MC_DISPERSION_VERSION,
     apply_dispersion_calibration,
@@ -223,6 +224,16 @@ def price(season: int) -> pd.DataFrame:
                 f"players={ctx['player_clean_key'].nunique()} teams={ctx['team'].nunique()}"
             )
 
+    # RB_RECEPTIONS_OPPONENT_ADJ_V1 (promoted 2026-11-24): fail closed on a missing or
+    # mismatched context for every non-Week-1 slate that carries RB receptions rows.
+    rb_rec_mask = canonical_markets.eq("receptions") & position_family.eq("RB")
+    rb_rec_weeks = sorted(set(pd.to_numeric(df.loc[rb_rec_mask, "week"], errors="coerce").dropna().astype(int).tolist()))
+    rb_rec_opp_ctx: dict[int, dict[str, float]] = {w: rb_rec_opp.load_context(int(season), w) for w in rb_rec_weeks if w > 1}
+    rb_rec_opp_rows = 0
+    if rb_rec_opp_ctx:
+        print(f"[pricing] {rb_rec_opp.VERSION} enabled b={rb_rec_opp.B} k={rb_rec_opp.SHRINK_K} "
+              f"weeks={sorted(rb_rec_opp_ctx)} defenses={ {w: len(c) for w, c in rb_rec_opp_ctx.items()} }")
+
     sims = simulate(df)
     mc_dispersion_calibration = load_mc_dispersion_calibration(live_pricing=True)
     print(f"[pricing] mc dispersion calibration: state="
@@ -371,6 +382,16 @@ def price(season: int) -> pd.DataFrame:
                     f"team={row.get('team')} opponent={row.get('opponent')}: {exc}"
                 ) from exc
 
+        rb_rec_opp_factor, rb_rec_opp_d, rb_rec_opp_applied = rb_rec_opp.factor(
+            market, row_position, str(row.get("opponent") or "").upper().strip(), _runtime_week(row),
+            rb_rec_opp_ctx.get(_runtime_week(row), {}),
+        )
+        if rb_rec_opp_applied:
+            if not np.isfinite(target_mean):
+                raise RuntimeError(f"{rb_rec_opp.VERSION}: non-finite base mean player={row.get('player')}")
+            target_mean = float(target_mean) * rb_rec_opp_factor
+            rb_rec_opp_rows += 1
+
         # Preserve Monte Carlo's non-negative distribution shape while aligning
         # its mean to the final football projection. Keep this original binding
         # structure intact because RB-PD2 shadow capture explicitly guards that
@@ -480,6 +501,10 @@ def price(season: int) -> pd.DataFrame:
             "rb_rush_rec_conservation_v2_target_mean": float(rb_rush_rec_v2_meta["target_mean"]) if rb_rush_rec_v2_meta is not None else np.nan,
             "rb_rush_rec_conservation_v2_rush_mean": float(rb_rush_rec_v2_meta["rush_target_mean"]) if rb_rush_rec_v2_meta is not None else np.nan,
             "rb_rush_rec_conservation_v2_rec_mean": float(rb_rush_rec_v2_meta["rec_target_mean"]) if rb_rush_rec_v2_meta is not None else np.nan,
+            "rb_receptions_opp_adj_applied": int(rb_rec_opp_applied),
+            "rb_receptions_opp_adj_version": rb_rec_opp.VERSION if rb_rec_opp_applied else "",
+            "rb_receptions_opp_adj_D": rb_rec_opp_d,
+            "rb_receptions_opp_adj_factor": rb_rec_opp_factor,
             "discrete_count_alignment_applied": int(discrete_count_meta["discrete_count_alignment_applied"]),
             "discrete_count_alignment_version": discrete_count_meta["discrete_count_alignment_version"],
             "discrete_count_alignment_pre_fractional_rate": discrete_count_meta["discrete_count_alignment_pre_fractional_rate"],
@@ -514,6 +539,8 @@ def price(season: int) -> pd.DataFrame:
         raise RuntimeError("Monte Carlo pricing produced 0 rows")
     if has_qb_pass and qb_synthesis_rows == 0:
         raise RuntimeError("promoted QB synthesis applied to zero pass_yards pricing rows")
+    if rb_rec_opp_ctx and rb_rec_opp_rows == 0:
+        raise RuntimeError(f"{rb_rec_opp.VERSION} applied to zero non-Week-1 RB receptions rows")
     if has_rb_rush and 1 in rush_weeks and rb_synthesis_rows == 0:
         raise RuntimeError("promoted RB synthesis applied to zero eligible Week-1 RB/FB rush_yards pricing rows")
 

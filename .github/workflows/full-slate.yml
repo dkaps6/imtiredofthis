@@ -424,6 +424,16 @@ jobs:
           print('QB C2 football state context certified',audit)
           EOF
 
+      - name: Build RB receptions opponent context (RB_RECEPTIONS_OPPONENT_ADJ_V1)
+        # Promoted 2026-11-24 (OPPONENT_POSITION_DEFENSE_ADJUSTMENT_RESULTS_V1). Football-only,
+        # strictly prior to the slate week; pricing fails closed without it on non-Week-1 slates.
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          python scripts/build_rb_receptions_opponent_context_v1.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
+          test -f data/rb_receptions_opponent_context.csv
+
       - name: Apply certified availability-aware current-output coverage seams
         run: |
           set -euo pipefail
