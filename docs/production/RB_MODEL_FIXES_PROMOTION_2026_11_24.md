@@ -92,7 +92,15 @@ adjustment is ±7% at most, a small, validated refinement.
 
 ## Validation before merge
 
-- `compileall` and `audit_repo.py --strict`: passed.
-- `tests/test_rb_model_fixes_2026_11_24.py`: 9 tests.
-- The full `pytest` suite.
-- A Full Slate replay of the paid week-11 Sunday boundary (run 45024058278, no new credits).
+| check | result |
+|---|---|
+| `compileall` and `audit_repo.py --strict` | passed |
+| `audit_2026_production_readiness.py` (local) | READY, no findings |
+| `tests/test_rb_model_fixes_2026_11_24.py` | 12 passed (9 behaviour, 3 wiring) |
+| full `pytest` | 1,317 passed, 3 failed. **All 3 fail identically without this change**: two need git history this sandbox lacks, one is a pre-existing workflow-contract assertion on the `FETCH_LIVE_ODDS` line. |
+| **pricing loop, week-11 inputs**: `run_pricing_v2.price()` on the archived week-11 rule-stage inputs (pass_yards excluded: QB synthesis needs player logs outside the replay set) | 1,610 side-rows priced. **35 RB receptions players adjusted** (140 side-rows). **0 rows touched outside RB receptions.** Final `model_proj` = ensemble x factor, to 1.2e-5. |
+| Full Slate no-odds dry run, week 12 (run 45461996815) | PlayerForm: `RB_CARRY_SHARE_RECENCY_V1 applied to 99 RB/FB rows`. Context step: passed. The run stopped at the strict readiness audit on `injury_status_all_null`: the week-12 injury report is not published until Wednesday. Environmental, not this change. |
+| Full Slate replay of the paid week-11 boundary (run 45461066034) | **Not possible for a completed week.** It stops at `Ourlads role universe is empty` before PlayerForm, because the current-roles availability artifact is empty once every game is final. This replay limitation is noted for the infrastructure backlog. |
+
+**The paid-run exercise of the pricing seam** is the week-12 Thursday capture. The local pricing
+run above exercised the same loop.

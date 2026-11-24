@@ -119,3 +119,34 @@ def test_promoted_coefficient_matches_the_research_artifact():
     art = json.loads(Path("data/research/opponent_position_defense/promoted_coefficients_v1.json").read_text())
     assert art["coefficients"]["receptions|RB"] == pytest.approx(adj.B)
     assert art["shrink_k"] == pytest.approx(adj.SHRINK_K)
+
+
+# ---------------------------------------------------------------- wiring (the full price() loop
+# needs the whole ML/state/rules/ensemble stack; follow the repo's source-wiring pattern)
+def test_pricing_seam_is_wired_before_mean_alignment():
+    from pathlib import Path
+    text = Path("scripts/run_pricing_v2.py").read_text(encoding="utf-8")
+    assert "import scripts.modeling.rb_receptions_opponent_adj_v1 as rb_rec_opp" in text
+    assert "rb_rec_opp.load_context(int(season), w)" in text
+    seam = text.index("rb_rec_opp.factor(")
+    align = text.index("adjusted_outcomes = base_outcomes * max(0.0, target_mean / mc_proj)")
+    assert seam < align, "the adjustment must set target_mean before the draws are aligned to it"
+    for col in ("rb_receptions_opp_adj_applied", "rb_receptions_opp_adj_version",
+                "rb_receptions_opp_adj_D", "rb_receptions_opp_adj_factor"):
+        assert f'"{col}"' in text
+    assert "applied to zero non-Week-1 RB receptions rows" in text
+
+
+def test_full_slate_builds_the_context_before_odds_and_pricing():
+    from pathlib import Path
+    wf = Path(".github/workflows/full-slate.yml").read_text(encoding="utf-8")
+    step = wf.index("python scripts/build_rb_receptions_opponent_context_v1.py")
+    assert step < wf.index("Fetch and gate player props and game odds")
+    assert step < wf.index("Price from certified football-first Full Slate stack")
+    assert step > wf.index("Build PlayerForm from production-eligible current roles")
+
+
+def test_playerform_build_applies_recency():
+    from pathlib import Path
+    text = Path("scripts/player_form_v2.py").read_text(encoding="utf-8")
+    assert "form = apply_rb_carry_share_recency(form, current_logs)" in text
