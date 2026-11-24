@@ -93,25 +93,28 @@
 >       - RB rushing alt: -0.9% (n=39).
 >     - Main-line screened RB rushing unders are eligible (2026: 43 bets,
 >       +31%; 2024-25: 246 bets, +2.2%).
-> 24. **Football logic first, then ask the model.** (Nov 23, after his MNF
+> 24. **Think about each game like a football person first; the model comes
+>     second. This is NOT a rule or a checklist.** (Nov 23, after his MNF
 >     CIN @ WAS ticket went 6/6 at about +511, while the gated card missed.)
 >     "I used football logic first then asked what the model thought.
->     FOOTBALL DECISIONS ARE DIFFERENT FROM A MATH PROBLEM."
+>     FOOTBALL DECISIONS ARE DIFFERENT FROM A MATH PROBLEM." And, when it was
+>     first written down as a four-question method: "It's not a rule. Every
+>     game is different. It's fluid. So not every rule is going to fit every
+>     game."
 >
->     His read, written down as the method:
->     - **How will the defense play the offense's best weapons?** Chase and
->       Higgins would draw double coverage.
->     - **Where does the ball go instead?** Burrow's next-safest throws: the
->       tight ends, and dump-offs to the backs.
->     - **Who gets the leftovers?** The defense keys on Chase, the hottest
->       receiver, which leaves Higgins a couple of shots.
->     - **What does the other team have to do?** WAS had to keep up with a top
->       offense, so it had to throw, and Daniels spreads it around.
+>     **Do not turn this into a template, a gate or a fixed list of
+>     questions.** Each game has its own story, and what matters changes from
+>     game to game. His CIN @ WAS read is one example of that thinking, not a
+>     formula:
+>     - CIN's two star receivers would draw double coverage, so Burrow's safe
+>       throws go to the tight ends and backs;
+>     - the defense keys on Chase, which leaves Higgins some shots;
+>     - WAS had to throw to keep up, and Daniels spreads it around.
 >
->     **Then** check each leg against the model's projection. The model
->     confirms or vetoes the football read; it does not replace it. Every card
->     starts with this written read per game, before any gate or rung is
->     chosen.
+>     The next game might turn on something else entirely: a weather game, a
+>     backup QB, a coach's tendency, an injured line. The model's projection
+>     and the guardrails are there to check and size a read, never to stand in
+>     for one.
 >
 > ### Rules a session invented that are NOT his (do not reapply)
 > * one leg per game per ticket (removed Nov 9; reapplied by mistake Nov 15);
