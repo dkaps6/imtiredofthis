@@ -20,11 +20,127 @@ def text(v): return "" if v is None or pd.isna(v) else str(v).strip()
 def key(v): return player_name_key(v,strip_suffix=True)
 def norm_status(v): return " ".join(text(v).upper().replace("-"," ").split())
 
-def resolve_state(*,official_inactive,official_complete,injury_status,injury_designation,ourlads_status):
+ROSTER_MEMBER_STATUSES={"ACT"}
+
+def load_roster_membership()->dict:
+    """(team, player_clean_key) -> nflverse weekly roster status for the target week.
+
+    ROSTER MEMBERSHIP IS NOT A DEPTH-CHART QUESTION. Ourlads is a depth-chart
+    provider: its job is who is on the team and in what ORDER. Treating its
+    INACTIVE marker as a definitive game-availability verdict conflated the two
+    and produced the week-10 standoff -- Cam Skattebo, NYG RB1, practising in
+    full with no designation, ruled definitively unavailable by a depth scrape
+    that had not caught up with his return from a week-7 injury.
+
+    nflverse weekly rosters carry the real membership fact, and separate the two
+    cases a depth INACTIVE cannot: ACT (on the active roster) versus
+    DEV/RES/CUT/RET/EXE (practice squad, reserve, released, retired). Week 10
+    2026: Skattebo, Watson, Jacobs, Burks, Lloyd and Kaleb Johnson all ACT,
+    while Josh Johnson reads CUT -- which is the one genuine non-member, and the
+    case an "absent from the injury report" heuristic would have wrongly
+    promoted, since a cut player never appears on one.
+
+    Empty on provider failure, which leaves the previous depth-source behaviour.
+    """
+    try:
+        import nflreadpy as nfl
+        from scripts.runtime_context import resolve_season, resolve_week
+        season=int(resolve_season()); week=int(resolve_week())
+        w=nfl.load_rosters_weekly(seasons=[season])
+        w=w.to_pandas() if hasattr(w,"to_pandas") else pd.DataFrame(w)
+    except Exception:
+        return {}
+    if w is None or w.empty: return {}
+    w.columns=[str(c).lower() for c in w.columns]
+    if not {"week","team","status"}.issubset(w.columns): return {}
+    name=next((c for c in ("full_name","player_name","football_name") if c in w.columns),None)
+    if name is None: return {}
+    w=w[pd.to_numeric(w["week"],errors="coerce").eq(week)]
+    if w.empty: return {}
+    return {(canon_team(t),key(n)):norm_status(st)
+            for t,n,st in zip(w["team"],w[name],w["status"])}
+
+
+PRACTICING={"FULL PARTICIPATION IN PRACTICE","LIMITED PARTICIPATION IN PRACTICE"}
+
+def resolve_state(*,official_inactive,official_complete,injury_status,injury_designation,ourlads_status,practice_status="",team_report_available=False,roster_status="",espn_proxy_out=False,club_injury_status=None,club_designation=None):
     if bool(official_complete) and bool(official_inactive): return "UNAVAILABLE_OFFICIAL_INACTIVE","official_inactive","listed on complete official game-day inactive section"
-    vals={norm_status(injury_status),norm_status(injury_designation)}-{""}
-    if any(v in DEF_UNAVAILABLE or v.startswith("OUT ") for v in vals): return "UNAVAILABLE_REPORTED","weekly_injury_report","definitive reported non-participation"
-    if norm_status(ourlads_status)=="INACTIVE": return "UNAVAILABLE_DEPTH_SOURCE","ourlads_depth","Ourlads depth source marked inactive"
+    # The club's OWN filing, before the ESPN injury-log proxy overwrote it.
+    # Callers that do not separate the two pass None and get the merged values,
+    # which is the pre-existing behaviour.
+    vals={norm_status(injury_status if club_injury_status is None else club_injury_status),
+          norm_status(injury_designation if club_designation is None else club_designation)}-{""}
+    definitive=lambda vs: any(v in DEF_UNAVAILABLE or v.startswith("OUT ") for v in vs)
+    if definitive(vals): return "UNAVAILABLE_REPORTED","weekly_injury_report","definitive reported non-participation"
+    prac=norm_status(practice_status)
+    member=norm_status(roster_status)
+    if bool(espn_proxy_out):
+        # AN INJURY-LOG PROXY IS NOT THE CLUB'S FILING.
+        #
+        # Same conflation as Ourlads one layer up. ESPN's team injury endpoint
+        # is explicitly a proxy -- its own provider docstring says it does not
+        # impersonate official inactives -- and it carries any "out" entry
+        # logged within RECENT_WINDOW_DAYS (6). A player ruled out for Sunday
+        # therefore still reads OUT on Thursday, which is exactly a return from
+        # injury: Week 10 2026 had Cam Skattebo, Jaylen Wright, Rashid Shaheed,
+        # Treylon Burks, MarShawn Lloyd and Deshaun Watson all stamped
+        # designation=OUT from this proxy with the authority recorded as
+        # weekly_injury_report, while the club's nfl.com report had three of
+        # them at FULL practice participation with no designation and two of
+        # them not on the report at all. Six priced markets then named players
+        # the universe had dropped, and the slate could not price.
+        #
+        # So the proxy fills blanks, but it loses to the club's own filing and
+        # to active-roster membership.
+        # ACTIVE-ROSTER MEMBERSHIP IS NOT A GAME-AVAILABILITY FACT. ACT means a
+        # player is on the 53; he can be on the 53 and still be ruled out for
+        # Sunday. So membership refutes a MEMBERSHIP claim (Ourlads INACTIVE,
+        # which encodes IR/PUP/practice-squad) but it must not refute a
+        # GAME-AVAILABILITY claim. Only the club's own report can do that.
+        if member and member not in ROSTER_MEMBER_STATUSES:
+            return ("UNAVAILABLE_NOT_ON_ACTIVE_ROSTER","weekly_roster",
+                    f"weekly roster status {member} is not active-roster membership")
+        if prac in PRACTICING and not (vals & UNCERTAIN):
+            # The club filed this week and put him on the field at full or
+            # limited participation with no designation. That is a current,
+            # authoritative game-availability fact and the proxy's entry is
+            # stale by up to RECENT_WINDOW_DAYS.
+            return ("AVAILABLE_REPORT_OVERRIDES_PROXY","weekly_injury_report",
+                    "club report shows full/limited practice with no definitive designation; injury-status proxy is stale")
+        # No contrary club fact -- including the case where the club itself
+        # filed QUESTIONABLE/DOUBTFUL, which corroborates the proxy rather
+        # than refuting it. Fail closed.
+        return "UNAVAILABLE_REPORTED","weekly_injury_report","definitive reported non-participation"
+    if norm_status(ourlads_status)=="INACTIVE":
+        # The club's own filing outranks a third-party depth scrape.
+        #
+        # Week 10 2026: Ourlads flagged Cam Skattebo INACTIVE, which made him
+        # definitively unavailable and removed NYG's RB1 from the universe --
+        # while the official report had him at FULL participation with no
+        # designation, nflverse had him active and RB1 on that day's depth
+        # chart, and the books were pricing him. Deshaun Watson, MarShawn Lloyd
+        # and Kaleb Johnson were in the same position with no report entry at
+        # all. Ourlads lags a return from injury: Skattebo had not played since
+        # week 7, and the scrape still carried the absence.
+        #
+        # Two forms of official evidence override it, and only these two:
+        if member and member not in ROSTER_MEMBER_STATUSES:
+            # Not on the active roster at all: practice squad, reserve, released
+            # or retired. This is a genuine membership fact, not a stale scrape.
+            return ("UNAVAILABLE_NOT_ON_ACTIVE_ROSTER","weekly_roster",
+                    f"weekly roster status {member} is not active-roster membership")
+        if member in ROSTER_MEMBER_STATUSES:
+            # On the active roster, with no official inactive listing and no
+            # definitive designation. A depth scrape does not get to overrule
+            # that: Ourlads supplies depth ORDER, not availability.
+            return ("AVAILABLE_ACTIVE_ROSTER","weekly_roster",
+                    "on the active weekly roster with no definitive designation; depth-source INACTIVE does not decide availability")
+        if prac in PRACTICING:
+            return ("AVAILABLE_REPORT_OVERRIDES_DEPTH","weekly_injury_report",
+                    "official report shows full/limited practice with no definitive designation; depth-source INACTIVE is stale")
+        # No membership fact available and no practice evidence: the depth
+        # source is all there is, so it stands.
+        return "UNAVAILABLE_DEPTH_SOURCE","ourlads_depth","Ourlads depth source marked inactive"
     if any(v in UNCERTAIN for v in vals): return "UNCERTAIN","weekly_injury_report","non-definitive game-status uncertainty"
     if bool(official_complete) and official_inactive is False: return "AVAILABLE_OFFICIAL_ACTIVE","official_inactive","absent from complete official inactive section"
     if vals: return "AVAILABLE_REPORTED","weekly_injury_report","report present without definitive unavailable designation"
@@ -86,6 +202,11 @@ def build(depth:pd.DataFrame,injuries:pd.DataFrame,official:pd.DataFrame|None=No
             o.loc[proxy_mask & o.player_clean_key.ne(""),"team"],
             o.loc[proxy_mask & o.player_clean_key.ne(""),"player_clean_key"],
         ))
+        # Keep the club's filed values intact so the proxy cannot launder its
+        # OUT into "definitive reported non-participation" below.
+        d["club_injury_status"]=d["injury_status"] if "injury_status" in d.columns else ""
+        d["club_designation"]=d["designation"] if "designation" in d.columns else ""
+        d["espn_proxy_out"]=0
         if proxy_keys:
             for idx,(team,pkey) in enumerate(zip(d.team,d.player_clean_key)):
                 if (team,pkey) not in proxy_keys:
@@ -97,6 +218,7 @@ def build(depth:pd.DataFrame,injuries:pd.DataFrame,official:pd.DataFrame|None=No
                 if "designation" in d.columns:
                     d.at[d.index[idx],"designation"]="OUT"
                 d.at[d.index[idx],"injury_source"]="espn_core_injury_status_out"
+                d.at[d.index[idx],"espn_proxy_out"]=1
 
         # Only true official-inactive semantics can certify a complete game-day
         # section. Legacy files without source_semantics retain old behavior.
@@ -116,10 +238,25 @@ def build(depth:pd.DataFrame,injuries:pd.DataFrame,official:pd.DataFrame|None=No
         ]
     else:
         d["official_inactive_section_complete"]=0; d["official_inactive"]=pd.NA
+    for c,src in (("club_injury_status","injury_status"),("club_designation","designation")):
+        if c not in d.columns: d[c]=d[src] if src in d.columns else ""
+    if "espn_proxy_out" not in d.columns: d["espn_proxy_out"]=0
+    # Did the club file an injury report for this team at all? Absence from a
+    # filed report is the healthy signal; absence of a filing says nothing.
+    reported_teams=set()
+    if "injury_source" in d.columns or "practice_status" in d.columns:
+        ev=pd.Series(False,index=d.index)
+        for c in ("injury_status","designation","practice_status","injury_source"):
+            if c in d.columns:
+                ev=ev | d[c].map(lambda v: bool(text(v)))
+        reported_teams={str(t) for t in d.loc[ev,"team"].unique()}
+    d["team_report_available"]=d.team.astype(str).isin(reported_teams).astype(int)
+    membership=load_roster_membership()
+    d["roster_status"]=[membership.get((str(t),str(k)),"") for t,k in zip(d.team,d.player_clean_key)]
     states=[]
     for r in d.itertuples(index=False):
         oi=False if pd.isna(r.official_inactive) else bool(r.official_inactive)
-        states.append(resolve_state(official_inactive=oi,official_complete=bool(r.official_inactive_section_complete),injury_status=getattr(r,"injury_status",""),injury_designation=getattr(r,"designation",""),ourlads_status=r.ourlads_status))
+        states.append(resolve_state(official_inactive=oi,official_complete=bool(r.official_inactive_section_complete),injury_status=getattr(r,"injury_status",""),injury_designation=getattr(r,"designation",""),ourlads_status=r.ourlads_status,practice_status=getattr(r,"practice_status",""),team_report_available=bool(getattr(r,"team_report_available",0)),roster_status=getattr(r,"roster_status",""),espn_proxy_out=bool(getattr(r,"espn_proxy_out",0)),club_injury_status=getattr(r,"club_injury_status",None),club_designation=getattr(r,"club_designation",None)))
     d[["final_availability_state","availability_authority","availability_reason"]]=pd.DataFrame(states,index=d.index)
     d["definitive_unavailable"]=d.final_availability_state.str.startswith("UNAVAILABLE_").astype(int)
     d=rerank(d); d["eligible_for_opportunity"]=(1-d.definitive_unavailable).astype(int); d["availability_generated_at_utc"]=datetime.now(timezone.utc).isoformat()

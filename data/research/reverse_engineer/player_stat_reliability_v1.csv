@@ -1,0 +1,26 @@
+position,measure,kind,odd_vs_even_r,players
+WR,snap share,role/volume,0.8,117
+WR,target share,role/volume,0.73,117
+WR,air-yards share,role/volume,0.61,117
+WR,targets per game,role/volume,0.71,117
+WR,yards per target,efficiency,0.27,117
+WR,catch rate,efficiency,0.23,117
+WR,receiving yards per game,outcome,0.6,117
+TE,snap share,role/volume,0.94,73
+TE,target share,role/volume,0.89,73
+TE,air-yards share,role/volume,0.79,70
+TE,targets per game,role/volume,0.86,73
+TE,yards per target,efficiency,0.31,68
+TE,catch rate,efficiency,-0.13,68
+TE,receiving yards per game,outcome,0.75,73
+RB,snap share,role/volume,0.84,52
+RB,target share,role/volume,0.38,52
+RB,air-yards share,role/volume,0.37,52
+RB,targets per game,role/volume,0.39,52
+RB,yards per target,efficiency,0.14,52
+RB,catch rate,efficiency,-0.03,52
+RB,receiving yards per game,outcome,0.32,52
+RB,carry share,role/volume,0.86,52
+RB,carries per game,role/volume,0.77,52
+RB,yards per carry,efficiency,0.19,52
+RB,rushing yards per game,outcome,0.73,52

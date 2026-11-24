@@ -10,6 +10,7 @@ from typing import Dict
 
 import numpy as np
 import pandas as pd
+from scripts.utils.player_identity_v3 import player_name_key
 
 from scripts.modeling.context_bridge import load_model_contexts
 from scripts.modeling.contracts import PlayerContext
@@ -166,6 +167,29 @@ def apply_rules_to_metrics(metrics: pd.DataFrame, bayes_baseline: pd.DataFrame |
 
     _, players = load_model_contexts()
     by_player = {(p.team, _key(p.player)): p for p in players}
+    # SUFFIX CONVENTION FALLBACK -- see bayesian_v2.apply_bayesian_to_metrics.
+    #
+    # by_player keys from the context's DISPLAY name via _key, which KEEPS a
+    # suffix ("brianrobinsonjr"), while PlayerForm's player_clean_key has it
+    # STRIPPED ("brianrobinson"). The two agree on every name without a suffix,
+    # so this stayed invisible until the depth-chart union pulled suffixed
+    # players into the full-universe rules gate and it failed closed on exactly
+    # that set (2026 week 10: Minshew II, Robinson Jr., All Jr., Etienne Jr.,
+    # Fidone II, Pittman Jr.).
+    #
+    # Consulted only when the primary lookup misses, so every match that
+    # already worked is unchanged. An ambiguous stripped key (a father/son or a
+    # same-named teammate) is dropped rather than guessed at, which leaves the
+    # row unmatched and the caller's gate still firing.
+    _stripped_counts: Dict[tuple[str, str], int] = {}
+    for _p in players:
+        _stripped_counts[(_p.team, player_name_key(_p.player, strip_suffix=True))] = \
+            _stripped_counts.get((_p.team, player_name_key(_p.player, strip_suffix=True)), 0) + 1
+    by_player_stripped = {
+        (_p.team, player_name_key(_p.player, strip_suffix=True)): _p
+        for _p in players
+        if _stripped_counts[(_p.team, player_name_key(_p.player, strip_suffix=True))] == 1
+    }
     role_labels = _wr_role_labels(players)
 
     out = metrics.copy()
@@ -193,6 +217,12 @@ def apply_rules_to_metrics(metrics: pd.DataFrame, bayes_baseline: pd.DataFrame |
             raise RuntimeError("full Bayesian rule authority missing player identity")
         auth["team"] = auth["team"].astype(str).str.upper().str.strip()
         auth["_bridge_key"] = auth_source.map(_key)
+        # Same two conventions meet here. The share lookup degrades silently
+        # rather than raising, so an injured alpha with a suffix would quietly
+        # contribute no posterior target share to the redistribution.
+        if "player" in auth.columns:
+            auth["_bridge_key_stripped"] = auth["player"].map(
+                lambda v: player_name_key(v, strip_suffix=True))
         if auth.duplicated(["team", "_bridge_key"]).any():
             sample = auth.loc[
                 auth.duplicated(["team", "_bridge_key"], keep=False),
@@ -203,6 +233,9 @@ def apply_rules_to_metrics(metrics: pd.DataFrame, bayes_baseline: pd.DataFrame |
             v = _num(r.get("bayes_tgt_share"))
             if np.isfinite(v):
                 bayes_share_by_player[(str(r["team"]), str(r["_bridge_key"]))] = v
+                alt_k = r.get("_bridge_key_stripped")
+                if alt_k and str(alt_k) != str(r["_bridge_key"]):
+                    bayes_share_by_player.setdefault((str(r["team"]), str(alt_k)), v)
         if not bayes_share_by_player:
             raise RuntimeError("full Bayesian rule authority produced zero finite target-share rows")
     elif "bayes_tgt_share" in out.columns:
@@ -227,6 +260,8 @@ def apply_rules_to_metrics(metrics: pd.DataFrame, bayes_baseline: pd.DataFrame |
         team = str(row.get("team", "") or "").upper().strip()
         pkey = str(row["_bridge_key"])
         ctx = by_player.get((team, pkey))
+        if ctx is None:
+            ctx = by_player_stripped.get((team, player_name_key(pkey, strip_suffix=True)))
         if ctx is None or ctx.offense is None or ctx.defense is None:
             continue
 

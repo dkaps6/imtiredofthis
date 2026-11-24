@@ -1,0 +1,13 @@
+metric,odd_vs_even_r
+epa,0.62
+def_epa_allowed,0.24
+proe,0.59
+plays,0.22
+rushes,0.27
+dropbacks,0.28
+pr_lead8,-0.27
+pr_trail8,0.41
+margin,0.54
+ats,0.08
+pts_vs_implied,-0.01
+lead_share,0.19

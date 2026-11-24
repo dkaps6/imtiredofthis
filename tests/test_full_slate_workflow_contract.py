@@ -39,4 +39,13 @@ def test_full_slate_preserved_replay_is_no_credit_and_noncurrent():
 def test_full_slate_main_push_defaults_to_no_credit_mode():
     text = Path('.github/workflows/full-slate.yml').read_text(encoding='utf-8')
     assert 'push:\n    branches: [main]' in text
-    assert "FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds || 'false' }}" in text
+    # Since d3047ae a push may spend credits only when its head commit carries the
+    # explicit authorization tag; any other push (and any dispatch left at its
+    # default) still resolves to 'false'.
+    expected = (
+        "FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds || "
+        "(github.event_name == 'push' && contains(github.event.head_commit.message, "
+        "'[LIVE_ODDS_AUTHORIZED]') && 'true') || 'false' }}"
+    )
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip().startswith('FETCH_LIVE_ODDS: ${{')]
+    assert lines == [expected], lines

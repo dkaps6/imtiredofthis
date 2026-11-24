@@ -1,0 +1,35 @@
+ticket,tier,player,market,side,threshold,price_american,book,football_reason,state_label,price_basis
+SAFE,SAFE,Jameson Williams,rec_yards,OVER,29.5,-350,fanduel,DET WR1-2 role 87% snaps; cleared 30 in 9/9; proj 47,HEALTHY_FULL,naive_product
+SAFE,SAFE,Malik Washington,rec_yards,OVER,19.5,-250,fanduel,"MIA slot 82% snaps; 9/9, 6/6 with Douglas active; proj 31",HEALTHY_FULL,naive_product
+SAFE,SAFE,Pat Freiermuth,rec_yards,OVER,14.5,-230,fanduel,PIT TE 64% snaps; 8/9; Roman Wilson inactive; PHI soft vs TE,HEALTHY_FULL,naive_product
+MODERATE,MODERATE,Malachi Fields,rec_yards,OVER,19.5,-225,fanduel,NYG WR 78% snaps; 7/9 and last 3 all over; proj 33,HEALTHY_FULL,naive_product
+MODERATE,MODERATE,Caleb Douglas,rec_yards,OVER,29.5,-320,fanduel,MIA WR 81% snaps; 5/6 healthy games; proj 49,HEALTHY_FULL,naive_product
+MODERATE,MODERATE,Brock Purdy,rush_yards,OVER,9.5,-300,fanduel,SF QB 97% snaps; 7/9 at 10+; proj 15.6,HEALTHY_FULL,naive_product
+MODERATE,MODERATE,Rashee Rice,rec_yards,OVER,29.5,-390,fanduel,KC WR 59% snaps; 5/6; proj 49,HEALTHY_FULL,naive_product
+MODERATE,MODERATE,Ashton Jeanty,rec_yards,OVER,14.5,-400,fanduel,LV RB 66% snaps; 9/10 with or without Bowers; proj 23; Denver dry,HEALTHY_FULL,naive_product
+MEDIUM,MEDIUM,Chuba Hubbard,rec_yards,OVER,9.5,-290,fanduel,CAR RB 80% snaps; 7/9; proj 20,HEALTHY_FULL,naive_product
+MEDIUM,MEDIUM,Jaylen Warren,rec_yards,OVER,9.5,-360,fanduel,PIT RB 68% snaps; 8/9; proj 18,HEALTHY_FULL,naive_product
+MEDIUM,MEDIUM,Ashton Jeanty,rec_yards,OVER,14.5,-400,fanduel,LV RB 66% snaps; 9/10 with or without Bowers; proj 23,HEALTHY_FULL,naive_product
+MEDIUM,MEDIUM,Antonio Williams,rec_yards,OVER,19.5,-360,fanduel,WAS WR 65% snaps; 8/9; McLaurin inactive; proj 31.5,HEALTHY_FULL,naive_product
+MEDIUM,MEDIUM,Bhayshul Tuten,rush_yards,UNDER,70.5,-113,fanduel,screened rushing under (6/6 screens); proj 48; line fell 4 since Thu,HEALTHY_FULL,naive_product
+HIGH,HIGH,Jahmyr Gibbs,rush_yards,UNDER,84.5,-113,fanduel,screened rushing under (6/6 screens); proj 59; line fell 6 since Thu,HEALTHY_FULL,naive_product
+HIGH,HIGH,J.J. McCarthy,rush_yards,UNDER,16.5,-113,fanduel,screened rushing under (6/6 screens); proj 11,HEALTHY_FULL,naive_product
+HIGH,HIGH,Chase Brown,rush_yards,OVER,29.5,-350,fanduel,CIN RB 70% snaps; 8/9 at 30+; CIN -5.5; proj 52,HEALTHY_FULL,naive_product
+HIGH,HIGH,Stefon Diggs,rec_yards,OVER,29.5,-320,fanduel,WAS WR 61% snaps; 8/8; McLaurin inactive; proj 47,HEALTHY_FULL,naive_product
+HIGH,HIGH,Pat Bryant,rec_yards,OVER,14.5,-310,fanduel,DEN WR 60% snaps; 4/5 (5 games); proj 22,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Bhayshul Tuten,rush_yards,UNDER,70.5,-113,fanduel,screened rushing under (6/6 screens); proj 48; line fell 4 since Thu,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Jahmyr Gibbs,rush_yards,UNDER,84.5,-113,fanduel,screened rushing under (6/6 screens); proj 59; line fell 6 since Thu,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,J.J. McCarthy,rush_yards,UNDER,16.5,-113,fanduel,screened rushing under (6/6 screens); proj 11,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Jameson Williams,rec_yards,OVER,29.5,-350,fanduel,DET WR1-2 role 87% snaps; cleared 30 in 9/9; proj 47,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Malik Washington,rec_yards,OVER,19.5,-250,fanduel,"MIA slot 82% snaps; 9/9, 6/6 with Douglas active; proj 31",HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Pat Freiermuth,rec_yards,OVER,14.5,-230,fanduel,PIT TE 64% snaps; 8/9; Roman Wilson inactive; PHI soft vs TE,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Malachi Fields,rec_yards,OVER,19.5,-225,fanduel,NYG WR 78% snaps; 7/9 and last 3 all over; proj 33,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Stefon Diggs,rec_yards,OVER,29.5,-320,fanduel,WAS WR 61% snaps; 8/8; McLaurin inactive; proj 47,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Brock Purdy,rush_yards,OVER,9.5,-300,fanduel,SF QB 97% snaps; 7/9 at 10+; proj 15.6,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Jaylen Warren,rec_yards,OVER,9.5,-360,fanduel,PIT RB 68% snaps; 8/9; proj 18,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Chase Brown,rush_yards,OVER,29.5,-350,fanduel,CIN RB 70% snaps; 8/9 at 30+; CIN -5.5; proj 52,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Caleb Douglas,rec_yards,OVER,29.5,-320,fanduel,MIA WR 81% snaps; 5/6 healthy games; proj 49,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Rashee Rice,rec_yards,OVER,29.5,-390,fanduel,KC WR 59% snaps; 5/6; proj 49,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Pat Bryant,rec_yards,OVER,14.5,-310,fanduel,DEN WR 60% snaps; 4/5; proj 22,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Chuba Hubbard,rec_yards,OVER,9.5,-290,fanduel,CAR RB 80% snaps; 7/9; proj 20,HEALTHY_FULL,naive_product
+LOTTERY,LOTTERY,Antonio Williams,rec_yards,OVER,19.5,-360,fanduel,WAS WR 65% snaps; 8/9; proj 31.5,HEALTHY_FULL,naive_product

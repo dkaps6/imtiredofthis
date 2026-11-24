@@ -159,6 +159,8 @@ Promoted production concepts currently include:
 - M89/M90 football-only QB passing-yards residual synthesis;
 - frozen STACK1 RB ensemble calibration for `rush_att` and `rush_yards`;
 - `RB_P3_SYNTHESIS_V1` for **2026 Week-1 RB rushing yards only**, using the exact STACK3 Week-1 route `WEEK1_STACK_OVERRIDE`.
+- `RB_CARRY_SHARE_RECENCY_V2` (2026-11-24, replaced V1 the same day): an RB/FB with >= 3 current games feeds Bayes `0.15 x season-to-date + 0.85 x last-3 snap games` carry share, only when all three window games are state-labelled `HEALTHY_FULL` from snap counts and the injury report; otherwise season-to-date is kept (`scripts/modeling/rb_carry_recency_v2.py`, shared by `scripts/player_form_v2.py` and its validation);
+- `RB_RECEPTIONS_OPPONENT_ADJ_V1` (2026-11-24): non-Week-1 RB receptions mean x `(1 + 0.1932 x D)`, D = shrunk opponent RB-receptions-allowed ratio, strictly prior (`scripts/modeling/rb_receptions_opponent_adj_v1.py`). Record: `docs/production/RB_MODEL_FIXES_PROMOTION_2026_11_24.md`.
 
 A model is not fully integrated merely because its Python module runs. Its **validated calibration/weights, feature semantics and provenance** must also survive a clean production checkout.
 
@@ -367,3 +369,29 @@ Current order:
 7. resume RB, WR and TE model refinement on the corrected production foundation.
 
 Do not spend production-overhaul time rewriting historical/backtest code simply because it contains 2025. Historical years are expected there. Focus on code that is executed by, imported into, or supplies artifacts to Full Slate.
+
+---
+
+## 10) Weekly ticket cards — the operator's rules, not a session's
+
+**Before building any card, read `docs/research/YOUR_RULES_PLAIN_ENGLISH.md`
+(the CURRENT RULES block), `docs/research/MODEL_BACKED_ALT_LINE_PARLAY_CONSTRUCTION_V1.md`
+and `docs/research/PRISM_ALT_CUSHION_STRATEGY_2026_W9.md`.** Those are the
+operator's rules with his words and dates. Do not rebuild them from a chat
+summary.
+
+On 2026-11-15 a session working from a compressed summary rebuilt the Sunday card
+five times and reapplied rules the operator had removed (one leg per game) or never
+gave ("model probability must beat the price" as a hard filter, tier minimums of
++500/+1200/+3000). Never do that again: if a rule is not in the CURRENT RULES
+block, it is not a rule.
+
+Tooling that implements checks: `scripts/research/build_slate_alt_legs_v1.py`
+(candidate rungs), `scripts/research/build_alt_cards_v1.py` (the nine gates),
+`scripts/research/audit_card_legs_v1.py` (per-leg checklist incl. team change and
+teammate context), `scripts/research/validate_ticket_card_v1.py` (ticket rules).
+`scripts/research/build_weekly_alt_card_v1.py` was written on 2026-11-15 and
+still enforces one leg per game; do not use its ticket assembly until that is
+removed. Same-day news (inactives, trades, IR) is applied as a quarantine and the
+check is re-run; never hand-pick a replacement and never relax a gate to fill a
+ticket.

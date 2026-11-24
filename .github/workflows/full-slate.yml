@@ -93,6 +93,11 @@ env:
   # Operational activation boundary: Week 2 can never become a prospective observation.
   RB_PD2_PROSPECTIVE_START_UTC: "2026-09-22T12:00:00Z"
   ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+  # Union the Ourlads availability-certified roles with the current nflverse
+  # depth chart. Week 10 2026 was missing NYG RB1 Cam Skattebo, who practised in
+  # full and started, and CLE QB1 Deshaun Watson. Off by default everywhere else
+  # so it can never mask the certified-team-scope gate in a test or a script.
+  SLATE_DEPTH_CHART_UNION: "1"
 
 jobs:
   full_slate:
@@ -304,11 +309,20 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          # Tee the WHOLE step. player_form.csv can be written and the step still
+          # fail in enrichment, the artifact checks or the strict-prior
+          # validator -- run 43316394856 did exactly that, and the diagnostic's
+          # "is player_form.csv present" guard then reported PlayerForm was not
+          # the failure while it was.
+          mkdir -p data/_debug
+          set -o pipefail
           WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
-          python scripts/run_player_form_current_roles_v1.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
-          python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
-          for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv data/player_identity_validation.csv; do test -s "$f"; done
-          python scripts/operations/validate_playerform_runtime_strict_prior_v1.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
+          {
+            python scripts/run_player_form_current_roles_v1.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+            python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+            for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv data/player_identity_validation.csv; do test -s "$f" || { echo "FATAL: missing/empty $f"; exit 1; }; done
+            python scripts/operations/validate_playerform_runtime_strict_prior_v1.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
+          } 2>&1 | tee data/_debug/playerform_step.log
 
       - name: Gate football providers and materialize canonical Team Context v3
         env:
@@ -409,6 +423,16 @@ jobs:
           audit=validate_qb_c2_state_context(x,season=int(__import__('os').environ['SEASON']),week=int(resolve_week()))
           print('QB C2 football state context certified',audit)
           EOF
+
+      - name: Build RB receptions opponent context (RB_RECEPTIONS_OPPONENT_ADJ_V1)
+        # Promoted 2026-11-24 (OPPONENT_POSITION_DEFENSE_ADJUSTMENT_RESULTS_V1). Football-only,
+        # strictly prior to the slate week; pricing fails closed without it on non-Week-1 slates.
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          python scripts/build_rb_receptions_opponent_context_v1.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
+          test -f data/rb_receptions_opponent_context.csv
 
       - name: Apply certified availability-aware current-output coverage seams
         run: |
@@ -971,7 +995,10 @@ jobs:
           else
             echo "  (no eligible roles artifact; parity cannot be evaluated)"
           fi
-          echo "--- PlayerForm re-run traceback (the step log tail is the only readable surface)"
+          echo "--- PlayerForm step log (teed; present player_form.csv does NOT mean it passed)"
+          if [ -s data/_debug/playerform_step.log ]; then
+            tail -30 data/_debug/playerform_step.log
+          fi
           if [ ! -s data/player_form.csv ]; then
             export ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
             python scripts/run_player_form_current_roles_v1.py \
@@ -1006,10 +1033,14 @@ jobs:
             if [ -s data/live_odds_status.json ]; then tail -c 2000 data/live_odds_status.json
             else echo "  (status absent: the gate raised before writing it)"; fi
           fi
-          echo "--- teed step logs, newest last -- LAST so the log tail always has them"
-          for f in data/_debug/*.log; do
+          echo "--- teed step logs, NEWEST LAST so the failing step is inside the tail"
+          # ls -tr, not a glob: a glob is alphabetical, which put the long
+          # playerform_step.log after materialize_live_props.log and pushed the
+          # actually-failing step's output out of the window the API serves.
+          # The newest log is always the step that just failed.
+          for f in $(ls -tr data/_debug/*.log 2>/dev/null); do
             [ -s "$f" ] || continue
             echo "  ===== ${f} ====="
-            tail -22 "$f"
+            tail -18 "$f"
           done
           echo "=============================================================="

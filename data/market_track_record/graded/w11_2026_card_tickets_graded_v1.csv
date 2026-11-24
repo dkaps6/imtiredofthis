@@ -1,0 +1,10 @@
+card,ticket,legs,hit,void,result,naive_payout_x,missed
+SUNDAY_CARD_V2,SAFE,3,3,0,WON,2.58,
+SUNDAY_CARD_V2,MODERATE,5,4,0,LOST,3.97,Brock Purdy rush_yards 9.5+ (0)
+SUNDAY_CARD_V2,MEDIUM,5,3,0,LOST,5.17,Chuba Hubbard rec_yards 9.5+ (0); Jaylen Warren rec_yards 9.5+ (1)
+SUNDAY_CARD_V2,HIGH,5,2,0,LOST,7.93,Jahmyr Gibbs rush_yards U84.5 (98); J.J. McCarthy rush_yards U16.5 (33); Chase Brown rush_yards 29.5+ (6)
+SUNDAY_CARD_V2,LOTTERY,16,10,0,LOST,269.2,Jahmyr Gibbs rush_yards U84.5 (98); J.J. McCarthy rush_yards U16.5 (33); Brock Purdy rush_yards 9.5+ (0); Jaylen Warren rec_yards 9.5+ (1); Chase Brown rush_yards 29.5+ (6); Chuba Hubbard rec_yards 9.5+ (0)
+SUNDAY_REMOVED,REMOVED_IN_FINAL_CHECK,2,1,0,LOST,2.41,Chuba Hubbard rush_yards U75.5 (120)
+SNF_SUGGESTED,SNF_SCRIPT,3,1,0,LOST,2.3,Kaelon Black rush_yards 14.5+ (8); Brock Purdy rush_yards 9.5+ (0)
+MNF_CHALLENGE,user,6,6,0,WON,6.11,
+MNF_CHALLENGE,claude,4,2,0,LOST,2.45,Ja'Marr Chase rec_yards 59.5+ (31)

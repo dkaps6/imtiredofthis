@@ -1,0 +1,210 @@
+<title>Week 11 Sunday Card</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: a stack of five bet tickets, one column, each leg a two-line row (who / what / price, then game + why). */
+:root {
+  --bg: #eef1ed;
+  --surface: #ffffff;
+  --ink: #18211d;
+  --muted: #5b6862;
+  --line: #d6ddd7;
+  --chip: #e6ebe7;
+  --safe: #2b7a4b;
+  --moderate: #1d6a86;
+  --medium: #a86b12;
+  --high: #c0430f;
+  --lottery: #8a2b78;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101513; --surface: #182019; --ink: #e7ece8; --muted: #9ba8a1; --line: #29332d; --chip: #212a24;
+    --safe: #5cc387; --moderate: #52b6d6; --medium: #e3aa4c; --high: #f2804c; --lottery: #da7fca;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101513; --surface: #182019; --ink: #e7ece8; --muted: #9ba8a1; --line: #29332d; --chip: #212a24;
+  --safe: #5cc387; --moderate: #52b6d6; --medium: #e3aa4c; --high: #f2804c; --lottery: #da7fca;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+header { display: flex; flex-direction: column; gap: 10px; }
+.eyebrow { font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(38px, 7vw, 58px); line-height: 0.95; margin: 0; letter-spacing: 0.01em; text-wrap: balance; text-transform: uppercase; }
+.meta { color: var(--muted); font-size: 14px; max-width: 65ch; margin: 0; }
+.status { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; background: var(--chip); color: var(--ink); }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--medium); }
+
+.changes { font-size: 13.5px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--medium); border-radius: 6px; padding: 10px 14px; max-width: 70ch; }
+.board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.board a { text-decoration: none; color: inherit; background: var(--surface); border: 1px solid var(--line); border-top: 4px solid var(--tier); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.board a:focus-visible { outline: 2px solid var(--tier); outline-offset: 2px; }
+.board .t { font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tier); }
+.board .o { font-family: var(--font-num); font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
+.board .l { font-size: 12px; color: var(--muted); }
+
+.ticket { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; scroll-margin-top: 16px; }
+.ticket > .head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 16px; padding: 16px 18px 14px; border-bottom: 1px dashed var(--line); position: relative; }
+.ticket > .head::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--tier); }
+.tier { font-family: var(--font-display); font-weight: 800; font-size: 30px; line-height: 1; letter-spacing: 0.06em; text-transform: uppercase; color: var(--tier); }
+.sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.odds { text-align: right; }
+.odds .big { font-family: var(--font-num); font-weight: 700; font-size: 28px; font-variant-numeric: tabular-nums; line-height: 1; }
+.odds .stake { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+
+ol.legs { list-style: none; margin: 0; padding: 0; }
+.leg { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) auto; gap: 4px 16px; padding: 12px 18px; border-bottom: 1px solid var(--line); align-items: baseline; }
+.leg:last-child { border-bottom: 0; }
+.who { min-width: 0; }
+.name { font-weight: 700; font-size: 15.5px; }
+.tags { display: inline-flex; gap: 6px; margin-left: 6px; vertical-align: 1px; }
+.tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: var(--chip); color: var(--ink); white-space: nowrap; }
+.tag.pos { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+.bet { min-width: 0; font-weight: 600; }
+.bet .kind { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-left: 6px; white-space: nowrap; }
+.bet.under { color: var(--tier); }
+.price { font-family: var(--font-num); font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.why { grid-column: 1 / -1; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.why .game { color: var(--ink); font-weight: 600; }
+.mon { color: var(--high); font-weight: 700; }
+
+.notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; font-size: 13.5px; color: var(--muted); }
+.note h2 { font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); margin: 0 0 6px; }
+.note p { margin: 0; }
+
+@media (max-width: 760px) {
+  .board { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .notes { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .leg { grid-template-columns: minmax(0, 1fr) auto; }
+  .who { grid-column: 1 / -1; }
+  .ticket > .head, .leg { padding-left: 16px; padding-right: 14px; }
+  .tier { font-size: 26px; }
+  .odds .big { font-size: 24px; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">NFL · Week 11 · Sun Nov 22 &amp; Mon Nov 23, 2026</div>
+    <h1>Week 11 Sunday Card</h1>
+    <p class="meta">Five tickets built from FanDuel prices captured Sunday 7:50 AM ET. Every leg is a player on the field with a stable role, and either an alt line well under his projection or a rushing under that passed all six football screens.</p>
+    <div class="status">Updated 11:40 AM ET after a final check · confirm each player is active in the FanDuel app before placing</div>
+    <div class="changes"><strong>Changed in the final check:</strong> Rome Odunze removed (rain and 15–22 mph wind forecast at Soldier Field during the 1:00 PM game). Chuba Hubbard's rushing under removed (Jonathon Brooks reported out, so Hubbard's carries go up). Replacements come from the same qualified pool.</div>
+  </header>
+
+  <nav class="board" aria-label="Tickets">
+    <a href="#safe" style="--tier: var(--safe)"><span class="t">Safe</span><span class="o">+158</span><span class="l">3 legs</span></a>
+    <a href="#moderate" style="--tier: var(--moderate)"><span class="t">Moderate</span><span class="o">+297</span><span class="l">5 legs</span></a>
+    <a href="#medium" style="--tier: var(--medium)"><span class="t">Medium</span><span class="o">+417</span><span class="l">5 legs</span></a>
+    <a href="#high" style="--tier: var(--high)"><span class="t">High</span><span class="o">+693</span><span class="l">5 legs</span></a>
+    <a href="#lottery" style="--tier: var(--lottery)"><span class="t">Lottery</span><span class="o">+26,820</span><span class="l">16 legs</span></a>
+  </nav>
+
+  <!-- SAFE -->
+  <section class="ticket" id="safe" style="--tier: var(--safe)">
+    <div class="head">
+      <div><div class="tier">Safe</div><div class="sub">3 legs · all Sunday 1:00 PM</div></div>
+      <div class="odds"><div class="big">+158</div><div class="stake">$40 returns $103</div></div>
+    </div>
+    <ol class="legs">
+      <li class="leg"><div class="who"><span class="name">Jameson Williams</span><span class="tags"><span class="tag pos">WR</span><span class="tag">DET</span></span></div><div class="bet">30+ receiving yds<span class="kind">Alt</span></div><div class="price">-350</div><div class="why"><span class="game">TB @ DET · Sun 1:00 PM</span><span>87% of snaps · cleared 30 in 9 of 9 · projects 47</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Malik Washington</span><span class="tags"><span class="tag pos">WR</span><span class="tag">MIA</span></span></div><div class="bet">20+ receiving yds<span class="kind">Alt</span></div><div class="price">-250</div><div class="why"><span class="game">MIA @ BUF · Sun 1:00 PM</span><span>82% of snaps · cleared 20 in 9 of 9, 6 of 6 with Douglas playing · projects 31</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Pat Freiermuth</span><span class="tags"><span class="tag pos">TE</span><span class="tag">PIT</span></span></div><div class="bet">15+ receiving yds<span class="kind">Alt</span></div><div class="price">-230</div><div class="why"><span class="game">PIT @ PHI · Sun 1:00 PM</span><span>64% of snaps · cleared 15 in 8 of 9 · projects 24</span></div></li>
+    </ol>
+  </section>
+
+  <!-- MODERATE -->
+  <section class="ticket" id="moderate" style="--tier: var(--moderate)">
+    <div class="head">
+      <div><div class="tier">Moderate</div><div class="sub">5 legs · Sunday 1:00 PM to 8:20 PM</div></div>
+      <div class="odds"><div class="big">+297</div><div class="stake">$25 returns $99</div></div>
+    </div>
+    <ol class="legs">
+      <li class="leg"><div class="who"><span class="name">Caleb Douglas</span><span class="tags"><span class="tag pos">WR</span><span class="tag">MIA</span></span></div><div class="bet">30+ receiving yds<span class="kind">Alt</span></div><div class="price">-320</div><div class="why"><span class="game">MIA @ BUF · Sun 1:00 PM</span><span>81% of snaps · cleared 30 in 5 of 6 healthy games · projects 49</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Rashee Rice</span><span class="tags"><span class="tag pos">WR</span><span class="tag">KC</span></span></div><div class="bet">30+ receiving yds<span class="kind">Alt</span></div><div class="price">-390</div><div class="why"><span class="game">ARI @ KC · Sun 1:00 PM</span><span>cleared 30 in 5 of 6 · projects 49</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Malachi Fields</span><span class="tags"><span class="tag pos">WR</span><span class="tag">NYG</span></span></div><div class="bet">20+ receiving yds<span class="kind">Alt</span></div><div class="price">-225</div><div class="why"><span class="game">JAX @ NYG · Sun 4:25 PM</span><span>78% of snaps · cleared 20 in 7 of 9, including his last 3 · projects 33</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Ashton Jeanty</span><span class="tags"><span class="tag pos">RB</span><span class="tag">LV</span></span></div><div class="bet">15+ receiving yds<span class="kind">Alt</span></div><div class="price">-400</div><div class="why"><span class="game">LV @ DEN · Sun 4:25 PM</span><span>66% of snaps · cleared 15 receiving in 9 of 10 · projects 23 · Brock Bowers out · dry in Denver</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Brock Purdy</span><span class="tags"><span class="tag pos">QB</span><span class="tag">SF</span></span></div><div class="bet">10+ rushing yds<span class="kind">Alt</span></div><div class="price">-300</div><div class="why"><span class="game">MIN @ SF · Sun 8:20 PM</span><span>cleared 10 rushing in 7 of 9 · projects 15.6</span></div></li>
+    </ol>
+  </section>
+
+  <!-- MEDIUM -->
+  <section class="ticket" id="medium" style="--tier: var(--medium)">
+    <div class="head">
+      <div><div class="tier">Medium</div><div class="sub">5 legs · settles Monday night</div></div>
+      <div class="odds"><div class="big">+417</div><div class="stake">$20 returns $103</div></div>
+    </div>
+    <ol class="legs">
+      <li class="leg"><div class="who"><span class="name">Chuba Hubbard</span><span class="tags"><span class="tag pos">RB</span><span class="tag">CAR</span></span></div><div class="bet">10+ receiving yds<span class="kind">Alt</span></div><div class="price">-290</div><div class="why"><span class="game">BAL @ CAR · Sun 1:00 PM</span><span>80% of snaps · cleared 10 receiving in 7 of 9 · projects 20</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Jaylen Warren</span><span class="tags"><span class="tag pos">RB</span><span class="tag">PIT</span></span></div><div class="bet">10+ receiving yds<span class="kind">Alt</span></div><div class="price">-360</div><div class="why"><span class="game">PIT @ PHI · Sun 1:00 PM</span><span>68% of snaps · cleared 10 receiving in 8 of 9 · projects 18</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Bhayshul Tuten</span><span class="tags"><span class="tag pos">RB</span><span class="tag">JAX</span></span></div><div class="bet under">Under 70.5 rushing yds<span class="kind">Main line</span></div><div class="price">-113</div><div class="why"><span class="game">JAX @ NYG · Sun 4:25 PM</span><span>passes all six football screens · projects 48 · line down 4 since Thursday</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Ashton Jeanty</span><span class="tags"><span class="tag pos">RB</span><span class="tag">LV</span></span></div><div class="bet">15+ receiving yds<span class="kind">Alt</span></div><div class="price">-400</div><div class="why"><span class="game">LV @ DEN · Sun 4:25 PM</span><span>cleared 15 receiving in 9 of 10 · projects 23 · Brock Bowers out, so more targets come his way</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Antonio Williams</span><span class="tags"><span class="tag pos">WR</span><span class="tag">WAS</span></span></div><div class="bet">20+ receiving yds<span class="kind">Alt</span></div><div class="price">-360</div><div class="why"><span class="game mon">CIN @ WAS · Mon 8:15 PM</span><span>65% of snaps · cleared 20 in 8 of 9 · projects 31.5</span></div></li>
+    </ol>
+  </section>
+
+  <!-- HIGH -->
+  <section class="ticket" id="high" style="--tier: var(--high)">
+    <div class="head">
+      <div><div class="tier">High</div><div class="sub">5 legs · settles Monday night</div></div>
+      <div class="odds"><div class="big">+693</div><div class="stake">$10 returns $79</div></div>
+    </div>
+    <ol class="legs">
+      <li class="leg"><div class="who"><span class="name">Jahmyr Gibbs</span><span class="tags"><span class="tag pos">RB</span><span class="tag">DET</span></span></div><div class="bet under">Under 84.5 rushing yds<span class="kind">Main line</span></div><div class="price">-113</div><div class="why"><span class="game">TB @ DET · Sun 1:00 PM</span><span>passes all six screens · Tampa allows the fewest RB rushing yards · projects 59 · line down 6 since Thursday</span></div></li>
+      <li class="leg"><div class="who"><span class="name">J.J. McCarthy</span><span class="tags"><span class="tag pos">QB</span><span class="tag">NYG</span></span></div><div class="bet under">Under 16.5 rushing yds<span class="kind">Main line</span></div><div class="price">-113</div><div class="why"><span class="game">JAX @ NYG · Sun 4:25 PM</span><span>passes all six screens · projects 11</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Pat Bryant</span><span class="tags"><span class="tag pos">WR</span><span class="tag">DEN</span></span></div><div class="bet">15+ receiving yds<span class="kind">Alt</span></div><div class="price">-310</div><div class="why"><span class="game">LV @ DEN · Sun 4:25 PM</span><span>60% of snaps · cleared 15 in 4 of 5 · projects 22</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Chase Brown</span><span class="tags"><span class="tag pos">RB</span><span class="tag">CIN</span></span></div><div class="bet">30+ rushing yds<span class="kind">Alt</span></div><div class="price">-350</div><div class="why"><span class="game mon">CIN @ WAS · Mon 8:15 PM</span><span>70% of snaps · cleared 30 rushing in 8 of 9 · projects 52</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Stefon Diggs</span><span class="tags"><span class="tag pos">WR</span><span class="tag">WAS</span></span></div><div class="bet">30+ receiving yds<span class="kind">Alt</span></div><div class="price">-320</div><div class="why"><span class="game mon">CIN @ WAS · Mon 8:15 PM</span><span>61% of snaps · cleared 30 in 8 of 8 · projects 47</span></div></li>
+    </ol>
+  </section>
+
+  <!-- LOTTERY -->
+  <section class="ticket" id="lottery" style="--tier: var(--lottery)">
+    <div class="head">
+      <div><div class="tier">Lottery</div><div class="sub">16 legs · settles Monday night</div></div>
+      <div class="odds"><div class="big">+26,820</div><div class="stake">$5 returns $1,346</div></div>
+    </div>
+    <ol class="legs">
+      <li class="leg"><div class="who"><span class="name">Jahmyr Gibbs</span><span class="tags"><span class="tag pos">RB</span><span class="tag">DET</span></span></div><div class="bet under">Under 84.5 rushing yds<span class="kind">Main line</span></div><div class="price">-113</div><div class="why"><span class="game">TB @ DET · Sun 1:00 PM</span><span>passes all six screens · projects 59</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Jameson Williams</span><span class="tags"><span class="tag pos">WR</span><span class="tag">DET</span></span></div><div class="bet">30+ receiving yds<span class="kind">Alt</span></div><div class="price">-350</div><div class="why"><span class="game">TB @ DET · Sun 1:00 PM</span><span>cleared 30 in 9 of 9 · projects 47</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Chuba Hubbard</span><span class="tags"><span class="tag pos">RB</span><span class="tag">CAR</span></span></div><div class="bet">10+ receiving yds<span class="kind">Alt</span></div><div class="price">-290</div><div class="why"><span class="game">BAL @ CAR · Sun 1:00 PM</span><span>cleared 10 receiving in 7 of 9 · projects 20 · more touches with Brooks out</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Malik Washington</span><span class="tags"><span class="tag pos">WR</span><span class="tag">MIA</span></span></div><div class="bet">20+ receiving yds<span class="kind">Alt</span></div><div class="price">-250</div><div class="why"><span class="game">MIA @ BUF · Sun 1:00 PM</span><span>cleared 20 in 9 of 9 · projects 31</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Caleb Douglas</span><span class="tags"><span class="tag pos">WR</span><span class="tag">MIA</span></span></div><div class="bet">30+ receiving yds<span class="kind">Alt</span></div><div class="price">-320</div><div class="why"><span class="game">MIA @ BUF · Sun 1:00 PM</span><span>cleared 30 in 5 of 6 healthy games · projects 49</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Pat Freiermuth</span><span class="tags"><span class="tag pos">TE</span><span class="tag">PIT</span></span></div><div class="bet">15+ receiving yds<span class="kind">Alt</span></div><div class="price">-230</div><div class="why"><span class="game">PIT @ PHI · Sun 1:00 PM</span><span>cleared 15 in 8 of 9 · projects 24</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Jaylen Warren</span><span class="tags"><span class="tag pos">RB</span><span class="tag">PIT</span></span></div><div class="bet">10+ receiving yds<span class="kind">Alt</span></div><div class="price">-360</div><div class="why"><span class="game">PIT @ PHI · Sun 1:00 PM</span><span>cleared 10 receiving in 8 of 9 · projects 18</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Rashee Rice</span><span class="tags"><span class="tag pos">WR</span><span class="tag">KC</span></span></div><div class="bet">30+ receiving yds<span class="kind">Alt</span></div><div class="price">-390</div><div class="why"><span class="game">ARI @ KC · Sun 1:00 PM</span><span>cleared 30 in 5 of 6 · projects 49</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Bhayshul Tuten</span><span class="tags"><span class="tag pos">RB</span><span class="tag">JAX</span></span></div><div class="bet under">Under 70.5 rushing yds<span class="kind">Main line</span></div><div class="price">-113</div><div class="why"><span class="game">JAX @ NYG · Sun 4:25 PM</span><span>passes all six screens · projects 48</span></div></li>
+      <li class="leg"><div class="who"><span class="name">J.J. McCarthy</span><span class="tags"><span class="tag pos">QB</span><span class="tag">NYG</span></span></div><div class="bet under">Under 16.5 rushing yds<span class="kind">Main line</span></div><div class="price">-113</div><div class="why"><span class="game">JAX @ NYG · Sun 4:25 PM</span><span>passes all six screens · projects 11</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Malachi Fields</span><span class="tags"><span class="tag pos">WR</span><span class="tag">NYG</span></span></div><div class="bet">20+ receiving yds<span class="kind">Alt</span></div><div class="price">-225</div><div class="why"><span class="game">JAX @ NYG · Sun 4:25 PM</span><span>cleared 20 in his last 3 · projects 33</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Pat Bryant</span><span class="tags"><span class="tag pos">WR</span><span class="tag">DEN</span></span></div><div class="bet">15+ receiving yds<span class="kind">Alt</span></div><div class="price">-310</div><div class="why"><span class="game">LV @ DEN · Sun 4:25 PM</span><span>cleared 15 in 4 of 5 · projects 22</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Brock Purdy</span><span class="tags"><span class="tag pos">QB</span><span class="tag">SF</span></span></div><div class="bet">10+ rushing yds<span class="kind">Alt</span></div><div class="price">-300</div><div class="why"><span class="game">MIN @ SF · Sun 8:20 PM</span><span>cleared 10 rushing in 7 of 9 · projects 15.6</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Chase Brown</span><span class="tags"><span class="tag pos">RB</span><span class="tag">CIN</span></span></div><div class="bet">30+ rushing yds<span class="kind">Alt</span></div><div class="price">-350</div><div class="why"><span class="game mon">CIN @ WAS · Mon 8:15 PM</span><span>cleared 30 rushing in 8 of 9 · projects 52</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Stefon Diggs</span><span class="tags"><span class="tag pos">WR</span><span class="tag">WAS</span></span></div><div class="bet">30+ receiving yds<span class="kind">Alt</span></div><div class="price">-320</div><div class="why"><span class="game mon">CIN @ WAS · Mon 8:15 PM</span><span>cleared 30 in 8 of 8 · projects 47</span></div></li>
+      <li class="leg"><div class="who"><span class="name">Antonio Williams</span><span class="tags"><span class="tag pos">WR</span><span class="tag">WAS</span></span></div><div class="bet">20+ receiving yds<span class="kind">Alt</span></div><div class="price">-360</div><div class="why"><span class="game mon">CIN @ WAS · Mon 8:15 PM</span><span>cleared 20 in 8 of 9 · projects 31.5</span></div></li>
+    </ol>
+  </section>
+
+  <section class="notes" aria-label="How to read this card">
+    <div class="note"><h2>How a leg gets on</h2><p>Alt legs pass nine gates: on the field 30%+ of snaps, a real role, the rung well under his projection, his own record at that rung, matchup, injury status and price. They also pass a check for teammates coming back or going out. Rushing unders pass six football screens: on the field, played the last two games, a stable role, a sensible gap to the line, a game script that fits, and a matchup that fits.</p></div>
+    <div class="note"><h2>About the odds</h2><p>Each ticket's odds are its legs' FanDuel prices multiplied together. FanDuel's own parlay quote is the real price, and legs from the same game can price differently. Stakes shown follow a $100 split ($40 / $25 / $20 / $10 / $5).</p></div>
+    <div class="note"><h2>Monday night</h2><p>Antonio Williams, Chase Brown and Stefon Diggs play CIN @ WAS on Monday. Medium, High and Lottery stay open until that game ends, and its inactives come out after these tickets are placed.</p></div>
+    <div class="note"><h2>What it is and isn't</h2><p>Every leg is likely on its own, and a missed leg is variance, not a guess. The alt-line method won in week 9 and lost in week 10. Rushing unders held up on this season and on 2024-25, at about +2% on the older seasons. Bet sizes should stay small.</p></div>
+  </section>
+</div>

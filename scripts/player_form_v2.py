@@ -17,10 +17,12 @@ import argparse
 from pathlib import Path
 from typing import Iterable
 
+import os
 import numpy as np
 import pandas as pd
 
 from scripts._opponent_map import canon_team
+import scripts.modeling.rb_carry_recency_v2 as rb_recency
 from scripts.runtime_context import resolve_prior_season, resolve_season, resolve_slate_date, resolve_week
 from scripts.utils.canonical_names import canonicalize_player_name_safe
 from scripts.utils.player_identity_v3 import (
@@ -348,7 +350,7 @@ def _blend(prior: pd.DataFrame, current: pd.DataFrame, universe: pd.DataFrame) -
         raise RuntimeError("PlayerForm universe must be resolved to player_identity_key before blending")
 
     p = (
-        prior[[join_key, "games", *metric_cols]].copy()
+        prior[[join_key, "games", *metric_cols, *(["historical_team"] if "historical_team" in prior.columns else [])]].copy()
         if not prior.empty
         else pd.DataFrame(columns=[join_key, "games", *metric_cols])
     )
@@ -357,7 +359,7 @@ def _blend(prior: pd.DataFrame, current: pd.DataFrame, universe: pd.DataFrame) -
         if not current.empty
         else pd.DataFrame(columns=[join_key, "games", *metric_cols])
     )
-    p = p.rename(columns={"games": "prior_games", **{m: f"{m}_prior" for m in metric_cols}})
+    p = p.rename(columns={"games": "prior_games", "historical_team": "prior_team", **{m: f"{m}_prior" for m in metric_cols}})
     c = c.rename(columns={"games": "current_games", **{m: f"{m}_current" for m in metric_cols}})
     out = universe.merge(p, on=join_key, how="left", validate="many_to_one").merge(
         c, on=join_key, how="left", validate="many_to_one"
@@ -366,7 +368,37 @@ def _blend(prior: pd.DataFrame, current: pd.DataFrame, universe: pd.DataFrame) -
     out["current_games"] = pd.to_numeric(out.get("current_games"), errors="coerce").fillna(0)
     # Four games of prior-season equivalent pseudo-sample gives meaningful Week 1
     # priors while allowing current evidence to take over quickly.
-    w_cur = out["current_games"] / (out["current_games"] + 4.0)
+    prior_k = pd.Series(4.0, index=out.index)
+    team_changed = pd.Series(False, index=out.index)
+    if "prior_team" in out.columns:
+        pt = out["prior_team"].astype("string").fillna("").map(lambda v: canon_team(v) if v else "")
+        ct = out["team"].astype("string").fillna("")
+        team_changed = (pt != "") & (ct != "") & (pt != ct)
+    # CANDIDATE, OFF BY DEFAULT: PLAYERFORM_TEAM_CHANGE_PRIOR_K.
+    #
+    # The fixed 4-game pseudo-sample is right for a player who stayed put and
+    # wrong for one who moved: last season's usage was earned in a different
+    # offense, with different teammates, quarterback and scheme, and the
+    # architecture doc says history must not be "a reason to ignore
+    # current-season/live role evidence". Walk-forward test on 2024-2025
+    # (4,072 WR/TE/RB player-games, 21.2% of them after a team change),
+    # error predicting that week's target share in points:
+    #
+    #                    k=0.5   k=1    k=2    k=4 (prod)   k=8   prior only
+    #   team-changers    6.172  6.177  6.212     6.301    6.472     7.458
+    #   same team        6.031  5.999  5.977     5.978    6.028     6.528
+    #   changers, prior >=8 pts from current:
+    #                    5.608  5.574  5.628     5.884    6.418    10.141
+    #
+    # Movers improve at k~1; stayers are best at k=2-4, so only movers change.
+    # This is a target-share test, not an end-to-end projection test, which is
+    # why it ships behind a flag until the second is run.
+    _flag = os.getenv("PLAYERFORM_TEAM_CHANGE_PRIOR_K", "").strip()
+    if _flag:
+        prior_k = prior_k.mask(team_changed, float(_flag))
+    out["prior_team_changed"] = team_changed.astype(int)
+    out["prior_k_applied"] = prior_k
+    w_cur = out["current_games"] / (out["current_games"] + prior_k)
     for m in metric_cols:
         pv = pd.to_numeric(out.get(f"{m}_prior"), errors="coerce")
         cv = pd.to_numeric(out.get(f"{m}_current"), errors="coerce")
@@ -382,6 +414,93 @@ def _blend(prior: pd.DataFrame, current: pd.DataFrame, universe: pd.DataFrame) -
     out["rz_rush_share"] = np.nan
     out["rz_carry_share"] = np.nan
     return out
+
+
+# RB_CARRY_SHARE_RECENCY_V1, promoted 2026-11-24.
+# Evidence: RB_CARRY_SHARE_RECENCY_RESULTS_V1 (input level, a fitted on 2023-2024 only, CIs
+# exclude 0 on 2025 and 2026) and RB_CARRY_SHARE_RECENCY_END_TO_END_RESULTS_V1 (through
+# Bayes, top-5 and the 0.95 cap: expected-carry MAE gain +0.073 [+0.035, +0.112] in 2025 and
+# +0.046 [+0.013, +0.078] in 2026; lead backs improve in both). Week 11 2026 grading: the
+# largest RB misses were backs whose role had just changed (Emmett Johnson, two weeks
+# running), which a season-to-date share is slow to see.
+# RB_CARRY_SHARE_RECENCY_V2 (scripts/modeling/rb_carry_recency_v2.py) replaced V1 on
+# 2026-11-24 after the PR #716 review: the last-3 window counts every snap game, each window
+# game is state-labelled (AGENTS.md anomaly gate), and only RB/FB rows change.
+RB_RECENCY_VERSION = rb_recency.VERSION
+
+
+def _rb_recency_disabled() -> bool:
+    # Emergency kill switch only; production default is ON.
+    return os.getenv("RB_CARRY_SHARE_RECENCY", "1").strip().lower() in {"0", "false", "off", "no"}
+
+
+def build_rb_recency_windows(snaps: pd.DataFrame, players: pd.DataFrame, injuries: pd.DataFrame,
+                             logs_all: pd.DataFrame, current_logs: pd.DataFrame, form: pd.DataFrame,
+                             week: int) -> tuple[pd.DataFrame | None, str]:
+    """Each slate RB's last-3 snap-game window, state-labelled, from already-loaded sources.
+
+    A team whose completed games are not all in the snap source is marked
+    SNAP_SOURCE_INCOMPLETE, so its RBs keep their season-to-date share.
+    """
+    need = {"pfr_player_id", "team", "week", "offense_snaps", "offense_pct"}
+    if snaps is None or snaps.empty or not need.issubset(snaps.columns):
+        return None, "SNAPS_EMPTY_OR_SCHEMA"
+    if players is None or not {"gsis_id", "pfr_id"}.issubset(players.columns):
+        return None, "PLAYERS_SCHEMA"
+    if injuries is None or not {"gsis_id", "week", "report_status", "practice_status"}.issubset(injuries.columns):
+        return None, "INJURIES_SCHEMA"
+    if "game_type" in snaps.columns:
+        snaps = snaps.loc[snaps["game_type"].astype(str).eq("REG")]
+    ids = logs_all[["player_id", "player_identity_key"]].astype(str)
+    ids = ids.loc[ids["player_id"].ne("") & ids["player_id"].ne("nan")].drop_duplicates("player_id")
+    gsis_to_key = ids.set_index("player_id")["player_identity_key"]
+    pl = players[["gsis_id", "pfr_id"]].dropna().drop_duplicates("pfr_id")
+    pfr_to_key = pl.assign(key=pl["gsis_id"].astype(str).map(gsis_to_key)).dropna(subset=["key"]).set_index("pfr_id")["key"].to_dict()
+    logs = current_logs.rename(columns={"player_identity_key": "key"})
+    games = rb_recency.snap_games(snaps, pfr_to_key, logs, int(week))
+    inj = injuries.assign(key=injuries["gsis_id"].astype(str).map(gsis_to_key)).dropna(subset=["key"])
+    inj = inj.loc[pd.to_numeric(inj["week"], errors="coerce") <= int(week)]
+    labeled = rb_recency.label_games(games, logs[["team", "week"]].drop_duplicates(), inj)
+    slate = form[["player_identity_key", "team"]].rename(columns={"player_identity_key": "key"})
+    windows = rb_recency.last3(labeled, slate)
+
+    log_tw = set(zip(logs["team"].astype(str), pd.to_numeric(logs["week"], errors="coerce").astype(int)))
+    snap_tw = set(zip(snaps["team"].astype(str).map(canon_team), pd.to_numeric(snaps["week"], errors="coerce").fillna(-1).astype(int)))
+    missing = sorted(log_tw - snap_tw)
+    if missing:
+        teams = {t for t, _ in missing}
+        keys = slate.loc[slate["team"].astype(str).isin(teams), "key"].unique()
+        windows = windows.reindex(windows.index.union(pd.Index(keys)))
+        windows.loc[keys, "rush_share_last3"] = np.nan
+        windows.loc[keys, "window_clean"] = False
+        for t in teams:
+            wks = ",".join(str(w) for tt, w in missing if tt == t)
+            tk = slate.loc[slate["team"].astype(str).eq(t), "key"].unique()
+            windows.loc[tk, "window_states"] = f"{rb_recency.SOURCE_INCOMPLETE}:w{wks}"
+        print(f"[player_form_v2] {RB_RECENCY_VERSION}: snap source missing team-weeks {missing}; those RBs keep season-to-date")
+    return windows, ""
+
+
+def rb_recency_windows(season: int, week: int, logs_all: pd.DataFrame, current_logs: pd.DataFrame,
+                       form: pd.DataFrame) -> tuple[pd.DataFrame | None, str]:
+    """Load snap counts and the injury report (nflverse) and build the windows.
+
+    Optional enrichment: a provider failure leaves recency off for every RB, labelled
+    SOURCE_UNAVAILABLE in rb_carry_recency_status. Never a silent fallback.
+    """
+    if _rb_recency_disabled():
+        return None, "KILL_SWITCH"
+    if current_logs.empty:
+        return None, "NO_CURRENT_LOGS"
+    try:
+        import nflreadpy as nflv
+        snaps = _to_pandas(nflv.load_snap_counts(seasons=[int(season)]))
+        players = _to_pandas(nflv.load_players())
+        injuries = _to_pandas(nflv.load_injuries(seasons=[int(season)]))
+    except Exception as exc:
+        print(f"[player_form_v2] {RB_RECENCY_VERSION}: snap/injury source unavailable: {exc}")
+        return None, f"nflreadpy:{type(exc).__name__}"
+    return build_rb_recency_windows(snaps, players, injuries, logs_all, current_logs, form, week)
 
 
 def build(season: int, prior_season: int, week: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -445,6 +564,13 @@ def build(season: int, prior_season: int, week: int) -> tuple[pd.DataFrame, pd.D
             form["position"] = form["position"].replace("", pd.NA).combine_first(form["historical_position"])
     form["position"] = form.get("position", pd.Series(pd.NA, index=form.index)).astype("string").str.upper()
     form["role"] = form.get("role", pd.Series(pd.NA, index=form.index)).astype("string").str.upper()
+    rb_windows, rb_reason = rb_recency_windows(season, week, all_logs, current_logs, form)
+    form = rb_recency.apply(form, rb_windows, unavailable_reason=rb_reason)
+    rb_status = form.loc[form["rb_carry_recency_status"].ne("NOT_RB"), "rb_carry_recency_status"].value_counts().to_dict()
+    print(
+        f"[player_form_v2] {RB_RECENCY_VERSION} applied to {int(form['rb_carry_recency_applied'].sum())} RB/FB rows "
+        f"(a={rb_recency.WEIGHT}, min games {rb_recency.MIN_GAMES}); RB/FB status {rb_status}"
+    )
     form["team_abbr"] = form["team"]
     form["opponent_abbr"] = form["opponent"]
     form["player_canonical"] = form["player"]

@@ -1,0 +1,57 @@
+week,target,model,mae
+4,rushes,production constant 0.57,5.221210937500002
+4,rushes,team season average,4.239583333333334
+4,rushes,team average + spread + total,4.957284207026975
+4,rushes,+ opponent allowed,4.7205339898642364
+4,dropbacks,production constant 0.57,8.790703125
+4,dropbacks,team season average,7.958333333333333
+4,dropbacks,team average + spread + total,8.537945460483828
+4,dropbacks,+ opponent allowed,8.540128383211744
+5,rushes,production constant 0.57,5.160406250000002
+5,rushes,team season average,5.508333333333334
+5,rushes,team average + spread + total,5.141743321078874
+5,rushes,+ opponent allowed,4.970126977969244
+5,dropbacks,production constant 0.57,6.60519791666667
+5,dropbacks,team season average,8.366666666666667
+5,dropbacks,team average + spread + total,6.650829123430813
+5,dropbacks,+ opponent allowed,7.007215520850265
+6,rushes,production constant 0.57,6.232151898734179
+6,rushes,team season average,5.65
+6,rushes,team average + spread + total,5.090342553538156
+6,rushes,+ opponent allowed,5.281707890012194
+6,dropbacks,production constant 0.57,8.46728752260398
+6,dropbacks,team season average,8.321428571428571
+6,dropbacks,team average + spread + total,7.4347889482113185
+6,dropbacks,+ opponent allowed,7.42778218486924
+7,rushes,production constant 0.57,6.7694470046082955
+7,rushes,team season average,7.260714285714285
+7,rushes,team average + spread + total,6.613431958210675
+7,rushes,+ opponent allowed,6.540793734501415
+7,dropbacks,production constant 0.57,5.8629723502304145
+7,dropbacks,team season average,7.644047619047618
+7,dropbacks,team average + spread + total,7.381854046291382
+7,dropbacks,+ opponent allowed,7.3104040089417435
+8,rushes,production constant 0.57,6.372680240320428
+8,rushes,team season average,6.3010204081632635
+8,rushes,team average + spread + total,6.043769263157506
+8,rushes,+ opponent allowed,6.080874304269818
+8,dropbacks,production constant 0.57,8.513024032042724
+8,dropbacks,team season average,9.034013605442178
+8,dropbacks,team average + spread + total,8.688507481527525
+8,dropbacks,+ opponent allowed,8.696445431604575
+9,rushes,production constant 0.57,5.842231404958679
+9,rushes,team season average,5.7940476190476184
+9,rushes,team average + spread + total,5.378250096380166
+9,rushes,+ opponent allowed,5.4399216595323745
+9,dropbacks,production constant 0.57,5.425330578512399
+9,dropbacks,team season average,4.7821428571428575
+9,dropbacks,team average + spread + total,5.382212455105722
+9,dropbacks,+ opponent allowed,5.387014162863693
+10,rushes,production constant 0.57,6.566846113445381
+10,rushes,team season average,4.932539682539683
+10,rushes,team average + spread + total,5.3147047528180655
+10,rushes,+ opponent allowed,5.219533117074315
+10,dropbacks,production constant 0.57,7.22577993697479
+10,dropbacks,team season average,7.421130952380953
+10,dropbacks,team average + spread + total,6.37905362054535
+10,dropbacks,+ opponent allowed,6.380168577506197

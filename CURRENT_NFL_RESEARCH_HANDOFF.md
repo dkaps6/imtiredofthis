@@ -1,6 +1,305 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
-## TOP CHECKPOINT — 2026-11-10 — V27 — **WEEK 9 CLOSED AND FULLY GRADED: THE TABLE'S PROFITABILITY CLAIM IS WITHDRAWN, THE NINE-GATE BUILDER IS THE ONLY THING THAT WORKED, AND IT CANNOT SERVE A LOTTERY TIER**
+## TOP CHECKPOINT — 2026-11-20 — V30 — **NO PREGAME FILTER PICKS OUT WINNING MODEL BETS ON 2024-25 LINES; THE PRICE ALREADY PREDICTS HIT RATE; THE RB-UNDER RULE AND THE PASSING-YARDS EDGE BOTH FAILED OUT OF SAMPLE**
+
+**Repo:** dkaps6/imtiredofthis. **Branch:** `claude/nice-cori-4qkwqs`.
+- V29 is archived verbatim at `docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V29_PRE_V30_2026-11-20.md`.
+  Its items 1-15 are kept below, still current except where V30 says otherwise.
+- V28 is at `docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V28_PRE_V29_2026-11-19.md`. Its §0
+  mandatory reading before any card still binds.
+
+### V30, added 2026-11-20 (read first)
+
+**Start with `docs/research/WHAT_WE_KNOW_2026_W11.md`:** the one-page settled summary, §1-9.
+
+16. **Team and player identity, and how FanDuel builds lines**
+    (`TEAM_PLAYER_IDENTITY_2026_V1.md`).
+    - Teams' efficiency, pass lean and quality repeat; volume and beating the spread do not.
+    - Player shares repeat.
+    - **A FanDuel line ≈ the season average shaded 5-16%,** with about 0.04 weight on the last
+      3 games.
+    - Player-level misses vs the line **reverse** between halves.
+17. **Alt ladders** (`ALT_LADDER_GENERIC_SHAPE_EXPLORATORY_V1.md`): rung prices are about 95%
+    explained by market + rung/main ratio, i.e. generic. Exploratory only.
+18. **RB-under rule and role-change rule on 2024-25 lines**
+    (`ROLE_CHANGE_AND_RB_UNDER_HISTORICAL_RESULTS_V1.md`): **both FAIL.**
+    - RB-under: 2024 60.2%, 2025 47.7%.
+    - Blind overs lose 7-12% in every market in both seasons.
+    - The weekly tracker (`RB_UNDER_TRACKER.md`) continues as a record only, with **no
+      demonstrated edge**. Week 11 picks are logged.
+    - Scheduled check-ins: Sun 11-22 (inactives) and Tue 11-24 (grade week 11).
+19. **Passing-yards edge, weeks 9-10:** 49.1%, -7.2% (n=112), after the 2026-11-04 retraction.
+    Dead.
+20. **Selective pick identification** (`SELECTIVE_PICK_IDENTIFICATION_RESULTS_V1.md`),
+    preregistered, fit on one season and scored on the other: **all six filters FAIL.**
+    - Filters tried: model unders, big edges, winning cells, price, the model's record on the
+      player, and a logistic classifier.
+    - The classifier hit 58.5% and lost 1.4%: it picked -150 bets.
+    - **Hit rate tracks the price-implied rate in every band.**
+    - The model's direction is real but small: an under the model calls OVER loses 7.9%, vs
+      -2.3% when it agrees.
+    - **Data defect:** the full-stack/base benchmark `game_id` is the prior season's game.
+      Team, opponent, line and actual are correct. Do not cluster or join on it.
+21. **What is left that the model cannot do by itself**, not yet tested:
+    - **line shopping:** the better of the FanDuel and DraftKings numbers on the same player;
+      the 2026 boards carry both books;
+    - **timing:** news the line has not absorbed yet.
+    - Each needs its own preregistration. Check the prior work first:
+      `VEGAS_CONFIRMATION_LIKELIHOOD_V1_PLAN.md` mentions cross-book prices.
+
+### V30 additions, 2026-11-22 to 11-24 (week 11 closed)
+
+22. **Week 11 is fully graded** (`WK11_2026_BACKTEST_V1.md`).
+    - **Sunday card v2:** SAFE +158 won 3/3. MODERATE, MEDIUM, HIGH and LOTTERY lost.
+    - **The three legs the fixed G7 would have removed all missed:** Purdy 10+ rush (0),
+      Hubbard 10+ rec (0), Warren 10+ rec (1).
+    - **The operator's MNF ticket won 6/6** (about +511). The card's entry lost.
+    - **Screened rushing unders went 1-3** in their first forward week.
+    - **Line movement:** the model's Thursday picks at Thursday prices made +0.4%; at Sunday
+      prices -1.2%. Thursday lines that later moved toward the model hit 58.9% (n=158).
+    - **Only week 11 can be checked.** Week 10's Thursday board was TNF-only.
+23. **Operator rules added** (`YOUR_RULES_PLAIN_ENGLISH.md`):
+    - **23:** no leg type on a ticket without a positive graded record (≥10 bets). The record
+      is `data/market_track_record/graded/w9_w11_2026_leg_type_record_v1.csv`; update it every
+      week.
+    - **24:** think about each game like a football person first; the model checks and sizes
+      the read.
+      - **It is NOT a rule or checklist.** Every game is different.
+      - The operator corrected an attempt to turn it into four fixed questions.
+      - Do not template it.
+24. **G7 matchup fix** (commit 246d8f6). Legs are judged against the defense versus the
+    player's own position group (QB / RB / WRTE). Previously QB rushing used RB run defense.
+    Regression tests are in `tests/test_build_alt_cards_gates_v1.py`.
+25. **SHIPPED 2026-11-24 into the model** (`docs/production/RB_MODEL_FIXES_PROMOTION_2026_11_24.md`,
+    commits c88c49f and 716ddae on `claude/nice-cori-4qkwqs`; every 2026 paid Full Slate run has
+    been dispatched from this branch):
+    - **`RB_CARRY_SHARE_RECENCY_V2`** (PlayerForm, `scripts/modeling/rb_carry_recency_v2.py`):
+      RB/FB with 3+ games feeds Bayes 0.15 x season-to-date + 0.85 x last-3 snap games, only
+      when all three window games are state-labelled `HEALTHY_FULL` (anomaly gate). Otherwise
+      season-to-date is kept.
+      - **V1 was replaced the same day.** The PR #716 review found:
+        - V1's test changed every position;
+        - production's window skipped zero-touch games;
+        - there was no anomaly gate.
+      - Preregistered retest (`RB_CARRY_SHARE_RECENCY_END_TO_END_RESULTS_V2.md`) PASSED:
+        - 2025: +0.046 [+0.022, +0.070];
+        - 2026: +0.040 [+0.020, +0.060];
+        - lead backs better in both.
+      - The gate withholds 12-17% of RB rows.
+      - Production and the test share one module.
+    - **`RB_RECEPTIONS_OPPONENT_ADJ_V1`** (pricing): RB receptions mean x (1 + 0.1932 x D),
+      with a new context step in Full Slate.
+    - **Validation:**
+      - 17 tests;
+      - repo and readiness audits;
+      - the real pricing loop on week-11 inputs (35 RB players adjusted, nothing else touched);
+      - week-12 no-odds dry run (V1) passed PlayerForm and the context step; a local real-data
+        week-12 run of V2 applied 72 RBs, withheld 33 (Barkley, Montgomery, Hall, Emmett
+        Johnson among them) and left 41 with fewer than 3 games.
+    - **Both are small.** The week-11 forward checks were flat.
+    - **NOT fixed:** the Emmett Johnson class of miss.
+      - Cause: Bayes gives zero-history backups the group-mean share. Before week 11, Carter
+        (0 games) had 0.32 and Ott (1 game) 0.26, above Johnson's 0.23.
+      - The fix is the allocative depth-chart prior (D1), in its frozen prospective test.
+      - **Next decision:** D1 at the week-14 interim.
+    - **Replay limitation:** a Full Slate replay of a completed week fails closed at
+      "Ourlads role universe is empty". Logged for infrastructure.
+    - **Main is 116 commits behind this branch.** Merging to main is a separate operator
+      decision.
+26. **Week 12:** a full-slate Thursday paid capture is needed for the RB-under tracker and the
+    line-movement check. It uses credits, so wait for the operator's go.
+    - **Credits:** 364 left after the 2026-11-22 Sunday pull (run 45024058278). The account
+      reset to 500 after a top-up.
+
+### V29 items (2026-11-19)
+
+### Reverse-engineering study (`docs/research/REVERSE_ENGINEER_2026_W1_10_V1.md`)
+Script `scripts/research/reverse_engineer_season_v1.py`; rows `data/research/reverse_engineer/`.
+Boards weeks 1, 2, 6-10 (3-5 lost).
+1. **PRISM's picked side:** no market/side positive in both weeks 6-10 and the out-of-sample
+   weeks 1-2. Consistent only in losing on RB/WR OVER calls (RB rush OVER -14.9% / -21.6%).
+   Week 6-10 "winners" (QB rush UNDER +20%, model/line 0.8-0.9 +4.5%) failed out of sample.
+2. **Game plans:** rush attempts track the final margin (r 0.54; won by 15+ = 30.8 rushes,
+   lost by 15+ = 20.2) far more than the spread (r 0.14; fav 7+ 27.1 vs dog 7+ 24.2).
+   Offense neutral PROE is stable (odd/even weeks r 0.54); **what a defense allows is not
+   (r 0.00)**, so team-vs-defense-type game plans are not measurable.
+3. **Production game script:** constant pass share 0.57 for all teams. Team average + spread
+   + total cuts team rush-attempt MAE 6.02 -> 5.51 walk-forward, better in 7/7 weeks;
+   dropbacks not improvable. A production candidate, needs its own promotion test.
+4. **Market pattern (every FanDuel offer, model ignored):** RB rushing UNDER when the team is
+   an underdog by 3+: **61.4% hit, +15.5%, 6 of 7 weeks above breakeven, DraftKings
+   61.3%**. Median actual 30 vs line 39.9. After removing partial/role-cut games: 59.3%,
+   +11.6%, game-clustered CI [-6%, +28%]. **Lines under 60: 63.7%, +19.9% (n=91); 60+ lines
+   (stars): 48%, no edge.** Alt RB rush OVER rungs on underdogs weeks 9-10: -30.4%.
+5. **Not a ticket rule.** Presented to the operator as a proposal on 2026-11-19; only he can
+   add it to the CURRENT RULES block.
+6. **Part 2, player production (same doc §5-9):** role/volume repeats (snap 0.82-0.93,
+   target share 0.80-0.89, carry share 0.90), efficiency does not (YPT 0.25-0.31, catch rate
+   ~0, YPC 0.21). Best weight on the last 3 games over 2024-2026: **RB carries 0.70 (stable
+   0.75/0.65/0.50)**, receivers ~0.2. **RB rushing UNDER with 2+ flags** (underdog 3+, YPC
+   < 95% league, volume projection > 1.2x line; `rb_rush_situation_flags_v1.py`): 83 bets,
+   66.3%, +24.6%, 6/7 weeks; out-of-sample weeks 1-2 62.5%; ex-injury-exits 60.6%, CI
+   [-8.9%, +35.7%]; lines < 30 do not work (51%). Week 11 candidates (line >= 30): Taylor,
+   Skattebo, Jeanty, Aaron Jones.
+7. **Validity audit (same doc §10).** The part-1 team-volume claim was **invalid** (fitted vs
+   unfit comparator, the flaw PR #558's review caught). Re-tested
+   (`team_volume_market_increment_v2.py`): spread/total add nothing (confirms #558); the
+   team's own fitted tendency beats the constant 0.57 split by 9-13% on rush attempts. A
+   name-join defect (snap counts to stats) was fixed with pfr→gsis IDs; conclusions held.
+8. **RB carry-share recency, preregistered and PASSED** (`RB_CARRY_SHARE_RECENCY_RESULTS_V1.md`):
+   PlayerForm has no recent-games component; adding last-3 at a=0.85 (fit 2023-24) improves
+   next-game carry share on 2025 (+0.0043 [+0.0016,+0.0070]) and 2026 (+0.0055
+   [+0.0022,+0.0088]). Candidate only. **Caveat:** that test scored PlayerForm's blended share, which
+   the simulator does not consume (Bayes rebuilds from the prior/current split).
+9. **End-to-end recency test, preregistered and PASSED**
+   (`RB_CARRY_SHARE_RECENCY_END_TO_END_RESULTS_V1.md`): offline reproduction of Bayes →
+   top-5 → 0.95 cap (it reproduces the known -3.5 carries/team mass deficit). Expected RB
+   carries MAE gain +0.073 [+0.035,+0.112] (2025), +0.046 [+0.013,+0.078] (2026); lead backs
+   improve. **Small** (1-2% of MAE).
+10. **Corrections (same evening).**
+    * Role-shrinkage V2 **was run**: `PRISM_ROLE_STATE_FRONTIER_RESULTS_V2.md`, 8 of 9 gates,
+      K6 on its own G7 threshold.
+    * The coupled fixes **were tested**: `PRISM_PLAYER_EVIDENCE_SHRINKAGE_RESULTS_V1.md`.
+      Evidence-precision weighting is closed negative. The allocative prior is a strong
+      candidate never given its own preregistration, and its universe/K was outcome-known.
+11. **Allocative prior, pregame universe, production chain:** two preregistered runs.
+    * **RB-only** (`RB_ALLOCATIVE_PRIOR_PREGAME_RESULTS_V1.md`): RB carry MAE -14 to -16%,
+      **K3 fired** (team RB mass worse; carries moved to an over-allocated QB block).
+    * **All blocks** (`ALLOCATIVE_PRIOR_ALL_BLOCKS_PREGAME_RESULTS_V1.md`): RB carry MAE
+      3.256→2.761 (2025, +0.495 [+0.419,+0.573]) and 3.457→2.854 (2026, +0.603
+      [+0.460,+0.748]); lead-back bias +3.7→+1.75; QB mass fixed (K4 clear). **K3 fired
+      again, smaller** (team RB mass worse by 0.14/0.21 carries). The remaining loss is the
+      0.95 cap/residual and non-playing backs. **Not passed; nothing promoted.**
+    * **Operator reopened** the closed "residual/top-five normalization" family
+      (2026-11-19, "Yes you should reopen it"). The closure's premise ("not missing team
+      mass") was falsified by the mass-budget study.
+12. **Allocative prior + team budget 1.0 (D1)**
+    (`ALLOCATIVE_PRIOR_PLUS_BUDGET_NORMALIZATION_RESULTS_V1.md`): RB carries MAE -19%
+    (2025, +0.623 [+0.519,+0.725]) and -21% (2026, +0.736 [+0.558,+0.908]); team RB mass
+    bias +1.8→+0.2 / +2.1→+0.5; lead-back bias +3.7→+0.7; committee backs improve. The
+    budget-only control harms committee backs and QBs. **K4 fired narrowly** (2025 team QB
+    mass worse by 0.024, CI crosses 0; the gate had no noise tolerance). Not passed.
+    **Prospective test frozen before week 11 kickoff**
+    (`ALLOCATIVE_PRIOR_BUDGET_PROSPECTIVE_PREREGISTRATION_V1.md`): weeks 11-18, frozen
+    tables/code hashes, NI margins 0.25 carries; interim after week 14 (no decision), final
+    after week 18. QB over-projection (~1 carry/team) decomposed: it is mass on QBs who do not
+    play (QB1 carries accurate under D1); the prior-weight fix is closed by
+    `PRISM_PRIOR_ANCHORING_RESULTS_V1.md`, so no QB study is opened.
+13. **D1 → rushing yards vs FanDuel** (`D1_RUSH_YARDS_VS_MARKET_RESULTS_V1.md`): primary null
+    (+0.18 yds, CI [-1.10,+1.50], n=221). D1 fixes the level (bias +10.6→+2.5) but its median
+    residual is -4.1. **When D1 is above the line, the actual went over only 38%**: a second,
+    independent sighting of the "book already cut him" RB-under pattern. Never decide sides
+    by mean vs line; RB rushing is right-skewed.
+14. **Receiving: allocative target prior + budget (TD1)** (`TARGET_ALLOCATIVE_PRIOR_BUDGET_RESULTS_V1.md`):
+    WR+TE target MAE -7/-8% (2025 +0.106 [+0.083,+0.130]; 2026 +0.129 [+0.087,+0.168]); WR1
+    under-projection removed (T3 lands it at ~0). The allocative prior is the whole gain. PASS as
+    written, but NI-2 (team mass) was uninformative by construction; block mass shows **WRs still
+    short ~1.5-2 targets/team-game and TEs over**, likely the rules layer's TE x1.265 / RB x1.20
+    target multipliers (measured on wk 8/9/11 replay inputs). Prospective test frozen before
+    week 11 (`TARGET_ALLOCATIVE_PRIOR_BUDGET_PROSPECTIVE_PREREGISTRATION_V1.md`). The multiplier question
+    is already settled: D2 (delete multipliers) was withdrawn in `PRISM_JOINT_D1_D2_D3_RESULTS_V1.md`
+    because it worsens yards. TD1 must be validated on yards (`TD1_REC_YARDS_VS_MARKET_*`).
+15. **TD1 → receiving yards/receptions vs FanDuel** (`TD1_REC_YARDS_VS_MARKET_RESULTS_V1.md`):
+    primary null (rec_yards -0.19, CI [-0.76,+0.40]; n=715). TD1 removes level biases
+    (receptions +0.56→+0.06 = the "half a reception low" defect; WR1 rec_yards +13.7→+1.2) but
+    yardage MAE does not improve; the line has the lowest MAE in both markets. **Consistent
+    across rushing and receiving: the allocative+budget fixes are opportunity/level fixes, not
+    yardage-accuracy fixes, and sides must come from the distribution, not mean vs line.**
+
+### Week 11
+* Paid full-week pull run **44580190319** (Thu-MNF, alt ladders), archived by 44581177692 to
+  `data/market_track_record/{boards,alt_props,raw_props,game_odds}/2026_wk11*`. First attempt
+  44578946345 failed closed at the live-prop identity gate (Andrew/Drew Ogletree; 141 credits
+  lost, not replayable); fixed with a verified `manual_roster_overrides.csv` row.
+  **218 credits left.** Sunday props were thin at capture (NYJ 8 rows, LAC 20); a weekend
+  re-pull is expected.
+* TNF IND @ HOU card: `docs/research/TNF_2026_WK11_IND_HOU_CARD_V1.md`. SAFE +158, MODERATE +170,
+  HIGH +610 (naive). MEDIUM not buildable and LOTTERY UNSOLVED under the two-ticket cap and the
+  never-above-projection rule (all eight eligible players at their deepest rungs = +1,638).
+  Every ticket is priced below its blended chance. Pattern play shown separately: Taylor
+  UNDER 51.5 rush (operator's call; conflicts with PRISM 55).
+
+---
+
+## CARRIED FORWARD FROM V28 (2026-11-16; still binding unless V29 above says otherwise) — **WEEK 10 CLOSED AND GRADED. THE OPERATOR'S TICKET RULES ARE NOW WRITTEN DOWN; READ THEM BEFORE BUILDING ANY CARD**
+
+**Repo:** dkaps6/imtiredofthis. **Branch:** `claude/nice-cori-4qkwqs` (not yet merged to `main`).
+V27 is archived verbatim at `docs/handoffs/ARCHIVE_NFL_RESEARCH_HANDOFF_V27_PRE_V28_2026-11-16.md`;
+its model-research sections are carried forward below unchanged.
+
+### 0. Before building ANY ticket card — mandatory reading, in order
+1. `docs/research/YOUR_RULES_PLAIN_ENGLISH.md` — the **CURRENT RULES** block: every operator
+   rule with his words and date, plus the list of rules a session invented on 2026-11-15
+   that are **not** his (one leg per game; "model probability must beat the price" as a
+   hard filter; tier minimums +500/+1200/+3000; an exact-match teammate check).
+2. `docs/research/MODEL_BACKED_ALT_LINE_PARLAY_CONSTRUCTION_V1.md` and the binding override
+   `docs/research/evidence/2026-11-01_week8_sunday_tickets/WEEK8_USER_BINDING_TICKET_PAYOUT_AND_CONSTRUCTION_OVERRIDE_20261101.md`.
+3. `docs/research/PRISM_ALT_CUSHION_STRATEGY_2026_W9.md` (+ addenda) and
+   `PRISM_ALT_FOOTBALL_INTEGRATION_2026_W9.md` — the Nov 9 integrated alt-line rule.
+4. `docs/research/WK10_2026_BACKTEST_V1.md` — what week 10 says.
+5. `AGENTS.md` section 10.
+
+**Why this block exists.** On 2026-11-15 the session worked from a compressed chat summary,
+rebuilt the Sunday card five times in two hours, reapplied a rule the operator removed on
+Nov 9 (one leg per game), and added filters he never gave. The operator's trust is very low
+and he asked for a different helper. **Never rebuild his rules from memory or a summary.**
+
+### 1. Week 10 results (`WK10_2026_BACKTEST_V1.md`)
+* TNF: nine-gate builder cards 4/4; ad hoc rebuilds 1/9.
+* Sunday: every version lost except **v3 SAFE +152 (7/7)**, which was replaced 23 minutes
+  later. SNF: 0 of 14 tickets across five versions.
+* Biggest single cause: **Rodgers on four Sunday tickets and every SNF ticket**; he was pulled
+  in a 38-18 blowout (143 yds, 82% snaps). Concentration, plus a game script (PIT secondary
+  lost two starters pregame) that was visible and not used.
+* Whole-board rule comparison (2,947 FanDuel over rungs): blind **-16.5%**; the only rule near
+  breakeven was **nine gates + own season beats the price, +1.1% (n=38, 17 players)**. Wider
+  pools all lost. One week; not proof.
+* Exclusions: QB-change teams -48%, toughest-quartile matchups -43%, teammate-context -24% —
+  all correctly excluded. **Mahomes (news over the official report) +57% and Keenan Allen
+  (team change) +59% were wrong this week.** Official club reports should outrank headlines.
+
+### 1b. Whole-slate grading (`PRISM_W10_COMPLETE_GRADING_V1.md`, week 10 closed incl. MNF)
+* PRISM-picked side: **-11.3% vs -5.5% coin flip (-5.7 pts, CI [-12.8, +1.5])** — reverses
+  weeks 6-8 (+3.5 pts). Overs -20.8%, unders -6.6% (FanDuel).
+* **The week-9 cushion edge did not replicate:** every cushion band lost; 1.5-2.0x at
+  -150..-400 went **-15.1%** (week 9: +13.5%). Do not treat the cushion rule as a proven edge.
+* Passing yards is the only market where PRISM beat the line (MAE 67.1 vs 69.3; alt rungs +11.7%).
+* Star compression: top-quartile lines PRISM bias **-17.6** vs Vegas -5.9. Missed role changes:
+  Emmett Johnson (PRISM 6 vs book 73.5, actual 101).
+* MNF: all five tickets lost — script inverted (LAC ran, Brissett threw 49); a QB change is a
+  whole-offense context change, not passing-only.
+
+### 2. Tooling state (all under `scripts/research/`, research only)
+* `build_slate_alt_legs_v1.py` — board + alt ladders -> rungs; `team_change_state()`.
+* `build_alt_cards_v1.py` — nine gates. **G7 fixed 2026-11-15**: the cut was one quantile over
+  all markets mixed (failed every rush rung, never a pass rung); now per market.
+* `audit_card_legs_v1.py` — per-leg checklist; `teammate_context_values()` is directional
+  (competitor back today / QB losing >= 30% of targets) with a volume floor for key teammates.
+* `validate_ticket_card_v1.py` — ticket rules; refuses UNRESOLVED_CONTEXT / DNP_INACTIVE;
+  edge bases `model`, `history`, `cushion`.
+* `build_weekly_alt_card_v1.py` — **still enforces one leg per game; do not use its ticket
+  assembly** until it is rebuilt from the CURRENT RULES. Its `--out-checks` CSV is useful.
+* Operator-facing export: `data/research/sun_2026_wk10_model_outputs_fanduel.csv` (every
+  FanDuel rung with model, book line, price, season record, checks failed).
+
+### 3. Next actions, in order
+1. **Build one card program from the CURRENT RULES** (no per-game quota; two-ticket player cap
+   enforced; same-game legs priced by the real quote; game-script and concentration checks;
+   single-game slates built separately). Test it on weeks 9 and 10 before week 11.
+2. **Build the week-11 card the night before**, not two hours before kickoff; Sunday morning
+   only applies inactives and price changes, through the program.
+3. Grade MNF (LAC@BAL) when it posts; add it to the week-10 rows.
+4. Model defects still open (V27 §6): ceiling compression on stars (JSN model 77 vs book 91;
+   Chase 62 vs 87.5) and overconfident distributions.
+
+### 4. Paid odds
+Sunday wk10 paid run 43730255663; Sunday alt ladders archived at
+`data/market_track_record/alt_props/2026_wk10_sun.csv`. Credits were 174/500 before Sunday;
+the Sunday pull's cost was not recorded — check before the next paid run.
+
+---
+
+## CARRIED FORWARD FROM V27 (2026-11-10; still binding unless V28 above says otherwise) — **WEEK 9 CLOSED AND FULLY GRADED: THE TABLE'S PROFITABILITY CLAIM IS WITHDRAWN, THE NINE-GATE BUILDER IS THE ONLY THING THAT WORKED, AND IT CANNOT SERVE A LOTTERY TIER**
 
 **Model:** PRISM — Player Role & Individual Situation Model. **Repo:** dkaps6/imtiredofthis.
 **Branch:** `claude/nice-cori-4qkwqs`, synced to `main`.
