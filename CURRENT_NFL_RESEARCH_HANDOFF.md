@@ -73,15 +73,29 @@
 25. **SHIPPED 2026-11-24 into the model** (`docs/production/RB_MODEL_FIXES_PROMOTION_2026_11_24.md`,
     commits c88c49f and 716ddae on `claude/nice-cori-4qkwqs`; every 2026 paid Full Slate run has
     been dispatched from this branch):
-    - **`RB_CARRY_SHARE_RECENCY_V1`** (PlayerForm): RB/FB with 3+ games feeds Bayes
-      0.15 x season-to-date + 0.85 x last-3 carry share.
+    - **`RB_CARRY_SHARE_RECENCY_V2`** (PlayerForm, `scripts/modeling/rb_carry_recency_v2.py`):
+      RB/FB with 3+ games feeds Bayes 0.15 x season-to-date + 0.85 x last-3 snap games, only
+      when all three window games are state-labelled `HEALTHY_FULL` (anomaly gate). Otherwise
+      season-to-date is kept.
+      - **V1 was replaced the same day.** The PR #716 review found:
+        - V1's test changed every position;
+        - production's window skipped zero-touch games;
+        - there was no anomaly gate.
+      - Preregistered retest (`RB_CARRY_SHARE_RECENCY_END_TO_END_RESULTS_V2.md`) PASSED:
+        - 2025: +0.046 [+0.022, +0.070];
+        - 2026: +0.040 [+0.020, +0.060];
+        - lead backs better in both.
+      - The gate withholds 12-17% of RB rows.
+      - Production and the test share one module.
     - **`RB_RECEPTIONS_OPPONENT_ADJ_V1`** (pricing): RB receptions mean x (1 + 0.1932 x D),
       with a new context step in Full Slate.
     - **Validation:**
-      - 12 tests;
+      - 17 tests;
       - repo and readiness audits;
       - the real pricing loop on week-11 inputs (35 RB players adjusted, nothing else touched);
-      - week-12 no-odds dry run: PlayerForm "applied to 99 RB/FB rows"; the context step passed.
+      - week-12 no-odds dry run (V1) passed PlayerForm and the context step; a local real-data
+        week-12 run of V2 applied 72 RBs, withheld 33 (Barkley, Montgomery, Hall, Emmett
+        Johnson among them) and left 41 with fewer than 3 games.
     - **Both are small.** The week-11 forward checks were flat.
     - **NOT fixed:** the Emmett Johnson class of miss.
       - Cause: Bayes gives zero-history backups the group-mean share. Before week 11, Carter

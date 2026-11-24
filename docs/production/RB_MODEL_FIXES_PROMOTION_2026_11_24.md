@@ -8,46 +8,65 @@ Both fixes:
 - are versioned and write audit columns;
 - fail closed where an input is missing.
 
-## 1. `RB_CARRY_SHARE_RECENCY_V1` (PlayerForm)
+## 1. `RB_CARRY_SHARE_RECENCY_V2` (PlayerForm)
 
-**Change.** For an RB/FB with ≥ 3 current-season games, the current-season carry share that
-feeds the Bayesian baseline becomes `0.15 x season-to-date + 0.85 x last 3 games with today's
-team`. Everything else is unchanged: prior share, game counts, other metrics, other positions.
+**V1 was replaced the same day, before any paid run used it.** The PR #716 review found three
+gaps between V1 and its validation, and all three were confirmed in the code:
+- V1's test changed every position's share;
+- production's last-3 window skipped zero-touch games;
+- there was no anomaly gate.
+
+V2 fixes all three. It passed a preregistered retest:
+`RB_CARRY_SHARE_RECENCY_END_TO_END_{PREREGISTRATION,RESULTS}_V2.md`.
+
+**Change.** For an RB/FB with >= 3 current games:
+- His last 3 offensive-snap games with today's team, carries filled as 0, are each
+  state-labelled from nflverse snap counts and the official injury report.
+- If all three are `HEALTHY_FULL`, the current carry share that feeds Bayes becomes
+  `0.15 x season-to-date + 0.85 x last 3`.
+- Otherwise the season-to-date share is kept, as the AGENTS.md anomaly gate requires.
+
+Everything else is unchanged: prior share, game counts, other metrics, other positions.
 
 **Code:**
-- `scripts/player_form_v2.py::apply_rb_carry_share_recency`;
-- called from `build()` after positions are resolved.
+- `scripts/modeling/rb_carry_recency_v2.py`, one module used by both production and the
+  validation;
+- wired in `scripts/player_form_v2.py::rb_recency_windows` / `build_rb_recency_windows`.
 
 **Audit columns** in `player_form_consensus.csv`:
-- `rush_share_current_season` (the old value);
+- `rush_share_current_season`;
 - `rush_share_last3`;
+- `rb_carry_recency_window_weeks`;
+- `rb_carry_recency_window_states`;
 - `rb_carry_recency_applied`;
+- `rb_carry_recency_status`, one of `APPLIED`, `WITHHELD_ANOMALY`,
+  `WITHHELD_SOURCE_INCOMPLETE`, `FEWER_THAN_3_GAMES`, `NO_SEASON_SHARE`,
+  `SOURCE_UNAVAILABLE:<why>` or `NOT_RB`;
 - `rb_carry_recency_version`.
 
-**Kill switch:** `RB_CARRY_SHARE_RECENCY_V1=0`. Emergency use only; production default is ON.
+**Sources and failure:**
+- Snap counts, players and injuries come from nflreadpy. They are an optional enrichment.
+- If a source fails, every RB keeps season-to-date with `SOURCE_UNAVAILABLE:<why>`, and the
+  failure is printed in the PlayerForm step.
+- If a team's completed game is missing from the snap source, that team's RBs keep
+  season-to-date with `WITHHELD_SOURCE_INCOMPLETE`.
+- Kill switch: `RB_CARRY_SHARE_RECENCY=0`.
 
-**Evidence:**
-- **Input level** (`RB_CARRY_SHARE_RECENCY_RESULTS_V1.md`): `a` was fitted on 2023-2024 only;
-  the CI excludes 0 on the 2025 and 2026 holdouts.
-- **End to end** through Bayes, top-5 and the 0.95 cap
-  (`RB_CARRY_SHARE_RECENCY_END_TO_END_RESULTS_V1.md`): expected-carry MAE gain
-  - +0.073 [+0.035, +0.112] in 2025;
-  - +0.046 [+0.013, +0.078] in 2026 weeks 4-10;
-  - lead backs improve in both.
+**Evidence (V2 test, the deployed intervention, carries MAE):**
 
-**Forward check, 2026 week 11, on production's archived week-11 PlayerForm**
-(`data/research/rb_recency_week11_production_replay_v1.csv`):
-- 51 RBs who played;
-- expected-carry MAE 4.531 → 4.514 (+0.017, CI [-0.157, +0.173]);
-- flat, as expected for a ~1-2% effect on one week.
+| holdout | gain | 95% CI | lead backs | lead 95% CI |
+|---|---|---|---|---|
+| 2025 | +0.046 | [+0.022, +0.070] | +0.059 | [+0.014, +0.104] |
+| 2026 wk 4-10 | +0.040 | [+0.020, +0.060] | +0.066 | [+0.018, +0.113] |
+
+The gate holds recency back on 17% (2025) and 12% (2026) of RB rows.
 
 **Limitation, stated plainly:**
-- This does **not** fix the week-11 Emmett Johnson miss (production 5.1 expected carries,
-  6.7 with recency, actual 23).
-- That miss comes from the Bayesian layer giving backs with no history the position-group mean
-  share: Nathan Carter (0 games) 0.32 and Jaydn Ott (1 game) 0.26, above Johnson's 0.23.
-- That is the allocative-prior / budget defect (`ALLOCATIVE_PRIOR_*`, D1). It is under a
-  frozen prospective test with an interim after week 14.
+- Recency does **not** fix the week-11 Emmett Johnson miss.
+- With V2 the gate withholds his weeks 10-11 surge as `UNRESOLVED_CONTEXT`.
+- The root cause is the Bayesian layer giving backs with no history the position-group mean
+  share. That is the allocative-prior / budget defect (D1), under a frozen prospective test
+  with an interim after week 14.
 
 ## 2. `RB_RECEPTIONS_OPPONENT_ADJ_V1` (pricing)
 
@@ -96,10 +115,10 @@ adjustment is ±7% at most, a small, validated refinement.
 |---|---|
 | `compileall` and `audit_repo.py --strict` | passed |
 | `audit_2026_production_readiness.py` (local) | READY, no findings |
-| `tests/test_rb_model_fixes_2026_11_24.py` | 12 passed (9 behaviour, 3 wiring) |
+| `tests/test_rb_model_fixes_2026_11_24.py` | 17 passed (V2 recency: game states, zero-touch window, team codes, RB-only apply, source failure, incomplete snaps, kill switch; opponent adjustment; wiring) |
 | full `pytest` | 1,317 passed, 3 failed. **All 3 fail identically without this change**: two need git history this sandbox lacks, one is a pre-existing workflow-contract assertion on the `FETCH_LIVE_ODDS` line. |
 | **pricing loop, week-11 inputs**: `run_pricing_v2.price()` on the archived week-11 rule-stage inputs (pass_yards excluded: QB synthesis needs player logs outside the replay set) | 1,610 side-rows priced. **35 RB receptions players adjusted** (140 side-rows). **0 rows touched outside RB receptions.** Final `model_proj` = ensemble x factor, to 1.2e-5. |
-| Full Slate no-odds dry run, week 12 (run 45461996815) | PlayerForm: `RB_CARRY_SHARE_RECENCY_V1 applied to 99 RB/FB rows`. Context step: passed. The run stopped at the strict readiness audit on `injury_status_all_null`: the week-12 injury report is not published until Wednesday. Environmental, not this change. |
+| Full Slate no-odds dry run, week 12 (run 45461996815, **V1**) | PlayerForm: `RB_CARRY_SHARE_RECENCY_V1 applied to 99 RB/FB rows`. Context step: passed. The run stopped at the strict readiness audit on `injury_status_all_null`: the week-12 injury report is not published until Wednesday. Environmental, not this change. |
 | Full Slate replay of the paid week-11 boundary (run 45461066034) | **Not possible for a completed week.** It stops at `Ourlads role universe is empty` before PlayerForm, because the current-roles availability artifact is empty once every game is final. This replay limitation is noted for the infrastructure backlog. |
 
 **The paid-run exercise of the pricing seam** is the week-12 Thursday capture. The local pricing
