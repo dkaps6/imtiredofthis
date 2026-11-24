@@ -93,6 +93,25 @@
 >       - RB rushing alt: -0.9% (n=39).
 >     - Main-line screened RB rushing unders are eligible (2026: 43 bets,
 >       +31%; 2024-25: 246 bets, +2.2%).
+> 24. **Football logic first, then ask the model.** (Nov 23, after his MNF
+>     CIN @ WAS ticket went 6/6 at about +511, while the gated card missed.)
+>     "I used football logic first then asked what the model thought.
+>     FOOTBALL DECISIONS ARE DIFFERENT FROM A MATH PROBLEM."
+>
+>     His read, written down as the method:
+>     - **How will the defense play the offense's best weapons?** Chase and
+>       Higgins would draw double coverage.
+>     - **Where does the ball go instead?** Burrow's next-safest throws: the
+>       tight ends, and dump-offs to the backs.
+>     - **Who gets the leftovers?** The defense keys on Chase, the hottest
+>       receiver, which leaves Higgins a couple of shots.
+>     - **What does the other team have to do?** WAS had to keep up with a top
+>       offense, so it had to throw, and Daniels spreads it around.
+>
+>     **Then** check each leg against the model's projection. The model
+>     confirms or vetoes the football read; it does not replace it. Every card
+>     starts with this written read per game, before any gate or rung is
+>     chosen.
 >
 > ### Rules a session invented that are NOT his (do not reapply)
 > * one leg per game per ticket (removed Nov 9; reapplied by mistake Nov 15);
