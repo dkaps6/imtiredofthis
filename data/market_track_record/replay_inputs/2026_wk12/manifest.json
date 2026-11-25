@@ -1,5 +1,5 @@
 {
-  "complete": false,
+  "complete": true,
   "files": {
     "data/injuries.csv": {
       "archived_as": "injuries.csv.gz",
@@ -12,6 +12,12 @@
       "bytes_gz": 338,
       "bytes_raw": 585,
       "sha256_raw": "f8b8b7636fb8c224a2138cf5e736e3297dab4e47644f616cabb9fbd62747f942"
+    },
+    "data/metrics_ready.csv": {
+      "archived_as": "metrics_ready.csv.gz",
+      "bytes_gz": 92243,
+      "bytes_raw": 2717144,
+      "sha256_raw": "8a93df395b28041acd168e6d06a84844ca118dc39b8f835c161af8dce858630f"
     },
     "data/model_ensemble_diagnostics.csv": {
       "archived_as": "model_ensemble_diagnostics.csv.gz",
@@ -30,6 +36,12 @@
       "bytes_gz": 38912,
       "bytes_raw": 165908,
       "sha256_raw": "c5dcb70443d18dbe9b5a3940a47a72c6a383bbf0a7811c206fd67bc20dd4216b"
+    },
+    "data/model_rule_simulation_inputs.csv": {
+      "archived_as": "model_rule_simulation_inputs.csv.gz",
+      "bytes_gz": 154179,
+      "bytes_raw": 3434794,
+      "sha256_raw": "5601d48308203827209a81eb3c438c0734f829c40a3b62795b39195f47fa4073"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
@@ -55,6 +67,12 @@
       "bytes_raw": 2925,
       "sha256_raw": "d4abeb22851daa574a44011eef6a26bb5516700e88b7cf45c653270f8fb492a2"
     },
+    "data/rb_rush_synthesis_context.csv": {
+      "archived_as": "rb_rush_synthesis_context.csv.gz",
+      "bytes_gz": 143,
+      "bytes_raw": 157,
+      "sha256_raw": "4a07c70be06434c6cb44e7e77416e7881519c95ce64a448f19e0def102b3785d"
+    },
     "data/team_week_map.csv": {
       "archived_as": "team_week_map.csv.gz",
       "bytes_gz": 5913,
@@ -63,18 +81,15 @@
     },
     "data/weather_week.csv": {
       "archived_as": "weather_week.csv.gz",
-      "bytes_gz": 1332,
+      "bytes_gz": 1325,
       "bytes_raw": 4496,
-      "sha256_raw": "b73f498da6942d0ceffd97a6dc5955ce2198dcb96f8963d568ad30baa4ca8916"
+      "sha256_raw": "0299fc4b8a7f55e7fe2de915da124b9c03fb3956f4317afb50ca8c813e1379a1"
     }
   },
   "required_column_stripped": {},
-  "required_missing": [
-    "data/metrics_ready.csv",
-    "data/model_rule_simulation_inputs.csv"
-  ],
-  "source_git_sha": "2e616fc877d9b452a1116646ed11b32f329b14fc",
-  "source_run_id": "45685322803",
+  "required_missing": [],
+  "source_git_sha": "e7c6a1d8a4a5ec7ac148c1093b11717cc5b1daf3",
+  "source_run_id": "45687281991",
   "stem": "2026_wk12",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
