@@ -1,0 +1,6 @@
+ticket,player,team,opp,market,rung,price,breakeven,model_proj,model_prob,main_line,model_vs_main,cushion,snap,own,ctx_own,matchup_pct,total,injury,context,fails
+MODERATE,Colby Parkinson,LAR,GB,receptions,1.5,-390,0.796,2.3,0.614,2.7,0.84,1.51,0.66,5/8,5/8,0.41,43.5,none,Davante Adams inactive; Puka Nacua inactive,"no model edge, context history"
+MODERATE,Tyler Higbee,LAR,GB,receptions,1.5,-750,0.882,2.4,0.652,3.3,0.72,1.59,0.64,7/9,7/9,0.41,43.5,none,Davante Adams inactive; Puka Nacua inactive,"no model edge, context history"
+MODERATE,Kyren Williams,LAR,GB,receptions,1.5,-650,0.867,2.1,0.575,3.3,0.64,1.4,0.65,9/10,9/10,0.35,43.5,none,Davante Adams inactive; Puka Nacua inactive,no model edge
+MODERATE,Kyren Williams,LAR,GB,rush_yards,29.5,-670,0.87,36.7,0.633,53.7,0.68,1.24,0.65,9/10,9/10,0.62,43.5,none,,no model edge
+MODERATE,Blake Corum,LAR,GB,rush_yards,29.5,-900,0.9,40.0,0.66,58.5,0.68,1.36,0.33,7/10,7/10,0.62,43.5,,,"no model edge, context history"

@@ -1,0 +1,5 @@
+ticket,tier,player,team,market,side,threshold,price_american,book,price_basis,model_proj,cushion,football_reason,state_label,event_id
+MODERATE,MODERATE,Colby Parkinson,LAR,receptions,OVER,1.5,-390.0,fanduel,naive_product,2.2644,1.5096,"No Nacua/Adams; TEs are Stafford's outlets behind a line missing two interior starters. 5,5,4,2 catches in his last four games played, ~70% snaps.",HEALTHY_FULL,5b612899d6dcdf998107f2c6c6e49a58
+MODERATE,MODERATE,Tyler Higbee,LAR,receptions,OVER,1.5,-750.0,fanduel,naive_product,2.38268,1.5884533333333335,"Lead TE, 67-83% snaps. 7 of 9 for 2+; 3 catches in the first game without Nacua.",HEALTHY_FULL,5b612899d6dcdf998107f2c6c6e49a58
+MODERATE,MODERATE,Kyren Williams,LAR,receptions,OVER,1.5,-650.0,fanduel,naive_product,2.0982,1.3987999999999998,Checkdown back with the WR room gutted; 9 of 10 for 2+; cleared off the injury report (toe).,HEALTHY_FULL,5b612899d6dcdf998107f2c6c6e49a58
+MODERATE,MODERATE,Blake Corum,LAR,rush_yards,OVER,29.5,-900.0,fanduel,naive_product,39.99541865774143,1.355776903652252,"11-17 carries every week since week 7; 42, 93, 73, 58, 100 yards in his last five.",HEALTHY_FULL,5b612899d6dcdf998107f2c6c6e49a58
