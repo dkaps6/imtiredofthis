@@ -111,10 +111,25 @@
       - Week-12 V2 dry run (45467603678): 68 applied, 31 withheld by the gate, 40 with fewer
         than 3 games. It stopped at the readiness audit only because the week-12 injury report
         publishes Wednesday.
-26. **Week 12:** a full-slate Thursday paid capture is needed for the RB-under tracker and the
-    line-movement check. It uses credits, so wait for the operator's go.
-    - **Credits:** 364 left after the 2026-11-22 Sunday pull (run 45024058278). The account
-      reset to 500 after a top-up.
+26. **Week 12 (Thanksgiving week: Wed GB@LA, three Thu games, Fri DEN@PIT, Sun, Mon):**
+    - **Paid pull 45685322803** (2026-11-25 19:27Z, operator's go): full week, alt ladders,
+      event window 2026-11-25..12-01, 150 credits.
+      - It failed closed at the live-prop identity gate on Chris Brooks (GB RB4, ACT) and
+        Michael Pittman Jr. (PIT, RES/reserve).
+      - Fixed with a verified roster row (Brooks) and a quarantine row (Pittman; revisit if PIT
+        activates him before Friday).
+    - **New: `reuse_paid_odds_regate`** re-runs the live-odds gate on a failed paid run's saved
+      capture with **no OddsAPI request**. Use it instead of re-buying whenever a paid run dies
+      at the gate.
+      - Re-gate run **45687281991**: 1,628 priced side-rows, 14 of 16 games.
+      - NE@LAC and WAS@ARI had no props posted yet. BAL@HOU had only 8 rows.
+    - **Archived to main:**
+      - paid capture: e7c6a1d (`raw_props`, `game_odds`, `alt_props/2026_wk12*.csv`);
+      - board: 8a17975 (`boards/2026_wk12.csv`).
+    - **Credits: 214 left.**
+    - **Caveat:** at capture, 22 of 32 teams showed "No injuries reported" on NFL.com, mostly
+      Sunday teams that had not filed Wednesday reports yet. Sunday games need a Sunday-morning
+      re-pull before any Sunday card.
 
 ### V29 items (2026-11-19)
 
