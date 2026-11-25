@@ -3,15 +3,15 @@
   "files": {
     "data/injuries.csv": {
       "archived_as": "injuries.csv.gz",
-      "bytes_gz": 111,
-      "bytes_raw": 105,
-      "sha256_raw": "ad0e2260bbb8e9485fce9c12fec0f137065e87f018d923523333140816914881"
+      "bytes_gz": 1436,
+      "bytes_raw": 8889,
+      "sha256_raw": "c8d920c2531c6d49a07e330a263c74fdea133f9ed6947f8c831a58bdb0145ef2"
     },
     "data/injuries_source_status.json": {
       "archived_as": "injuries_source_status.json.gz",
-      "bytes_gz": 225,
-      "bytes_raw": 282,
-      "sha256_raw": "b404a286e2d1cfbd46e3142b5091ce0cdb6ea9169ac20195ace56a29d774db91"
+      "bytes_gz": 338,
+      "bytes_raw": 585,
+      "sha256_raw": "f8b8b7636fb8c224a2138cf5e736e3297dab4e47644f616cabb9fbd62747f942"
     },
     "data/model_ensemble_diagnostics.csv": {
       "archived_as": "model_ensemble_diagnostics.csv.gz",
@@ -27,27 +27,27 @@
     },
     "data/model_ml_diagnostics.csv": {
       "archived_as": "model_ml_diagnostics.csv.gz",
-      "bytes_gz": 39251,
-      "bytes_raw": 167182,
-      "sha256_raw": "485394d28a77a91ad719e5171cb6b78ef853d7183b087eb215dddcf56249ed6e"
+      "bytes_gz": 38912,
+      "bytes_raw": 165908,
+      "sha256_raw": "c5dcb70443d18dbe9b5a3940a47a72c6a383bbf0a7811c206fd67bc20dd4216b"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
-      "bytes_gz": 15645,
-      "bytes_raw": 241620,
-      "sha256_raw": "eb9ab90955990969a76ca97a4825d34a389bfdea25fe96e2a1a563b9f2ed2691"
+      "bytes_gz": 15518,
+      "bytes_raw": 240161,
+      "sha256_raw": "c6e6bbc4b5d3237e21c4f2da6bdc79fa0153c2db7ce225582e6f8ac4e552994c"
     },
     "data/player_form_consensus.csv": {
       "archived_as": "player_form_consensus.csv.gz",
-      "bytes_gz": 80535,
-      "bytes_raw": 343338,
-      "sha256_raw": "0739c675053041cdb088d23be38f283a55b7de1afaa547d9a020c5b98406267f"
+      "bytes_gz": 79685,
+      "bytes_raw": 339763,
+      "sha256_raw": "93adee4d4b48d5e833c8f78c0f4493c5dbfe77f98a9f31777d1574e71de77d73"
     },
     "data/qb_promoted_team_context.csv": {
       "archived_as": "qb_promoted_team_context.csv.gz",
-      "bytes_gz": 4731,
+      "bytes_gz": 4729,
       "bytes_raw": 12245,
-      "sha256_raw": "6de3e2e926a7d05c31daf09ffc3005856c277fb56205f8576b56b8192d15813f"
+      "sha256_raw": "d7b15ba299c9cf74e9e4bf8f0f8d21997e1cb3af61c40409bb50bd659fa4c6dc"
     },
     "data/rb_receptions_opponent_context.csv": {
       "archived_as": "rb_receptions_opponent_context.csv.gz",
@@ -63,9 +63,9 @@
     },
     "data/weather_week.csv": {
       "archived_as": "weather_week.csv.gz",
-      "bytes_gz": 1362,
-      "bytes_raw": 4539,
-      "sha256_raw": "523605e4682e020f9f9f1ab5510221c15b5628c651495096f065b9619a7543c9"
+      "bytes_gz": 1332,
+      "bytes_raw": 4496,
+      "sha256_raw": "b73f498da6942d0ceffd97a6dc5955ce2198dcb96f8963d568ad30baa4ca8916"
     }
   },
   "required_column_stripped": {},
@@ -73,8 +73,8 @@
     "data/metrics_ready.csv",
     "data/model_rule_simulation_inputs.csv"
   ],
-  "source_git_sha": "24c8bc2d6199d04b8c036744ba3b70634ecdb971",
-  "source_run_id": "45468439042",
+  "source_git_sha": "2e616fc877d9b452a1116646ed11b32f329b14fc",
+  "source_run_id": "45685322803",
   "stem": "2026_wk12",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
