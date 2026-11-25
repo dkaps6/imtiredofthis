@@ -51,6 +51,11 @@ on:
         description: "Pinned sha256:... digest for the preserved artifact"
         required: false
         default: ""
+      reuse_paid_odds_regate:
+        description: "With reuse_paid_odds_*: the pinned run paid for odds but failed closed at the live-odds gate; re-run that gate on its saved capture (NO OddsAPI fetch)"
+        required: false
+        type: boolean
+        default: false
       rb_pd2_shadow_capture:
         description: "Research only: capture and pregame-lock frozen RB PD2 distributions"
         required: false
@@ -84,6 +89,7 @@ env:
   REUSE_PAID_ODDS_RUN_ID: ${{ github.event.inputs.reuse_paid_odds_run_id || (github.event_name == 'push' && contains(github.event.head_commit.message, '[REPLAY_WEEK6_38791377571]') && '38791377571') || '' }}
   REUSE_PAID_ODDS_ARTIFACT_ID: ${{ github.event.inputs.reuse_paid_odds_artifact_id || (github.event_name == 'push' && contains(github.event.head_commit.message, '[REPLAY_WEEK6_38791377571]') && '11999923880') || '' }}
   REUSE_PAID_ODDS_ARTIFACT_DIGEST: ${{ github.event.inputs.reuse_paid_odds_artifact_digest || (github.event_name == 'push' && contains(github.event.head_commit.message, '[REPLAY_WEEK6_38791377571]') && 'sha256:0916cd1cbec93f9a2529190b3df7c39172eee011a31eb9df429a35cdb9b41f61') || '' }}
+  REUSE_PAID_ODDS_REGATE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.reuse_paid_odds_regate == 'true' && 'true' || 'false' }}
   RB_PD2_SHADOW_CAPTURE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.rb_pd2_shadow_capture == 'true' && 'true' || '' }}
   # Pinned green history build: 2025 leakage-safe seed + certified completed 2026 Weeks 1-2.
   RB_PD2_FORWARD_HISTORY_RUN_ID: "35732782075"
@@ -606,17 +612,34 @@ jobs:
           PY
           gh run download "${REUSE_PAID_ODDS_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name "run_${REUSE_PAID_ODDS_RUN_ID}" --dir /tmp/preserved_paid_odds
 
-          for f in             outputs/props_raw.csv             outputs/props_raw_compact.csv             outputs/odds_game.csv             data/props_raw.csv             data/odds_game.csv             data/opponent_map_from_props.csv             data/live_odds_status.json             data/live_odds_placeholder_rows.csv             data/live_odds_artifact_hardening.json             data/live_prop_identity_audit.csv             data/live_prop_identity_status.json
-          do
-            test -s "/tmp/preserved_paid_odds/${f}"
-            mkdir -p "$(dirname "${f}")"
-            cp "/tmp/preserved_paid_odds/${f}" "${f}"
-          done
-
           mkdir -p data/replay_source_paid
-          cp /tmp/preserved_paid_odds/outputs/props_raw_compact.csv data/replay_source_paid/props_raw_compact_paid.csv
-          cp /tmp/preserved_paid_odds/outputs/odds_game.csv data/replay_source_paid/odds_game_paid.csv
-          sha256sum data/replay_source_paid/props_raw_compact_paid.csv data/replay_source_paid/odds_game_paid.csv > /tmp/preserved_paid_odds_boundary.sha256
+          if [ "${REUSE_PAID_ODDS_REGATE}" = "true" ]; then
+            # The pinned run bought this capture and then failed closed at the
+            # live-odds gate, so it never wrote live_odds_status.json. Re-run that
+            # same gate on its saved capture: the same scoping, hardening and
+            # identity checks as a live fetch, with no OddsAPI request.
+            test ! -s /tmp/preserved_paid_odds/data/live_odds_status.json || {
+              echo "FATAL: reuse_paid_odds_regate is only for a run whose gate failed; this run has live_odds_status.json, use the plain replay"; exit 1; }
+            cp /tmp/preserved_paid_odds/outputs/props_raw.csv data/replay_source_paid/props_raw_paid.csv
+            cp /tmp/preserved_paid_odds/outputs/odds_game.csv data/replay_source_paid/odds_game_paid.csv
+            sha256sum data/replay_source_paid/props_raw_paid.csv data/replay_source_paid/odds_game_paid.csv > /tmp/preserved_paid_odds_boundary.sha256
+            mkdir -p data/_debug
+            set -o pipefail
+            LIVE_ODDS_PRESERVED_RAW_DIR=/tmp/preserved_paid_odds \
+              python scripts/run_live_odds_gate.py --season "${SEASON}" --date "${SLATE_DATE}" \
+              2>&1 | tee data/_debug/live_odds_gate.log
+            test -s data/live_odds_status.json
+          else
+            for f in             outputs/props_raw.csv             outputs/props_raw_compact.csv             outputs/odds_game.csv             data/props_raw.csv             data/odds_game.csv             data/opponent_map_from_props.csv             data/live_odds_status.json             data/live_odds_placeholder_rows.csv             data/live_odds_artifact_hardening.json             data/live_prop_identity_audit.csv             data/live_prop_identity_status.json
+            do
+              test -s "/tmp/preserved_paid_odds/${f}"
+              mkdir -p "$(dirname "${f}")"
+              cp "/tmp/preserved_paid_odds/${f}" "${f}"
+            done
+            cp /tmp/preserved_paid_odds/outputs/props_raw_compact.csv data/replay_source_paid/props_raw_compact_paid.csv
+            cp /tmp/preserved_paid_odds/outputs/odds_game.csv data/replay_source_paid/odds_game_paid.csv
+            sha256sum data/replay_source_paid/props_raw_compact_paid.csv data/replay_source_paid/odds_game_paid.csv > /tmp/preserved_paid_odds_boundary.sha256
+          fi
 
           python - <<'PY'
           import json, os
@@ -635,12 +658,18 @@ jobs:
           s['replay_source_artifact_id']=int(os.environ['REUSE_PAID_ODDS_ARTIFACT_ID'])
           s['replay_source_artifact_digest']=os.environ['REUSE_PAID_ODDS_ARTIFACT_DIGEST']
           s['odds_api_refetched']=False
+          s['replay_regated']=os.environ.get('REUSE_PAID_ODDS_REGATE','false')=='true'
           p.write_text(json.dumps(s,indent=2,sort_keys=True)+'\n',encoding='utf-8')
           print('CANONICAL_PRESERVED_ODDS_READY',{'season':season,'week':week,'compact_rows':s.get('production_compact_rows')})
           PY
 
-          python scripts/operations/reconcile_preserved_live_props_current_roster_v1.py
-          test -s data/preserved_live_props_current_roster_reconciliation.json
+          # A re-gated capture was just validated against the current roster by the
+          # live-odds gate itself, exactly as a live fetch is, so the preserved-compact
+          # reconciliation (which needs the paid run's compact file) does not apply.
+          if [ "${REUSE_PAID_ODDS_REGATE}" != "true" ]; then
+            python scripts/operations/reconcile_preserved_live_props_current_roster_v1.py
+            test -s data/preserved_live_props_current_roster_reconciliation.json
+          fi
 
           echo "available=true" >> "${GITHUB_OUTPUT}"
           echo "status=preserved_paid_artifact" >> "${GITHUB_OUTPUT}"

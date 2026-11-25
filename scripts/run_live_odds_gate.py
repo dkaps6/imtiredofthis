@@ -97,6 +97,48 @@ def _clear_stale_odds_artifacts() -> None:
             raise RuntimeError(f"Unable to clear stale sportsbook artifact {path}: {exc}") from exc
 
 
+# Re-gate mode. A paid run can buy the sportsbook capture and then fail closed in
+# this gate (an unresolved player identity, for example). Its artifact keeps the
+# capture, but it never wrote live_odds_status.json, so the plain replay path
+# cannot use it, and refetching costs the whole credit bill again. Runs 43267020775,
+# 44578946345 and 45685322803 each lost a full paid capture this way. With
+# LIVE_ODDS_PRESERVED_RAW_DIR set to that downloaded artifact, the gate restores
+# the capture instead of calling OddsAPI and then applies exactly the same
+# scoping, hardening and identity checks a live fetch gets.
+PRESERVED_RAW_ENV = "LIVE_ODDS_PRESERVED_RAW_DIR"
+PRESERVED_RAW_REQUIRED = ("outputs/props_raw.csv", "outputs/odds_game.csv")
+PRESERVED_RAW_OPTIONAL_DATA = (
+    "data/props_raw.csv",
+    "data/odds_game.csv",
+    "data/props_enriched.csv",
+    "data/opponent_map_from_props.csv",
+    "data/player_name_map_from_props.csv",
+)
+
+
+def _restore_preserved_raw(src: Path) -> list[str]:
+    """Copy a previously paid sportsbook capture into place. No provider request."""
+    src = Path(src)
+    for rel in PRESERVED_RAW_REQUIRED:
+        f = src / rel
+        if not f.exists() or f.stat().st_size == 0:
+            raise RuntimeError(f"preserved paid capture missing/empty: {f}")
+    rels = set(PRESERVED_RAW_REQUIRED) | set(PRESERVED_RAW_OPTIONAL_DATA)
+    rels.update(str(f.relative_to(src)) for f in (src / "outputs").glob("props_*.csv"))
+    rels.update(str(f.relative_to(src)) for f in (src / "outputs").glob("player_name_map_from_props.csv"))
+    rels.update(str(f.relative_to(src)) for f in (src / "outputs" / "props_raw").glob("*.csv"))
+    copied: list[str] = []
+    for rel in sorted(rels):
+        f = src / rel
+        if not f.exists():
+            continue
+        dest = Path(rel)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(f.read_bytes())
+        copied.append(rel)
+    return copied
+
+
 def _active_game_pairs(schedule: pd.DataFrame, season: int, week: int) -> set[tuple[str, str]]:
     required = {"season", "week", "team", "opponent"}
     missing = required - set(schedule.columns)
@@ -310,15 +352,21 @@ def run_gate(season: int, date: str = "") -> dict:
 
     _clear_stale_odds_artifacts()
 
-    cmd = [
-        sys.executable,
-        "scripts/fetch_props_oddsapi.py",
-        "--season",
-        str(int(season)),
-        "--date",
-        str(date or ""),
-    ]
-    proc = subprocess.run(cmd, env=dict(os.environ), check=False)
+    preserved_raw = os.getenv(PRESERVED_RAW_ENV, "").strip()
+    if preserved_raw:
+        restored = _restore_preserved_raw(Path(preserved_raw))
+        print(f"[live_odds_gate] PRESERVED_RAW_REGATE no OddsAPI request; restored {len(restored)} files from {preserved_raw}")
+        proc = subprocess.CompletedProcess(args=["preserved_raw_regate"], returncode=0)
+    else:
+        cmd = [
+            sys.executable,
+            "scripts/fetch_props_oddsapi.py",
+            "--season",
+            str(int(season)),
+            "--date",
+            str(date or ""),
+        ]
+        proc = subprocess.run(cmd, env=dict(os.environ), check=False)
     if proc.returncode != 0:
         payload = {
             "status": "provider_error",
@@ -370,6 +418,8 @@ def run_gate(season: int, date: str = "") -> dict:
         "actual_prop_rows": int(actual_props),
         "game_odds_rows": int(len(scoped_games)),
         "fetch_returncode": 0,
+        "preserved_raw_regate": bool(preserved_raw),
+        "odds_api_refetched": not bool(preserved_raw),
         "artifact_hardening_disposition": hardening_status.get("disposition", "missing"),
         "game_identity_event_count": int(hardening_status.get("game_identity_event_count", 0)),
         "provider_source_duplicate_rows": int(hardening_status.get("provider_source_duplicate_rows", 0)),

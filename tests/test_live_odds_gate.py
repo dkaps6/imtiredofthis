@@ -244,3 +244,55 @@ def test_clear_stale_odds_artifacts_removes_previous_outputs(tmp_path, monkeypat
 
     _clear_stale_odds_artifacts()
     assert all(not path.exists() for path in stale)
+
+
+def _preserved_capture(root: Path) -> Path:
+    src = root / "artifact"
+    (src / "outputs" / "props_raw").mkdir(parents=True)
+    (src / "data").mkdir(parents=True)
+    (src / "outputs" / "props_raw.csv").write_text("event_id,player\ne1,A\n", encoding="utf-8")
+    (src / "outputs" / "odds_game.csv").write_text("event_id,team\ne1,GB\n", encoding="utf-8")
+    (src / "outputs" / "props_alt_raw.csv").write_text("event_id,player\ne1,A\n", encoding="utf-8")
+    (src / "outputs" / "props_raw" / "player_receptions.csv").write_text("event_id\ne1\n", encoding="utf-8")
+    (src / "data" / "props_raw.csv").write_text("event_id,player\ne1,A\n", encoding="utf-8")
+    return src
+
+
+def test_preserved_capture_restore_copies_the_paid_files_and_requires_the_core_ones(tmp_path, monkeypatch):
+    import scripts.run_live_odds_gate as g
+    monkeypatch.chdir(tmp_path)
+    src = _preserved_capture(tmp_path)
+    copied = g._restore_preserved_raw(src)
+    assert {"outputs/props_raw.csv", "outputs/odds_game.csv", "outputs/props_alt_raw.csv",
+            "outputs/props_raw/player_receptions.csv", "data/props_raw.csv"} <= set(copied)
+    assert Path("outputs/props_raw.csv").read_text(encoding="utf-8") == "event_id,player\ne1,A\n"
+    (src / "outputs" / "odds_game.csv").unlink()
+    with pytest.raises(RuntimeError, match="preserved paid capture missing"):
+        g._restore_preserved_raw(src)
+
+
+def test_run_gate_on_a_preserved_capture_never_calls_oddsapi(tmp_path, monkeypatch):
+    import scripts.run_live_odds_gate as g
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    src = _preserved_capture(tmp_path)
+    monkeypatch.setenv(g.PRESERVED_RAW_ENV, str(src))
+
+    def no_fetch(*a, **k):
+        raise AssertionError("OddsAPI fetch must not run on a preserved capture")
+
+    monkeypatch.setattr(g.subprocess, "run", no_fetch)
+    monkeypatch.setattr(g, "resolve_week", lambda: 12)
+    monkeypatch.setattr(g, "_active_game_pairs", lambda *a: {("GB", "LAR")})
+    monkeypatch.setattr(g, "_active_game_windows", lambda *a: {})
+    monkeypatch.setattr(g, "_scope_to_eligible_teams", lambda p, w, t: (p, w))
+    monkeypatch.setattr(g, "expected_current_teams", lambda: None)
+    monkeypatch.setattr(g, "_allowed_event_ids", lambda *a: {"e1"})
+    monkeypatch.setattr(g, "_scope_all_event_artifacts", lambda ids: None)
+    monkeypatch.setattr(g, "harden_live_odds_artifacts", lambda: {"disposition": "ok"})
+    monkeypatch.setattr(g, "repair_live_prop_identity", lambda: {"disposition": "LIVE_PROP_IDENTITY_READY"})
+    payload = g.run_gate(2026, "2026-11-25")
+    assert payload["available"] is True
+    assert payload["preserved_raw_regate"] is True and payload["odds_api_refetched"] is False
+    status = json.loads(Path("data/live_odds_status.json").read_text(encoding="utf-8"))
+    assert status["preserved_raw_regate"] is True
