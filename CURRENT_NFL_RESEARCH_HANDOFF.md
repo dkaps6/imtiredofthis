@@ -130,6 +130,14 @@
     - **Caveat:** at capture, 22 of 32 teams showed "No injuries reported" on NFL.com, mostly
       Sunday teams that had not filed Wednesday reports yet. Sunday games need a Sunday-morning
       re-pull before any Sunday card.
+    - **Wed GB @ LA:** the card was logged pre-kickoff (`data/research/cards/wk12_2026_wed_gb_lar_*`).
+      The operator skipped the game. The session had built the card gates-first, against
+      rule 24; the football-first redo pointed at the Rams' quick game (TE and RB catches).
+    - **The operator's MNF reads were tested** (`MNF_READS_SINGLE_GAME_TEST_RESULTS_V1.md`):
+      - shootout totals and a missing top receiver are, on average, already in the line;
+      - near-projection rungs ran about even in primetime single games (-2%, 6 games) vs -13%
+        on Sundays;
+      - this was added next to rule 24 as context, not a rule.
 
 ### V29 items (2026-11-19)
 

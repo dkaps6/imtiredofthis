@@ -125,6 +125,17 @@
 >     and the guardrails are there to check and size a read, never to stand in
 >     for one.
 >
+>     **Context from testing his Monday read (2026-11-26,
+>     `MNF_READS_SINGLE_GAME_TEST_RESULTS_V1.md`). This is information for his
+>     reads, not a rule:**
+>     - A high total or a missing top receiver is, on average, already in the
+>       book's line. Pass-catchers' overs still lost about 3% in shootouts, and
+>       backs' and tight ends' overs did no better when the top receiver sat.
+>     - So the edge is in reading the specific game: who the defense keys on,
+>       and who is forced to throw. The situation alone is not enough.
+>     - In primetime single games, rungs near the projection came out about even
+>       (-2%, 6 games). On Sunday afternoons the same rungs lost 13%.
+>
 > ### Rules a session invented that are NOT his (do not reapply)
 > * one leg per game per ticket (removed Nov 9; reapplied by mistake Nov 15);
 > * "model probability must beat the price" as a hard filter (Nov 15) — it
