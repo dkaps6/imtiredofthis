@@ -1,0 +1,183 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>PRISM Week 12 Thanksgiving Card</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+/* Broadcast graphics package, three letter pages: games + Moderate, High, Lottery + notes. */
+:root{
+  --deep:#0b1426; --panel:#13213b; --panel2:#1b2d4f; --chalk:#f2f5fa; --muted:#9db0cc; --body:#dde6f2;
+  --gold:#ffcf3f; --flag:#e63946; --risk:#f4a261;
+}
+@page{size:letter;margin:0}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--deep)}
+body{font-family:Inter,system-ui,sans-serif;color:var(--chalk);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{width:8.5in;height:11in;padding:.38in .42in .32in;position:relative;overflow:hidden;break-after:page;
+  background:radial-gradient(ellipse at 85% -8%,#203a66 0%,var(--deep) 52%)}
+.page:last-child{break-after:auto}
+svg text{font-family:'Barlow Condensed'}
+.wm{font-style:italic;font-weight:800}
+
+/* page-1 masthead */
+.mast{display:flex;align-items:stretch}
+.crest{width:2.55in;flex:none}
+.titlebar{flex:1;display:flex;flex-direction:column;justify-content:center;padding-left:16px;border-left:5px solid var(--gold);margin-left:6px}
+.titlebar .a{font-family:'Barlow Condensed',sans-serif;font-style:italic;font-weight:800;font-size:25pt;line-height:1;letter-spacing:.02em}
+.titlebar .b{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:10.5pt;color:var(--muted);letter-spacing:.14em;margin-top:4px}
+/* running header pages 2-3 */
+.run{display:flex;align-items:center;gap:12px;border-bottom:2px solid var(--panel2);padding-bottom:8px}
+.run svg{width:1.55in;height:auto}
+.run .t{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:10pt;color:var(--muted);letter-spacing:.16em;margin-left:auto;text-align:right}
+
+/* score bugs */
+.bugs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0 14px}
+.bug{background:var(--panel);border-radius:4px;overflow:hidden;display:flex;flex-direction:column}
+.bug .row{display:grid;grid-template-columns:1fr auto;align-items:center;padding:3px 10px;border-bottom:1px solid var(--panel2)}
+.bug .tm{font-family:Teko,sans-serif;font-weight:600;font-size:21pt;line-height:1.05}
+.bug .ln{font-family:Teko,sans-serif;font-weight:500;font-size:15pt;color:var(--muted)}
+.bug .ft{display:flex;justify-content:space-between;padding:3px 10px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:9pt;letter-spacing:.1em;color:var(--deep);background:var(--gold)}
+.bug .rd{padding:6px 10px 8px;font-size:8.3pt;line-height:1.35;color:var(--body)}
+
+/* ticket */
+.seg{display:flex;align-items:flex-end;gap:12px;margin:4px 0 8px}
+.seg .tier{font-family:'Barlow Condensed',sans-serif;font-style:italic;font-weight:800;font-size:33pt;line-height:.9;letter-spacing:.02em}
+.seg .meta{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:10.5pt;color:var(--muted);letter-spacing:.12em;padding-bottom:3px}
+.seg .odds{margin-left:auto;text-align:right}
+.seg .odds .n{font-family:Teko,sans-serif;font-weight:700;font-size:34pt;line-height:.85;color:var(--gold)}
+.seg .odds .l{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:8.5pt;color:var(--muted);letter-spacing:.1em}
+.lt{display:grid;grid-template-columns:.3in 1fr .9in;align-items:stretch;margin-bottom:5px;transform:skewX(-8deg);margin-left:6px;margin-right:4px}
+.lt>*{transform:skewX(8deg)}
+.lt .n{background:var(--gold);color:var(--deep);font-family:Teko,sans-serif;font-weight:700;font-size:16pt;display:flex;align-items:center;justify-content:center}
+.lt .body{background:var(--chalk);color:var(--deep);padding:4px 12px;display:flex;align-items:baseline;gap:9px;min-width:0}
+.lt .nm{font-family:'Barlow Condensed',sans-serif;font-style:italic;font-weight:800;font-size:15pt;text-transform:uppercase;white-space:nowrap}
+.lt .ps{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:9pt;color:#4a5a75;letter-spacing:.1em;white-space:nowrap}
+.lt .gm{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:9pt;color:#6a7a94;letter-spacing:.06em;white-space:nowrap}
+.lt .cl{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:12.5pt;margin-left:auto;white-space:nowrap}
+.lt .px{background:var(--panel2);font-family:Teko,sans-serif;font-weight:600;font-size:18pt;display:flex;align-items:center;justify-content:center}
+.ov{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:8pt;background:var(--flag);color:#fff;padding:1px 6px;letter-spacing:.1em;align-self:center;white-space:nowrap}
+
+/* write-ups */
+.tele{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.tc{background:var(--panel);border-radius:4px;padding:8px 11px 9px 14px;position:relative}
+.tc::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--gold)}
+.tc h4{margin:0;font-family:'Barlow Condensed',sans-serif;font-style:italic;font-weight:800;font-size:13.5pt;text-transform:uppercase;letter-spacing:.02em;line-height:1.1}
+.tc .c{font-family:'Barlow Condensed',sans-serif;font-weight:700;color:var(--muted);letter-spacing:.1em;font-size:8.8pt}
+.tc p{margin:4px 0 0;font-size:8.6pt;line-height:1.38;color:var(--body)}
+.tc .f{font-family:Teko,sans-serif;font-weight:500;font-size:14pt;line-height:1;margin-top:5px;letter-spacing:.04em;color:var(--gold)}
+.tc .rk{font-size:8.2pt;color:var(--risk);margin-top:3px}
+.tc .oc{font-size:8.2pt;color:#ff8f97;margin-top:3px}
+.same{grid-column:1 / -1;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.08em;font-size:9.5pt;color:var(--muted);padding:2px 2px 0}
+.intro{font-size:9pt;color:var(--body);margin:0 0 8px;max-width:72ch}
+
+/* notes */
+.notes{margin-top:10px;background:var(--panel);border-radius:4px;padding:9px 14px 10px;border-top:3px solid var(--gold)}
+.notes h3{margin:0 0 4px;font-family:'Barlow Condensed',sans-serif;font-style:italic;font-weight:800;font-size:14pt;letter-spacing:.03em}
+.notes ul{margin:0;padding-left:16px;display:grid;gap:3px}
+.notes li{font-size:8.5pt;line-height:1.38;color:var(--body)}
+.notes b{color:var(--chalk)}
+.foot{position:absolute;left:.42in;right:.42in;bottom:.22in;display:flex;justify-content:space-between;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.14em;color:#6f84a6;font-size:8.5pt}
+</style></head>
+<body>
+
+<!-- ================= PAGE 1 ================= -->
+<section class="page">
+  <div class="mast">
+    <svg class="crest" viewBox="0 0 330 110" aria-label="PRISM Football Model">
+      <path d="M10 6 H90 V58 C90 84 70 98 50 106 C30 98 10 84 10 58 Z" fill="#13213b" stroke="#ffcf3f" stroke-width="5"/>
+      <polygon points="50,24 28,70 72,70" fill="#f2f5fa"/><polygon points="50,24 50,70 72,70" fill="#c9d4e4"/>
+      <rect x="22" y="80" width="56" height="5" fill="#ffcf3f"/>
+      <text class="wm" x="108" y="74" font-size="74" fill="#f2f5fa">PRISM</text>
+      <text x="110" y="98" font-size="17" fill="#ffcf3f" letter-spacing="5" font-weight="700">FOOTBALL MODEL</text>
+    </svg>
+    <div class="titlebar"><div class="a">THANKSGIVING TRIPLEHEADER</div><div class="b">WEEK 12 · THU NOV 26 2026 · FANDUEL LINES 10:30 AM ET</div></div>
+  </div>
+
+  <div class="bugs">
+    <div class="bug"><div class="row"><div class="tm">CHI</div><div class="ln">−1.5</div></div><div class="row"><div class="tm">DET</div><div class="ln">O/U 56.5</div></div><div class="ft"><span>1:00 PM ET</span><span>FORD FIELD</span></div>
+      <div class="rd">Two 8-2 teams, the highest total of the day. Chicago is missing its nickel corner and a safety. Detroit runs through Gibbs.</div></div>
+    <div class="bug"><div class="row"><div class="tm">PHI</div><div class="ln">O/U 48.5</div></div><div class="row"><div class="tm">DAL</div><div class="ln">−8.5</div></div><div class="ft"><span>4:30 PM ET</span><span>AT&amp;T STADIUM</span></div>
+      <div class="rd">Philly starts backup QB Joe Milton. If Dallas gets ahead, it runs the clock on a defense that gives up yards on the ground.</div></div>
+    <div class="bug"><div class="row"><div class="tm">KC</div><div class="ln">O/U 45.5</div></div><div class="row"><div class="tm">BUF</div><div class="ln">−3</div></div><div class="ft"><span>8:20 PM ET</span><span>RAIN · 38°F</span></div>
+      <div class="rd">Rain and 15 to 25 mph wind: runs and short throws. Kenneth Walker is out, so Emmett Johnson is KC's back.</div></div>
+  </div>
+
+  <div class="seg"><div class="tier">MODERATE</div><div class="meta">4 LEGS · 3 GAMES</div><div class="odds"><div class="n">≈ +133</div><div class="l">ESTIMATE · FANDUEL SETS THE FINAL</div></div></div>
+  <div class="lt"><div class="n">1</div><div class="body"><span class="nm">Jahmyr Gibbs</span><span class="ps">DET · RB</span><span class="gm">CHI @ DET 1:00</span><span class="cl">60+ RUSH YDS</span></div><div class="px">−550</div></div>
+  <div class="lt"><div class="n">2</div><div class="body"><span class="nm">Travis Kelce</span><span class="ps">KC · TE</span><span class="gm">KC @ BUF 8:20</span><span class="cl">3+ CATCHES</span></div><div class="px">−440</div></div>
+  <div class="lt"><div class="n">3</div><div class="body"><span class="nm">Emmett Johnson</span><span class="ps">KC · RB</span><span class="ov">OUR CALL</span><span class="cl">60+ RUSH YDS</span></div><div class="px">−310</div></div>
+  <div class="lt"><div class="n">4</div><div class="body"><span class="nm">Javonte Williams</span><span class="ps">DAL · RB</span><span class="gm">PHI @ DAL 4:30</span><span class="cl">50+ RUSH YDS</span></div><div class="px">−470</div></div>
+
+  <div class="tele">
+    <div class="tc"><h4>Jahmyr Gibbs</h4><div class="c">60+ RUSH YDS · −550</div><p>Detroit's only back since the Montgomery trade, with 20 to 29 carries a week. Chicago allows 77 rush yards a game to backs, 23rd in the league.</p><div class="f">LAST 5 · 116 · 153 · 74 · 153 · 98</div><div class="rk">Watch: a shootout could tilt Detroit to the pass.</div></div>
+    <div class="tc"><h4>Travis Kelce</h4><div class="c">3+ CATCHES · −440</div><p>Rain and 15 to 25 mph wind shrink the game to short throws, and Kelce is Mahomes's outlet. Buffalo allows 5.4 tight-end catches a game.</p><div class="f">LAST 5 · 4 · 5 · 4 · 2 · 6</div><div class="rk">Watch: his one miss came on 31% of the snaps.</div></div>
+    <div class="tc"><h4>Emmett Johnson</h4><div class="c">60+ RUSH YDS · −310 · OUR CALL</div><p>Walker is out, and Johnson already took the job: 22 carries for 101 and 23 for 105 the last two weeks, on 82 to 88% of the snaps. Rain only adds carries.</p><div class="f">AS STARTER · 101 · 105</div><div class="oc">Our call: the model still projects him as a backup.</div></div>
+    <div class="tc"><h4>Javonte Williams</h4><div class="c">50+ RUSH YDS · −470</div><p>Dallas is an 8.5-point favorite against a backup quarterback. A lead means late carries, and Philly allows 102 rush yards a game to backs.</p><div class="f">LAST 5 · 155 · 56 · 101 · 63 · 67</div><div class="rk">Watch: if Milton keeps it close, the late carries go away.</div></div>
+  </div>
+  <div class="foot"><span>PRISM · PLAYER ROLE &amp; INDIVIDUAL SITUATION MODEL</span><span>1 / 3</span></div>
+</section>
+
+<!-- ================= PAGE 2 ================= -->
+<section class="page">
+  <div class="run">
+    <svg viewBox="0 0 330 110"><path d="M10 6 H90 V58 C90 84 70 98 50 106 C30 98 10 84 10 58 Z" fill="#13213b" stroke="#ffcf3f" stroke-width="5"/><polygon points="50,24 28,70 72,70" fill="#f2f5fa"/><polygon points="50,24 50,70 72,70" fill="#c9d4e4"/><rect x="22" y="80" width="56" height="5" fill="#ffcf3f"/><text class="wm" x="108" y="74" font-size="74" fill="#f2f5fa">PRISM</text><text x="110" y="98" font-size="17" fill="#ffcf3f" letter-spacing="5" font-weight="700">FOOTBALL MODEL</text></svg>
+    <div class="t">THANKSGIVING TRIPLEHEADER<br>WEEK 12 · THU NOV 26</div>
+  </div>
+  <div class="seg" style="margin-top:14px"><div class="tier">HIGH</div><div class="meta">8 LEGS · 3 GAMES</div><div class="odds"><div class="n">≈ +654</div><div class="l">ESTIMATE · FANDUEL SETS THE FINAL</div></div></div>
+  <div class="lt"><div class="n">1</div><div class="body"><span class="nm">Jahmyr Gibbs</span><span class="ps">DET · RB</span><span class="gm">CHI @ DET 1:00</span><span class="cl">60+ RUSH YDS</span></div><div class="px">−550</div></div>
+  <div class="lt"><div class="n">2</div><div class="body"><span class="nm">Sam LaPorta</span><span class="ps">DET · TE</span><span class="gm">CHI @ DET 1:00</span><span class="cl">3+ CATCHES</span></div><div class="px">−550</div></div>
+  <div class="lt"><div class="n">3</div><div class="body"><span class="nm">Colston Loveland</span><span class="ps">CHI · TE</span><span class="gm">CHI @ DET 1:00</span><span class="cl">4+ CATCHES</span></div><div class="px">−420</div></div>
+  <div class="lt"><div class="n">4</div><div class="body"><span class="nm">Caleb Williams</span><span class="ps">CHI · QB</span><span class="gm">CHI @ DET 1:00</span><span class="cl">10+ RUSH YDS</span></div><div class="px">−600</div></div>
+  <div class="lt"><div class="n">5</div><div class="body"><span class="nm">Javonte Williams</span><span class="ps">DAL · RB</span><span class="gm">PHI @ DAL 4:30</span><span class="cl">50+ RUSH YDS</span></div><div class="px">−470</div></div>
+  <div class="lt"><div class="n">6</div><div class="body"><span class="nm">Travis Kelce</span><span class="ps">KC · TE</span><span class="gm">KC @ BUF 8:20</span><span class="cl">3+ CATCHES</span></div><div class="px">−440</div></div>
+  <div class="lt"><div class="n">7</div><div class="body"><span class="nm">Emmett Johnson</span><span class="ps">KC · RB</span><span class="ov">OUR CALL</span><span class="cl">80+ RUSH YDS</span></div><div class="px">−120</div></div>
+  <div class="lt"><div class="n">8</div><div class="body"><span class="nm">James Cook</span><span class="ps">BUF · RB</span><span class="gm">KC @ BUF 8:20</span><span class="cl">70+ RUSH YDS</span></div><div class="px">−270</div></div>
+
+  <div class="tele">
+    <div class="same">GIBBS, JAVONTE WILLIAMS AND KELCE: SAME READS AS THE MODERATE.</div>
+    <div class="tc"><h4>Emmett Johnson</h4><div class="c">80+ RUSH YDS · −120 · OUR CALL</div><p>This is his main line, so the leg is all-in on the lead-back read. He went over 100 in both games since taking the job, and the weather points to more carries.</p><div class="f">AS STARTER · 101 · 105</div><div class="oc">This leg lifts the ticket past +600. At 70+ it pays about +530.</div></div>
+    <div class="tc"><h4>Sam LaPorta</h4><div class="c">3+ CATCHES · −550</div><p>He plays 91% of the snaps and sees 5 or 6 targets a game. Chicago is missing nickel Kyler Gordon and safety Elijah Hicks, who cover the middle.</p><div class="f">LAST 5 · 1 · 3 · 4 · 1 · 3</div><div class="rk">Watch: Chicago allows only 4.3 TE catches a game. The weakest leg here.</div></div>
+    <div class="tc"><h4>Colston Loveland</h4><div class="c">4+ CATCHES · −420</div><p>On the field for 87% of the snaps, against a Detroit defense that allows 6.8 tight-end catches a game, third most in the league.</p><div class="f">LAST 5 · 6 · 7 · 7 · 4 · 3</div><div class="rk">Watch: 4+ in 6 of 10 games this season.</div></div>
+    <div class="tc"><h4>Caleb Williams</h4><div class="c">10+ RUSH YDS · −600</div><p>Detroit gives up 21.9 rushing yards a game to quarterbacks, fourth most, and a shootout means plenty of dropbacks to scramble from.</p><div class="f">LAST 5 · 3 · 18 · 1 · 16 · 11</div><div class="rk">Watch: he reached 10 in three of those five.</div></div>
+    <div class="tc"><h4>James Cook</h4><div class="c">70+ RUSH YDS · −270</div><p>In a rain game with Buffalo favored, Cook gets the ball, 18 to 31 carries a game. His line moved up to 88.5 this morning.</p><div class="f">LAST 5 · 95 · 80 · 107 · 157 · 89</div><div class="rk">Watch: KC allows only 71.5 rush yards a game to backs. This rides on volume.</div></div>
+  </div>
+  <div class="foot"><span>PRISM · PLAYER ROLE &amp; INDIVIDUAL SITUATION MODEL</span><span>2 / 3</span></div>
+</section>
+
+<!-- ================= PAGE 3 ================= -->
+<section class="page">
+  <div class="run">
+    <svg viewBox="0 0 330 110"><path d="M10 6 H90 V58 C90 84 70 98 50 106 C30 98 10 84 10 58 Z" fill="#13213b" stroke="#ffcf3f" stroke-width="5"/><polygon points="50,24 28,70 72,70" fill="#f2f5fa"/><polygon points="50,24 50,70 72,70" fill="#c9d4e4"/><rect x="22" y="80" width="56" height="5" fill="#ffcf3f"/><text class="wm" x="108" y="74" font-size="74" fill="#f2f5fa">PRISM</text><text x="110" y="98" font-size="17" fill="#ffcf3f" letter-spacing="5" font-weight="700">FOOTBALL MODEL</text></svg>
+    <div class="t">THANKSGIVING TRIPLEHEADER<br>WEEK 12 · THU NOV 26</div>
+  </div>
+  <div class="seg" style="margin-top:14px"><div class="tier">LOTTERY</div><div class="meta">6 LEGS · THE PERFECT SCRIPT</div><div class="odds"><div class="n">≈ +35,238</div><div class="l">ABOUT 353 TO 1 · FANDUEL SETS THE FINAL</div></div></div>
+  <p class="intro">Like buying a lottery ticket: a big payout that only hits if all three games go exactly to plan. Every leg is something the player has done in at least two of his last five games.</p>
+  <div class="lt"><div class="n">1</div><div class="body"><span class="nm">Jahmyr Gibbs</span><span class="ps">DET · RB</span><span class="gm">CHI @ DET 1:00</span><span class="cl">110+ RUSH YDS</span></div><div class="px">+164</div></div>
+  <div class="lt"><div class="n">2</div><div class="body"><span class="nm">Colston Loveland</span><span class="ps">CHI · TE</span><span class="gm">CHI @ DET 1:00</span><span class="cl">6+ CATCHES</span></div><div class="px">+104</div></div>
+  <div class="lt"><div class="n">3</div><div class="body"><span class="nm">Javonte Williams</span><span class="ps">DAL · RB</span><span class="gm">PHI @ DAL 4:30</span><span class="cl">100+ RUSH YDS</span></div><div class="px">+220</div></div>
+  <div class="lt"><div class="n">4</div><div class="body"><span class="nm">Dallas Goedert</span><span class="ps">PHI · TE</span><span class="gm">PHI @ DAL 4:30</span><span class="cl">5+ CATCHES</span></div><div class="px">+198</div></div>
+  <div class="lt"><div class="n">5</div><div class="body"><span class="nm">Emmett Johnson</span><span class="ps">KC · RB</span><span class="ov">OUR CALL</span><span class="cl">100+ RUSH YDS</span></div><div class="px">+182</div></div>
+  <div class="lt"><div class="n">6</div><div class="body"><span class="nm">James Cook</span><span class="ps">BUF · RB</span><span class="gm">KC @ BUF 8:20</span><span class="cl">100+ RUSH YDS</span></div><div class="px">+144</div></div>
+
+  <div class="tele">
+    <div class="tc"><h4>Jahmyr Gibbs</h4><div class="c">110+ RUSH YDS · +164</div><p>Detroit gets ahead and leans on the only back it has.</p><div class="f">LAST 5 · 116 · 153 · 74 · 153 · 98</div></div>
+    <div class="tc"><h4>Colston Loveland</h4><div class="c">6+ CATCHES · +104</div><p>A shootout, with Caleb feeding his tight end against the defense that allows the third-most TE catches.</p><div class="f">LAST 5 · 6 · 7 · 7 · 4 · 3</div></div>
+    <div class="tc"><h4>Javonte Williams</h4><div class="c">100+ RUSH YDS · +220</div><p>Dallas builds a lead on a backup quarterback and runs the clock, 25 carries or more.</p><div class="f">LAST 5 · 155 · 56 · 101 · 63 · 67</div></div>
+    <div class="tc"><h4>Dallas Goedert</h4><div class="c">5+ CATCHES · +198</div><p>Philly chases all game, and Milton checks down to his tight end over and over.</p><div class="f">LAST 5 · 6 · 5 · 4 · 5 · 1</div></div>
+    <div class="tc"><h4>Emmett Johnson</h4><div class="c">100+ RUSH YDS · +182 · OUR CALL</div><p>The lead back in a rain game. Over 100 in both games since he took the job.</p><div class="f">AS STARTER · 101 · 105</div></div>
+    <div class="tc"><h4>James Cook</h4><div class="c">100+ RUSH YDS · +144</div><p>Rain, wind and a Buffalo lead: 25-plus carries. Both backs going for 100 is how this game plays out.</p><div class="f">LAST 5 · 95 · 80 · 107 · 157 · 89</div><div class="rk">If FanDuel prices the ticket under +24,900, move Cook to 110+ (+205).</div></div>
+  </div>
+
+  <div class="notes">
+    <h3>BEFORE YOU BET</h3>
+    <ul>
+      <li><b>The payouts are estimates.</b> Each ticket has legs from the same game, and FanDuel prices those together, so the number on your slip will differ.</li>
+      <li><b>The Moderate and High overlap.</b> Every Moderate player is also on the High, so one miss sinks both. Playing just one is fine.</li>
+      <li><b>The Lottery is built to need everything to go right.</b> Its lines sit above our own projections. Play it like a lottery ticket.</li>
+      <li><b>Check inactives:</b> about 11:30 am for CHI @ DET, 3:00 pm for PHI @ DAL, 6:50 pm for KC @ BUF. Everyone on the card was off the injury report.</li>
+      <li><b>No Safe ticket today.</b> The legs safe enough to qualify are all priced −900 or shorter, so they can't reach +150.</li>
+    </ul>
+  </div>
+  <div class="foot"><span>PRISM · PLAYER ROLE &amp; INDIVIDUAL SITUATION MODEL · BET ONLY WHAT YOU'RE FINE LOSING</span><span>3 / 3</span></div>
+</section>
+
+</body></html>
