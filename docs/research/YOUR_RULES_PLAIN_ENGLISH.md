@@ -54,6 +54,20 @@
 >     greater than +600", Nov 8). **LOTTERY at least 250x (+24,900)** or labeled
 >     UNSOLVED. An optional "million-dollar" exhibition is allowed, built from
 >     validated legs, never random shots. (Nov 1)
+>     **What a LOTTERY is, in his words (Nov 26):** "A lottery ticket. Something
+>     fun but still could be plausible. Literally like buying a lottery ticket.
+>     Really big payout but if everything goes to plan perfectly it hits."
+>     - **How it was applied on Nov 26:** each leg is what happens if that game's
+>       football read plays out perfectly, and the player has done it before.
+>     - **By that definition, the legs sit above the model's projection** and
+>       outside the high-survival gates: rule 2, G3, G4 near-main, G6 own
+>       hit rate, and the +130 price cap.
+>     - **Still applied:**
+>       - graded leg types only (rule 23);
+>       - no anytime TDs (rule 10);
+>       - no player on more than two tickets (rule 18);
+>       - on the field (G1), a real role (G2), matchup (G7) and injury
+>         state (G8).
 > 15. **No hard-coded leg count.** Stacking many high-survival alt lines is the
 >     preferred way to earn the odds. (Nov 1)
 > 16. **NO one-leg-per-game rule.** "Ok what if we didn't use one player per

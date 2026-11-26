@@ -1,0 +1,299 @@
+<title>Week 12 Thanksgiving Card</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one column. Three game strips, then each parlay as a bet slip with its leg write-ups directly underneath. */
+:root {
+  --bg: #eef1ed;
+  --surface: #ffffff;
+  --ink: #18211d;
+  --muted: #5b6862;
+  --line: #d6ddd7;
+  --chip: #e6ebe7;
+  --moderate: #1d6a86;
+  --high: #c0430f;
+  --risk: #9a5a0c;
+  --override: #7a3fa0;
+  --lottery: #8a2b78;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101513; --surface: #182019; --ink: #e7ece8; --muted: #9ba8a1; --line: #29332d; --chip: #212a24;
+    --moderate: #52b6d6; --high: #f2804c; --risk: #e3aa4c; --override: #c69be6; --lottery: #da7fca;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101513; --surface: #182019; --ink: #e7ece8; --muted: #9ba8a1; --line: #29332d; --chip: #212a24;
+  --moderate: #52b6d6; --high: #f2804c; --risk: #e3aa4c; --override: #c69be6; --lottery: #da7fca;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+.wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px; }
+header { display: flex; flex-direction: column; gap: 10px; }
+.eyebrow { font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(40px, 8vw, 62px); line-height: 0.95; margin: 0; text-transform: uppercase; text-wrap: balance; }
+.meta { color: var(--muted); font-size: 14px; max-width: 65ch; margin: 0; }
+h2 { font-family: var(--font-display); font-weight: 800; font-size: 26px; text-transform: uppercase; letter-spacing: 0.02em; margin: 0; }
+
+/* game strips */
+.games { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.game { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.game .when { font-family: var(--font-num); font-size: 12px; color: var(--muted); letter-spacing: 0.02em; }
+.game .match { font-family: var(--font-display); font-weight: 800; font-size: 24px; line-height: 1; text-transform: uppercase; }
+.game .line { font-family: var(--font-num); font-size: 12.5px; color: var(--muted); }
+.game p { margin: 4px 0 0; font-size: 14px; }
+
+/* slip */
+.parlay { display: flex; flex-direction: column; gap: 14px; }
+.slip { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.slip-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; padding: 16px 18px 12px; border-top: 6px solid var(--tier); flex-wrap: wrap; }
+.tier { font-family: var(--font-display); font-weight: 800; font-size: 30px; line-height: 1; text-transform: uppercase; color: var(--tier); letter-spacing: 0.02em; }
+.slip-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.odds { text-align: right; }
+.odds .num { font-family: var(--font-num); font-weight: 700; font-size: 30px; line-height: 1; color: var(--tier); font-variant-numeric: tabular-nums; }
+.odds .lbl { font-size: 12px; color: var(--muted); }
+.legs { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.leg { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 12px 18px; border-bottom: 1px solid var(--line); align-items: center; }
+.leg:last-child { border-bottom: 0; }
+.who { font-weight: 700; font-size: 16px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.chip { font-family: var(--font-num); font-size: 11.5px; font-weight: 500; background: var(--chip); color: var(--muted); border-radius: 5px; padding: 2px 6px; letter-spacing: 0.02em; }
+.chip.ov { background: transparent; border: 1px solid var(--override); color: var(--override); }
+.bet { grid-column: 1; font-size: 14px; color: var(--muted); }
+.bet b { color: var(--ink); font-weight: 600; }
+.price { grid-column: 2; grid-row: 1 / span 2; font-family: var(--font-num); font-weight: 700; font-size: 17px; font-variant-numeric: tabular-nums; }
+
+/* write-ups */
+.writeups { display: flex; flex-direction: column; gap: 10px; }
+.wu { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.wu h3 { margin: 0; font-size: 15px; font-weight: 700; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.wu h3 .bt { font-weight: 500; color: var(--muted); font-size: 14px; }
+.wu p { margin: 0; max-width: 72ch; }
+.wu .risk { color: var(--risk); font-size: 14px; }
+.wu .risk strong, .wu .ovnote strong { font-weight: 700; }
+.wu .ovnote { color: var(--override); font-size: 14px; }
+.nums { font-family: var(--font-num); font-size: 13px; font-variant-numeric: tabular-nums; }
+.same { color: var(--muted); font-size: 14px; margin: 0; padding: 0 2px; }
+
+/* notes */
+.notes { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.notes ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.notes li { max-width: 75ch; }
+footer { color: var(--muted); font-size: 13px; text-align: center; }
+
+@media (max-width: 720px) {
+  .games { grid-template-columns: minmax(0, 1fr); }
+  .odds { text-align: left; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">NFL Week 12 · Thursday, Nov 26</div>
+    <h1>Thanksgiving Card</h1>
+    <p class="meta">Three games, three parlays. Football read first, then the numbers. Every leg comes from a bet type with a winning track record, and every price is FanDuel's as of about 10:30 am ET.</p>
+  </header>
+
+  <section class="games" aria-label="Today's games">
+    <div class="game">
+      <div class="when">1:00 PM ET · Ford Field</div>
+      <div class="match">CHI @ DET</div>
+      <div class="line">Bears −1.5 · Total 56.5</div>
+      <p>Two 8-2 teams in the highest total of the day. Chicago is missing its nickel corner and a safety. Detroit runs everything through Gibbs.</p>
+    </div>
+    <div class="game">
+      <div class="when">4:30 PM ET · AT&amp;T Stadium</div>
+      <div class="match">PHI @ DAL</div>
+      <div class="line">Cowboys −8.5 · Total 48.5</div>
+      <p>Philly starts backup QB Joe Milton. If Dallas gets ahead, it can run the clock against a defense that gives up yards on the ground.</p>
+    </div>
+    <div class="game">
+      <div class="when">8:20 PM ET · Highmark Stadium</div>
+      <div class="match">KC @ BUF</div>
+      <div class="line">Bills −3 · Total 45.5</div>
+      <p>Rain, 38°F, wind 15 to 25 mph. Expect runs and short throws. Kenneth Walker is out, so Emmett Johnson is KC's back.</p>
+    </div>
+  </section>
+
+  <!-- MODERATE -->
+  <section class="parlay" style="--tier: var(--moderate)">
+    <div class="slip">
+      <div class="slip-head">
+        <div>
+          <div class="tier">Moderate</div>
+          <div class="slip-sub">4 legs · 3 games</div>
+        </div>
+        <div class="odds"><div class="num">≈ +133</div><div class="lbl">estimate · FanDuel sets the final price</div></div>
+      </div>
+      <ul class="legs">
+        <li class="leg"><div class="who">Jahmyr Gibbs <span class="chip">DET · RB</span></div><div class="bet"><b>60+ rushing yards</b> · CHI @ DET, 1:00</div><div class="price">−550</div></li>
+        <li class="leg"><div class="who">Travis Kelce <span class="chip">KC · TE</span></div><div class="bet"><b>3+ receptions</b> · KC @ BUF, 8:20</div><div class="price">−440</div></li>
+        <li class="leg"><div class="who">Emmett Johnson <span class="chip">KC · RB</span> <span class="chip ov">our call</span></div><div class="bet"><b>60+ rushing yards</b> · KC @ BUF, 8:20</div><div class="price">−310</div></li>
+        <li class="leg"><div class="who">Javonte Williams <span class="chip">DAL · RB</span></div><div class="bet"><b>50+ rushing yards</b> · PHI @ DAL, 4:30</div><div class="price">−470</div></li>
+      </ul>
+    </div>
+
+    <div class="writeups">
+      <article class="wu">
+        <h3>Jahmyr Gibbs <span class="bt">60+ rushing yards · −550</span></h3>
+        <p>He is Detroit's only back since the Montgomery trade, and he gets 20 to 29 carries every week. Chicago gives up 77 rushing yards a game to backs, 23rd in the league.</p>
+        <p class="nums">Last five: 116 · 153 · 74 · 153 · 98</p>
+        <p class="risk"><strong>Risk:</strong> in a 56.5-total shootout, Detroit could lean on the pass.</p>
+      </article>
+      <article class="wu">
+        <h3>Travis Kelce <span class="bt">3+ receptions · −440</span></h3>
+        <p>Wind and rain cut the passing game down to short throws, and Kelce is Mahomes's outlet. Buffalo allows 5.4 tight-end catches a game, about league average.</p>
+        <p class="nums">Last five: 4 · 5 · 4 · 2 · 6 catches</p>
+        <p class="risk"><strong>Risk:</strong> his one miss came in a game where he played only 31% of the snaps.</p>
+      </article>
+      <article class="wu">
+        <h3>Emmett Johnson <span class="bt">60+ rushing yards · −310</span></h3>
+        <p>Kenneth Walker is out, and Johnson already took the job: 22 carries for 101 yards and 23 for 105 the last two weeks, on 82 to 88% of the snaps. A rain game should only add carries. Buffalo allows 78 rushing yards a game to backs, 22nd.</p>
+        <p class="nums">Last two: 22 car · 101 yds, 23 car · 105 yds</p>
+        <p class="ovnote"><strong>Our call:</strong> the model still projects him as a backup, so this leg is a football read over the model.</p>
+        <p class="risk"><strong>Risk:</strong> if KC falls behind, it throws more, though the wind limits that.</p>
+      </article>
+      <article class="wu">
+        <h3>Javonte Williams <span class="bt">50+ rushing yards · −470</span></h3>
+        <p>Dallas is an 8.5-point favorite against a backup quarterback. A lead means carries late, and Philly gives up 102 rushing yards a game to backs, 11th most.</p>
+        <p class="nums">Last five: 155 · 56 · 101 · 63 · 67 (50+ in all five)</p>
+        <p class="risk"><strong>Risk:</strong> if Milton keeps it close, the late carries go away.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- HIGH -->
+  <section class="parlay" style="--tier: var(--high)">
+    <div class="slip">
+      <div class="slip-head">
+        <div>
+          <div class="tier">High</div>
+          <div class="slip-sub">8 legs · 3 games</div>
+        </div>
+        <div class="odds"><div class="num">≈ +654</div><div class="lbl">estimate · FanDuel sets the final price</div></div>
+      </div>
+      <ul class="legs">
+        <li class="leg"><div class="who">Jahmyr Gibbs <span class="chip">DET · RB</span></div><div class="bet"><b>60+ rushing yards</b> · CHI @ DET, 1:00</div><div class="price">−550</div></li>
+        <li class="leg"><div class="who">Sam LaPorta <span class="chip">DET · TE</span></div><div class="bet"><b>3+ receptions</b> · CHI @ DET, 1:00</div><div class="price">−550</div></li>
+        <li class="leg"><div class="who">Colston Loveland <span class="chip">CHI · TE</span></div><div class="bet"><b>4+ receptions</b> · CHI @ DET, 1:00</div><div class="price">−420</div></li>
+        <li class="leg"><div class="who">Caleb Williams <span class="chip">CHI · QB</span></div><div class="bet"><b>10+ rushing yards</b> · CHI @ DET, 1:00</div><div class="price">−600</div></li>
+        <li class="leg"><div class="who">Javonte Williams <span class="chip">DAL · RB</span></div><div class="bet"><b>50+ rushing yards</b> · PHI @ DAL, 4:30</div><div class="price">−470</div></li>
+        <li class="leg"><div class="who">Travis Kelce <span class="chip">KC · TE</span></div><div class="bet"><b>3+ receptions</b> · KC @ BUF, 8:20</div><div class="price">−440</div></li>
+        <li class="leg"><div class="who">Emmett Johnson <span class="chip">KC · RB</span> <span class="chip ov">our call</span></div><div class="bet"><b>80+ rushing yards</b> · KC @ BUF, 8:20</div><div class="price">−120</div></li>
+        <li class="leg"><div class="who">James Cook <span class="chip">BUF · RB</span></div><div class="bet"><b>70+ rushing yards</b> · KC @ BUF, 8:20</div><div class="price">−270</div></li>
+      </ul>
+    </div>
+
+    <div class="writeups">
+      <p class="same">Gibbs, Javonte Williams and Kelce: same reads as on the Moderate.</p>
+      <article class="wu">
+        <h3>Emmett Johnson <span class="bt">80+ rushing yards · −120</span></h3>
+        <p>This is his main line, so the leg is all-in on the lead-back read. He went over 100 in both games since taking the job, and the weather points to more carries, not fewer.</p>
+        <p class="ovnote"><strong>Our call:</strong> this is the leg that lifts the ticket past +600. At 70+ it pays about +530.</p>
+      </article>
+      <article class="wu">
+        <h3>Sam LaPorta <span class="bt">3+ receptions · −550</span></h3>
+        <p>He plays 91% of the snaps and sees 5 or 6 targets a game. Chicago is missing nickel corner Kyler Gordon and safety Elijah Hicks, both of whom cover the middle of the field.</p>
+        <p class="nums">Last five: 1 · 3 · 4 · 1 · 3 catches</p>
+        <p class="risk"><strong>Risk:</strong> Chicago has been tough on tight ends all year, allowing 4.3 catches a game. This is the weakest leg on the card.</p>
+      </article>
+      <article class="wu">
+        <h3>Colston Loveland <span class="bt">4+ receptions · −420</span></h3>
+        <p>He is on the field for 87% of the snaps, against a Detroit defense that allows 6.8 tight-end catches a game, third most in the league.</p>
+        <p class="nums">4+ catches in 6 of 10 games</p>
+        <p class="risk"><strong>Risk:</strong> a 6-in-10 hit rate is why this sits on the High ticket only.</p>
+      </article>
+      <article class="wu">
+        <h3>Caleb Williams <span class="bt">10+ rushing yards · −600</span></h3>
+        <p>Detroit gives up 21.9 rushing yards a game to quarterbacks, fourth most, and a shootout means plenty of dropbacks to scramble from.</p>
+        <p class="nums">Last five: 3 · 18 · 1 · 16 · 11</p>
+        <p class="risk"><strong>Risk:</strong> he reached 10 in only three of those five.</p>
+      </article>
+      <article class="wu">
+        <h3>James Cook <span class="bt">70+ rushing yards · −270</span></h3>
+        <p>In a rain game with Buffalo favored, Cook gets the ball: 18 to 31 carries a game. His line moved up to 88.5 this morning.</p>
+        <p class="nums">Last five: 95 · 80 · 107 · 157 · 89</p>
+        <p class="risk"><strong>Risk:</strong> Kansas City is stingy against backs, allowing 71.5 a game (6th fewest), so this rides on volume.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- LOTTERY -->
+  <section class="parlay" style="--tier: var(--lottery)">
+    <div class="slip">
+      <div class="slip-head">
+        <div>
+          <div class="tier">Lottery</div>
+          <div class="slip-sub">6 legs · 3 games · the perfect script</div>
+        </div>
+        <div class="odds"><div class="num">≈ +26,566</div><div class="lbl">about 265 to 1 · FanDuel sets the final price</div></div>
+      </div>
+      <ul class="legs">
+        <li class="leg"><div class="who">Sam LaPorta <span class="chip">DET · TE</span></div><div class="bet"><b>5+ receptions</b> · CHI @ DET, 1:00</div><div class="price">+108</div></li>
+        <li class="leg"><div class="who">Colston Loveland <span class="chip">CHI · TE</span></div><div class="bet"><b>6+ receptions</b> · CHI @ DET, 1:00</div><div class="price">+104</div></li>
+        <li class="leg"><div class="who">Caleb Williams <span class="chip">CHI · QB</span></div><div class="bet"><b>30+ rushing yards</b> · CHI @ DET, 1:00</div><div class="price">+168</div></li>
+        <li class="leg"><div class="who">Joe Milton <span class="chip">PHI · QB</span></div><div class="bet"><b>40+ rushing yards</b> · PHI @ DAL, 4:30</div><div class="price">+158</div></li>
+        <li class="leg"><div class="who">Dallas Goedert <span class="chip">PHI · TE</span></div><div class="bet"><b>5+ receptions</b> · PHI @ DAL, 4:30</div><div class="price">+198</div></li>
+        <li class="leg"><div class="who">James Cook <span class="chip">BUF · RB</span></div><div class="bet"><b>110+ rushing yards</b> · KC @ BUF, 8:20</div><div class="price">+205</div></li>
+      </ul>
+    </div>
+
+    <div class="writeups">
+      <p class="same">Like buying a lottery ticket: a big payout that only hits if all three games go exactly to plan. Every leg is something the player has already done this season.</p>
+      <article class="wu">
+        <h3>Sam LaPorta <span class="bt">5+ receptions · +108</span></h3>
+        <p>If Detroit goes after the middle of the field with Chicago's nickel corner and safety out, LaPorta's usual 5 or 6 targets turn into 5 catches.</p>
+        <p class="nums">5+ catches in 4 of 10 games</p>
+      </article>
+      <article class="wu">
+        <h3>Colston Loveland <span class="bt">6+ receptions · +104</span></h3>
+        <p>In a shootout, Caleb keeps feeding his tight end against the defense that gives up the third-most tight-end catches in the league.</p>
+        <p class="nums">6+ catches in 4 of 10 games</p>
+      </article>
+      <article class="wu">
+        <h3>Caleb Williams <span class="bt">30+ rushing yards · +168</span></h3>
+        <p>A shootout means a lot of dropbacks, and Detroit allows the fourth-most quarterback rushing yards in the league. Two or three scrambles get him there.</p>
+        <p class="nums">30+ in 2 of 7 games</p>
+      </article>
+      <article class="wu">
+        <h3>Joe Milton <span class="bt">40+ rushing yards · +158</span></h3>
+        <p>Dallas gets ahead, the pass rush comes, and Milton has to run for his life. He ran 9 times for 64 yards in his week 9 start.</p>
+        <p class="nums">Starts this year: 64 and 7 rushing yards</p>
+      </article>
+      <article class="wu">
+        <h3>Dallas Goedert <span class="bt">5+ receptions · +198</span></h3>
+        <p>Trailing all game, Milton checks down to his tight end over and over.</p>
+        <p class="nums">5+ catches in 4 of 8 games</p>
+      </article>
+      <article class="wu">
+        <h3>James Cook <span class="bt">110+ rushing yards · +205</span></h3>
+        <p>Rain, wind and a Buffalo lead mean Cook carries the ball 25-plus times. He ran for 157 two weeks ago.</p>
+        <p class="nums">110+ in 4 of 10 games</p>
+        <p class="risk"><strong>If FanDuel prices the ticket under +24,900:</strong> move Cook to 125+ (+360) to get back over 250 to 1.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="notes" aria-label="Before you bet">
+    <h2>Before you bet</h2>
+    <ul>
+      <li><strong>The payouts are estimates.</strong> Both tickets have legs from the same game, and FanDuel prices those together, so the real number on your slip will differ.</li>
+      <li><strong>The two tickets overlap.</strong> Every Moderate player is also on the High, so one miss sinks both. Playing just one is a fine choice.</li>
+      <li><strong>Check inactives before kickoff:</strong> about 11:30 am for CHI @ DET, 3:00 pm for PHI @ DAL, and 6:50 pm for KC @ BUF. Everyone on the card is off the injury report.</li>
+      <li><strong>The Lottery is built on purpose to need everything to go right.</strong> Its legs sit above our own projections. Play it like a lottery ticket.</li>
+      <li><strong>No Safe ticket today.</strong> The legs with enough room to qualify are all priced −900 or shorter, so they can't reach the +150 a Safe ticket needs.</li>
+    </ul>
+  </section>
+
+  <footer>Built from FanDuel lines captured Thursday morning. Bet only what you're fine losing.</footer>
+</div>
