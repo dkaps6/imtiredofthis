@@ -3,21 +3,21 @@
   "files": {
     "data/injuries.csv": {
       "archived_as": "injuries.csv.gz",
-      "bytes_gz": 1436,
-      "bytes_raw": 8889,
-      "sha256_raw": "c8d920c2531c6d49a07e330a263c74fdea133f9ed6947f8c831a58bdb0145ef2"
+      "bytes_gz": 3718,
+      "bytes_raw": 25944,
+      "sha256_raw": "34a2125e9f8119ef44ffcd84d8bf18bb40c43586a5e3323c9e283dfbf8901721"
     },
     "data/injuries_source_status.json": {
       "archived_as": "injuries_source_status.json.gz",
-      "bytes_gz": 338,
-      "bytes_raw": 585,
-      "sha256_raw": "f8b8b7636fb8c224a2138cf5e736e3297dab4e47644f616cabb9fbd62747f942"
+      "bytes_gz": 339,
+      "bytes_raw": 584,
+      "sha256_raw": "5ce8b6138fec62bf4d7ae8e8008a93f701ab35d5cb8ef95a4c93eed891ba62ac"
     },
     "data/metrics_ready.csv": {
       "archived_as": "metrics_ready.csv.gz",
-      "bytes_gz": 92243,
-      "bytes_raw": 2717144,
-      "sha256_raw": "8a93df395b28041acd168e6d06a84844ca118dc39b8f835c161af8dce858630f"
+      "bytes_gz": 26230,
+      "bytes_raw": 809370,
+      "sha256_raw": "661071b14572fe2967e72f503431b4ee49961e24b725948ff0b15b6fcef53b52"
     },
     "data/model_ensemble_diagnostics.csv": {
       "archived_as": "model_ensemble_diagnostics.csv.gz",
@@ -33,27 +33,27 @@
     },
     "data/model_ml_diagnostics.csv": {
       "archived_as": "model_ml_diagnostics.csv.gz",
-      "bytes_gz": 38912,
-      "bytes_raw": 165908,
-      "sha256_raw": "c5dcb70443d18dbe9b5a3940a47a72c6a383bbf0a7811c206fd67bc20dd4216b"
+      "bytes_gz": 36635,
+      "bytes_raw": 155237,
+      "sha256_raw": "9b11b420b745cc7b915455fd5e2baf1a669fb9fca51195864508012ae547f47c"
     },
     "data/model_rule_simulation_inputs.csv": {
       "archived_as": "model_rule_simulation_inputs.csv.gz",
-      "bytes_gz": 154179,
-      "bytes_raw": 3434794,
-      "sha256_raw": "5601d48308203827209a81eb3c438c0734f829c40a3b62795b39195f47fa4073"
+      "bytes_gz": 43193,
+      "bytes_raw": 1022727,
+      "sha256_raw": "3a6647f4483c90fd98baf7978a90a43efc063174f714b14f983363078e835a15"
     },
     "data/model_state_diagnostics.csv": {
       "archived_as": "model_state_diagnostics.csv.gz",
-      "bytes_gz": 15518,
-      "bytes_raw": 240161,
-      "sha256_raw": "c6e6bbc4b5d3237e21c4f2da6bdc79fa0153c2db7ce225582e6f8ac4e552994c"
+      "bytes_gz": 14538,
+      "bytes_raw": 224915,
+      "sha256_raw": "2b96404e45210906ce255017bfc94f23de5f4836de795ca386a9b50b1d825b70"
     },
     "data/player_form_consensus.csv": {
       "archived_as": "player_form_consensus.csv.gz",
-      "bytes_gz": 79685,
-      "bytes_raw": 339763,
-      "sha256_raw": "93adee4d4b48d5e833c8f78c0f4493c5dbfe77f98a9f31777d1574e71de77d73"
+      "bytes_gz": 74234,
+      "bytes_raw": 317439,
+      "sha256_raw": "6c095fe500b7ddfbdf8c836cc2bef90492e634073936ac53417df3d9633b058f"
     },
     "data/qb_promoted_team_context.csv": {
       "archived_as": "qb_promoted_team_context.csv.gz",
@@ -81,15 +81,15 @@
     },
     "data/weather_week.csv": {
       "archived_as": "weather_week.csv.gz",
-      "bytes_gz": 1325,
-      "bytes_raw": 4496,
-      "sha256_raw": "0299fc4b8a7f55e7fe2de915da124b9c03fb3956f4317afb50ca8c813e1379a1"
+      "bytes_gz": 1277,
+      "bytes_raw": 4236,
+      "sha256_raw": "172079a845adb68a663c40895fe6544c07e33dbe0c41606d94d7002acc76df9b"
     }
   },
   "required_column_stripped": {},
   "required_missing": [],
-  "source_git_sha": "e7c6a1d8a4a5ec7ac148c1093b11717cc5b1daf3",
-  "source_run_id": "45687281991",
+  "source_git_sha": "8a179753b4067337f550d87e58fa87474a04f0dc",
+  "source_run_id": "45849141423",
   "stem": "2026_wk12",
   "version": "REPLAY_INPUT_SET_V1",
   "warning": "NOT denylist-stripped; reproduction fixture only, never a projection input",
