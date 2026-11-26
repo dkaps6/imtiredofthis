@@ -65,9 +65,12 @@
 >     - **Still applied:**
 >       - graded leg types only (rule 23);
 >       - no anytime TDs (rule 10);
->       - no player on more than two tickets (rule 18);
 >       - on the field (G1), a real role (G2), matchup (G7) and injury
 >         state (G8).
+>     - **The two-ticket limit (rule 18) does not apply to the lottery.** "I am ok
+>       breaking the multiple player rule for the lottery." (Nov 26)
+>     - Lottery legs were chosen on recent form at the rung (the last five
+>       games), so players whose story is the game's story can carry it.
 > 15. **No hard-coded leg count.** Stacking many high-survival alt lines is the
 >     preferred way to earn the odds. (Nov 1)
 > 16. **NO one-leg-per-game rule.** "Ok what if we didn't use one player per
